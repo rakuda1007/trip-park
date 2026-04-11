@@ -1,0 +1,255 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function groupOwnerId(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)).data.ownerId;
+    }
+
+    function isGroupMember(groupId) {
+      return exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+
+    function memberRole(groupId) {
+      return exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isOwnerOrAdmin(groupId) {
+      return groupOwnerId(groupId) == request.auth.uid ||
+        memberRole(groupId) == 'admin' ||
+        memberRole(groupId) == 'owner';
+    }
+
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /groups/{groupId} {
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId &&
+          exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+        allow update: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    match /inviteCodes/{code} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null &&
+        exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)) &&
+        groupOwnerId(request.resource.data.groupId) == request.auth.uid;
+      allow delete: if request.auth != null &&
+        groupOwnerId(resource.data.groupId) == request.auth.uid;
+      allow update: if false;
+    }
+
+    match /groups/{groupId} {
+      allow read: if request.auth != null && isGroupMember(groupId);
+      allow create: if request.auth != null &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.keys().hasAll(['name', 'ownerId', 'inviteCode', 'createdAt', 'updatedAt']);
+      allow update: if request.auth != null && resource.data.ownerId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
+
+      match /members/{userId} {
+        // メンバー一覧はグループ参加者のみ。自分のドキュメントは未参加でも読める（招待参加前の重複チェック用）
+        allow read: if request.auth != null && (
+          isGroupMember(groupId) || request.auth.uid == userId
+        );
+
+        allow create: if request.auth != null && request.auth.uid == userId && (
+          (request.resource.data.role == 'owner' &&
+            groupOwnerId(groupId) == request.auth.uid) ||
+          (request.resource.data.role == 'member' &&
+            request.resource.data.keys().hasAll(['role', 'joinedAt', 'code']) &&
+            get(/databases/$(database)/documents/inviteCodes/$(request.resource.data.code)).data.groupId == groupId)
+        );
+
+        allow update: if request.auth != null && request.auth.uid == userId &&
+          request.resource.data.role == resource.data.role &&
+          !request.resource.data.keys().hasAny(['code']);
+
+        allow delete: if request.auth != null && (
+          (request.auth.uid == userId && groupOwnerId(groupId) != userId) ||
+          (groupOwnerId(groupId) == request.auth.uid && userId != groupOwnerId(groupId))
+        );
+      }
+
+      match /bulletinPosts/{postId} {
+        allow read: if request.auth != null && isGroupMember(groupId);
+        allow create: if request.auth != null && isGroupMember(groupId) &&
+          request.resource.data.authorUserId == request.auth.uid &&
+          request.resource.data.pinned == false &&
+          request.resource.data.keys().hasAll([
+            'title', 'body', 'authorUserId', 'authorDisplayName',
+            'category', 'importance', 'pinned', 'createdAt', 'updatedAt'
+          ]);
+        allow update: if request.auth != null && isGroupMember(groupId) && (
+          isOwnerOrAdmin(groupId) ||
+          (
+            request.auth.uid == resource.data.authorUserId &&
+            request.resource.data.authorUserId == resource.data.authorUserId &&
+            request.resource.data.pinned == resource.data.pinned
+          )
+        );
+        allow delete: if request.auth != null && isGroupMember(groupId) && (
+          isOwnerOrAdmin(groupId) || resource.data.authorUserId == request.auth.uid
+        );
+
+        match /replies/{replyId} {
+          allow read: if request.auth != null && isGroupMember(groupId);
+          allow create: if request.auth != null && isGroupMember(groupId) &&
+            request.resource.data.authorUserId == request.auth.uid &&
+            request.resource.data.keys().hasAll([
+              'body', 'authorUserId', 'authorDisplayName', 'createdAt', 'updatedAt'
+            ]);
+          allow update: if request.auth != null && isGroupMember(groupId) && (
+            isOwnerOrAdmin(groupId) ||
+            (
+              request.auth.uid == resource.data.authorUserId &&
+              request.resource.data.authorUserId == resource.data.authorUserId
+            )
+          );
+          allow delete: if request.auth != null && isGroupMember(groupId) && (
+            isOwnerOrAdmin(groupId) || resource.data.authorUserId == request.auth.uid
+          );
+        }
+      }
+
+      match /scheduleCandidates/{candidateId} {
+        allow read: if request.auth != null && isGroupMember(groupId);
+        allow create: if request.auth != null && isOwnerOrAdmin(groupId) &&
+          request.resource.data.keys().hasAll(['date', 'startDate', 'endDate', 'createdAt', 'createdBy']);
+        allow delete: if request.auth != null && isOwnerOrAdmin(groupId);
+        allow update: if false;
+      }
+
+      match /scheduleResponses/{responseId} {
+        allow read: if request.auth != null && isGroupMember(groupId);
+        allow create, update: if request.auth != null && isGroupMember(groupId) &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.keys().hasAll(['userId', 'candidateId', 'answer', 'updatedAt']);
+        allow delete: if request.auth != null && isGroupMember(groupId) && (
+          resource.data.userId == request.auth.uid ||
+          isOwnerOrAdmin(groupId)
+        );
+      }
+
+      match /config/{docId} {
+        allow read: if request.auth != null && isGroupMember(groupId);
+        allow create, update: if request.auth != null && isOwnerOrAdmin(groupId);
+        allow delete: if request.auth != null && isOwnerOrAdmin(groupId);
+      }
+
+      match /tripRoutes/{routeId} {
+        allow read: if request.auth != null && isGroupMember(groupId);
+        allow create: if request.auth != null && isGroupMember(groupId) &&
+          request.resource.data.createdByUserId == request.auth.uid &&
+          request.resource.data.waypoints is list &&
+          request.resource.data.keys().hasAll([
+            'routeLabel', 'title', 'destinationName', 'destinationAddress', 'destinationMemo',
+            'destinationMapUrl', 'waypoints', 'routeMapUrl', 'sortOrder',
+            'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt'
+          ]);
+        allow update: if request.auth != null && isGroupMember(groupId) &&
+          request.resource.data.createdByUserId == resource.data.createdByUserId &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.waypoints is list &&
+          (isOwnerOrAdmin(groupId) || resource.data.createdByUserId == request.auth.uid) &&
+          request.resource.data.keys().hasAll([
+            'routeLabel', 'title', 'destinationName', 'destinationAddress', 'destinationMemo',
+            'destinationMapUrl', 'waypoints', 'routeMapUrl', 'sortOrder',
+            'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt'
+          ]);
+        allow delete: if request.auth != null && isGroupMember(groupId) && (
+          isOwnerOrAdmin(groupId) || resource.data.createdByUserId == request.auth.uid
+        );
+      }
+
+      match /expenses/{expenseId} {
+        allow read: if request.auth != null && isGroupMember(groupId);
+        allow create: if request.auth != null && isGroupMember(groupId) &&
+          request.resource.data.createdByUserId == request.auth.uid &&
+          request.resource.data.splitMode in ['equal', 'weighted'] &&
+          request.resource.data.weightByUserId is map &&
+          request.resource.data.weightByUserId.size() >= 1 &&
+          request.resource.data.amount is int &&
+          request.resource.data.amount >= 1 &&
+          request.resource.data.participantUserIds is list &&
+          request.resource.data.participantUserIds.size() >= 1 &&
+          exists(/databases/$(database)/documents/groups/$(groupId)/families/$(request.resource.data.paidByFamilyId)) &&
+          request.resource.data.participantUserIds.hasAny(
+            get(/databases/$(database)/documents/groups/$(groupId)/families/$(request.resource.data.paidByFamilyId)).data.memberUserIds
+          ) &&
+          request.resource.data.category in ['food', 'transport', 'lodging', 'other'] &&
+          request.resource.data.keys().hasAll([
+            'amount', 'paidByFamilyId', 'expenseDate', 'category', 'memo', 'splitMode',
+            'participantUserIds', 'weightByUserId', 'createdByUserId', 'createdAt', 'updatedAt'
+          ]);
+        allow update: if request.auth != null && isGroupMember(groupId) &&
+          request.resource.data.createdByUserId == resource.data.createdByUserId &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.splitMode in ['equal', 'weighted'] &&
+          request.resource.data.weightByUserId is map &&
+          request.resource.data.weightByUserId.size() >= 1 &&
+          request.resource.data.amount is int &&
+          request.resource.data.amount >= 1 &&
+          request.resource.data.participantUserIds is list &&
+          request.resource.data.participantUserIds.size() >= 1 &&
+          exists(/databases/$(database)/documents/groups/$(groupId)/families/$(request.resource.data.paidByFamilyId)) &&
+          request.resource.data.participantUserIds.hasAny(
+            get(/databases/$(database)/documents/groups/$(groupId)/families/$(request.resource.data.paidByFamilyId)).data.memberUserIds
+          ) &&
+          request.resource.data.category in ['food', 'transport', 'lodging', 'other'] &&
+          (isOwnerOrAdmin(groupId) || resource.data.createdByUserId == request.auth.uid) &&
+          request.resource.data.keys().hasAll([
+            'amount', 'paidByFamilyId', 'expenseDate', 'category', 'memo', 'splitMode',
+            'participantUserIds', 'weightByUserId', 'createdByUserId', 'createdAt', 'updatedAt'
+          ]);
+        allow delete: if request.auth != null && isGroupMember(groupId) && (
+          isOwnerOrAdmin(groupId) || resource.data.createdByUserId == request.auth.uid
+        );
+      }
+
+      match /families/{familyId} {
+        allow read: if request.auth != null && isGroupMember(groupId);
+        allow create: if request.auth != null && isGroupMember(groupId) &&
+          request.resource.data.createdByUserId == request.auth.uid &&
+          request.resource.data.memberUserIds is list &&
+          request.resource.data.memberUserIds.size() >= 1 &&
+          request.resource.data.adultCount is int &&
+          request.resource.data.childCount is int &&
+          request.resource.data.adultCount >= 0 &&
+          request.resource.data.childCount >= 0 &&
+          request.resource.data.childRatio is float &&
+          request.resource.data.childRatio > 0 &&
+          request.resource.data.childRatio <= 1 &&
+          request.resource.data.keys().hasAll([
+            'name', 'adultCount', 'childCount', 'childRatio', 'memberUserIds',
+            'createdByUserId', 'createdAt', 'updatedAt'
+          ]);
+        allow update: if request.auth != null && isGroupMember(groupId) &&
+          request.resource.data.createdByUserId == resource.data.createdByUserId &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.memberUserIds is list &&
+          request.resource.data.memberUserIds.size() >= 1 &&
+          request.resource.data.adultCount is int &&
+          request.resource.data.childCount is int &&
+          request.resource.data.adultCount >= 0 &&
+          request.resource.data.childCount >= 0 &&
+          request.resource.data.childRatio is float &&
+          request.resource.data.childRatio > 0 &&
+          request.resource.data.childRatio <= 1 &&
+          (isOwnerOrAdmin(groupId) || resource.data.createdByUserId == request.auth.uid) &&
+          request.resource.data.keys().hasAll([
+            'name', 'adultCount', 'childCount', 'childRatio', 'memberUserIds',
+            'createdByUserId', 'createdAt', 'updatedAt'
+          ]);
+        allow delete: if request.auth != null && isGroupMember(groupId) && (
+          isOwnerOrAdmin(groupId) || resource.data.createdByUserId == request.auth.uid
+        );
+      }
+    }
+  }
+}

@@ -1,0 +1,327 @@
+"use client";
+
+import { useAuth } from "@/contexts/auth-context";
+import {
+  createBulletinTopic,
+  listBulletinTopicsWithReplyCounts,
+} from "@/lib/firestore/bulletin";
+import { getGroup, listMembers } from "@/lib/firestore/groups";
+import type { GroupDoc, MemberDoc } from "@/types/group";
+import type {
+  BulletinCategory,
+  BulletinImportance,
+  BulletinTopicDoc,
+} from "@/types/bulletin";
+import { Timestamp } from "firebase/firestore";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+
+const CATEGORY_LABELS: Record<BulletinCategory, string> = {
+  general: "全体連絡",
+  gear: "持ち物",
+  dayof: "当日の連絡",
+  other: "その他",
+};
+
+const CATEGORY_OPTIONS: BulletinCategory[] = [
+  "general",
+  "gear",
+  "dayof",
+  "other",
+];
+
+function formatTs(v: unknown): string {
+  if (!v) return "—";
+  if (v instanceof Timestamp) {
+    return v.toDate().toLocaleString("ja-JP", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+  return "—";
+}
+
+function excerpt(body: string, max = 120): string {
+  const t = body.trim().replace(/\s+/g, " ");
+  if (t.length <= max) return t;
+  return t.slice(0, max) + "…";
+}
+
+export function BulletinClient() {
+  const params = useParams();
+  const groupId = params.groupId as string;
+  const { user } = useAuth();
+
+  const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
+  const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>(
+    [],
+  );
+  const [topics, setTopics] = useState<
+    { id: string; data: BulletinTopicDoc; replyCount: number }[]
+  >([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const [newTitle, setNewTitle] = useState("");
+  const [newBody, setNewBody] = useState("");
+  const [newCategory, setNewCategory] = useState<BulletinCategory>("general");
+  const [newImportance, setNewImportance] =
+    useState<BulletinImportance>("normal");
+
+  const load = useCallback(async () => {
+    if (!groupId) return;
+    setError(null);
+    try {
+      const g = await getGroup(groupId);
+      setGroup(g);
+      if (!g) {
+        setMembers([]);
+        setTopics([]);
+        return;
+      }
+      const [m, t] = await Promise.all([
+        listMembers(groupId),
+        listBulletinTopicsWithReplyCounts(groupId),
+      ]);
+      setMembers(m);
+      setTopics(t);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "読み込みに失敗しました");
+      setGroup(null);
+    }
+  }, [groupId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const isMember = Boolean(
+    user && members.some((x) => x.userId === user.uid),
+  );
+
+  async function handleCreateTopic() {
+    if (!user || !groupId || !newTitle.trim() || !newBody.trim()) return;
+    setBusy("create");
+    setError(null);
+    try {
+      await createBulletinTopic(
+        groupId,
+        user.uid,
+        user.displayName,
+        newTitle,
+        newBody,
+        newCategory,
+        newImportance,
+      );
+      setNewTitle("");
+      setNewBody("");
+      setNewCategory("general");
+      setNewImportance("normal");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "投稿に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (group === undefined) {
+    return (
+      <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
+        <p className="text-sm text-zinc-500">読み込み中…</p>
+      </div>
+    );
+  }
+
+  if (group === null) {
+    return (
+      <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
+        <p className="text-sm text-zinc-600">グループが見つかりません。</p>
+        <Link
+          href="/groups"
+          className="mt-4 inline-block text-sm text-zinc-900 underline"
+        >
+          グループ一覧へ
+        </Link>
+      </div>
+    );
+  }
+
+  if (user && !isMember) {
+    return (
+      <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
+        <p className="text-sm text-zinc-600">
+          このグループのメンバーではありません。
+        </p>
+        <Link
+          href={`/groups/${groupId}`}
+          className="mt-4 inline-block text-sm text-zinc-900 underline"
+        >
+          グループ詳細へ
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
+      <Link
+        href={`/groups/${groupId}`}
+        className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+      >
+        ← {group.name}
+      </Link>
+
+      <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+        掲示板
+      </h1>
+      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+        話題ごとにスレッドが分かれます。一覧から話題を選ぶと、本文と返信を見たり書き込みできます。
+      </p>
+
+      {error ? (
+        <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      {user && isMember ? (
+        <section className="mt-8 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+          <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+            新しい話題を立てる
+          </h2>
+          <div className="mt-3 space-y-3">
+            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+              タイトル
+              <input
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                maxLength={200}
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                placeholder="件名"
+              />
+            </label>
+            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+              本文（最初の投稿）
+              <textarea
+                value={newBody}
+                onChange={(e) => setNewBody(e.target.value)}
+                rows={5}
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                placeholder="内容"
+              />
+            </label>
+            <div className="flex flex-wrap gap-4">
+              <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                カテゴリ
+                <select
+                  value={newCategory}
+                  onChange={(e) =>
+                    setNewCategory(e.target.value as BulletinCategory)
+                  }
+                  className="mt-1 block rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                >
+                  {CATEGORY_OPTIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {CATEGORY_LABELS[c]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                重要度
+                <select
+                  value={newImportance}
+                  onChange={(e) =>
+                    setNewImportance(e.target.value as BulletinImportance)
+                  }
+                  className="mt-1 block rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="normal">通常</option>
+                  <option value="important">重要</option>
+                </select>
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={handleCreateTopic}
+              disabled={
+                busy !== null || !newTitle.trim() || !newBody.trim()
+              }
+              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+            >
+              {busy === "create" ? "作成中…" : "話題を作成"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="mt-10">
+        <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+          話題一覧
+        </h2>
+        {topics.length === 0 ? (
+          <p className="mt-3 text-sm text-zinc-500">
+            まだ話題がありません。上のフォームから最初の話題を作成してください。
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {topics.map(({ id, data, replyCount }) => {
+              const showImportant =
+                data.importance === "important" || data.pinned;
+              return (
+                <li key={id}>
+                  <Link
+                    href={`/groups/${groupId}/bulletin/${id}`}
+                    className={`block rounded-lg border p-4 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
+                      showImportant
+                        ? "border-amber-200 bg-amber-50/80 dark:border-amber-900/60 dark:bg-amber-950/25"
+                        : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
+                    }`}
+                  >
+                    {data.pinned ? (
+                      <p className="mb-1 text-xs font-medium text-amber-800 dark:text-amber-200">
+                        📌 ピン留め
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                        {data.title}
+                      </h3>
+                      <span className="shrink-0 text-xs text-zinc-500">
+                        返信 {replyCount} 件
+                      </span>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
+                      {excerpt(data.body)}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                      <span className="rounded bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800">
+                        {CATEGORY_LABELS[data.category]}
+                      </span>
+                      {data.importance === "important" ? (
+                        <span className="text-amber-700 dark:text-amber-300">
+                          重要
+                        </span>
+                      ) : null}
+                      <span>
+                        {data.authorDisplayName ||
+                          data.authorUserId.slice(0, 8) + "…"}{" "}
+                        · {formatTs(data.createdAt)}
+                      </span>
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
