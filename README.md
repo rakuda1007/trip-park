@@ -1,5 +1,7 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+**TripPark（本リポジトリ）**は Git で管理し、GitHub 上の**テニスパークとは別のリポジトリ**に push できます。手順は [docs/GITHUB.md](./docs/GITHUB.md) を参照してください。
+
 ## Getting Started
 
 1. Copy `.env.local.example` to `.env.local` and set your Firebase web app config (`NEXT_PUBLIC_FIREBASE_*`).
