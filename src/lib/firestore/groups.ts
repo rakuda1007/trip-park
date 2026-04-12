@@ -159,20 +159,28 @@ export async function listMyGroups(uid: string): Promise<
   });
 
   // グループ本体から旅行日程を並列取得
+  // 権限エラーや削除済みグループは null として扱いリストから除外する
   const groupSnaps = await Promise.all(
-    items.map(({ groupId }) => getDoc(doc(db, COLLECTIONS.groups, groupId))),
+    items.map(({ groupId }) =>
+      getDoc(doc(db, COLLECTIONS.groups, groupId)).catch(() => null),
+    ),
   );
-  return items.map((item, i) => {
-    const gd = groupSnaps[i]?.data() as GroupDoc | undefined;
-    return {
-      groupId: item.groupId,
-      data: {
-        ...item.data,
-        tripStartDate: gd?.tripStartDate ?? null,
-        tripEndDate: gd?.tripEndDate ?? null,
-      },
-    };
-  });
+
+  return items
+    .map((item, i) => {
+      const gSnap = groupSnaps[i];
+      if (!gSnap) return null; // アクセス不可 → スキップ
+      const gd = gSnap.data() as GroupDoc | undefined;
+      return {
+        groupId: item.groupId,
+        data: {
+          ...item.data,
+          tripStartDate: gd?.tripStartDate ?? null,
+          tripEndDate: gd?.tripEndDate ?? null,
+        },
+      };
+    })
+    .filter((item): item is { groupId: string; data: UserGroupRefDoc } => item !== null);
 }
 
 /** グループの旅行日程を更新する（オーナーまたは管理者が実行） */
