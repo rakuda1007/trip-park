@@ -296,18 +296,28 @@ async function deleteBulletinPostsTree(db: Firestore, groupId: string) {
 
 export async function deleteGroup(ownerUid: string, groupId: string): Promise<void> {
   const db = getFirebaseFirestore();
-  const group = await getGroup(groupId);
+
+  // [手順1] グループ本体を読み取り（isGroupMember チェック）
+  let group: GroupDoc | null;
+  try {
+    group = await getGroup(groupId);
+  } catch (e) {
+    throw new Error(`[手順1:グループ読み取り] ${e instanceof Error ? e.message : e}`);
+  }
   if (!group) throw new Error("旅行が見つかりません。");
-  if (group.ownerId !== ownerUid) {
-    throw new Error("旅行を削除できるのはオーナーのみです。");
+  if (group.ownerId !== ownerUid) throw new Error("旅行を削除できるのはオーナーのみです。");
+
+  // [手順2] メンバー一覧を読み取り
+  let membersSnap: Awaited<ReturnType<typeof getDocs>>;
+  try {
+    membersSnap = await getDocs(
+      collection(db, COLLECTIONS.groups, groupId, SUB.members),
+    );
+  } catch (e) {
+    throw new Error(`[手順2:メンバー読み取り] ${e instanceof Error ? e.message : e}`);
   }
 
-  // メンバー一覧を先に取得（後で UserGroupRef 削除に使う）
-  const membersSnap = await getDocs(
-    collection(db, COLLECTIONS.groups, groupId, SUB.members),
-  );
-
-  // サブコレクション削除（エラーは無視して続行）
+  // [手順3] サブコレクション削除（エラーは無視して続行）
   const cleanups = [
     SUB.scheduleCandidates,
     SUB.scheduleResponses,
@@ -326,23 +336,39 @@ export async function deleteGroup(ownerUid: string, groupId: string): Promise<vo
     .then((snap) => (snap.exists() ? deleteDoc(scheduleCfgRef) : undefined))
     .catch(() => {});
 
-  // ① メンバードキュメントを個別に削除（グループ文書はまだ存在する状態）
-  await Promise.all(membersSnap.docs.map((m) => deleteDoc(m.ref)));
+  // [手順4] メンバードキュメントを個別に削除（グループ文書はまだ存在する状態）
+  try {
+    await Promise.all(membersSnap.docs.map((m) => deleteDoc(m.ref)));
+  } catch (e) {
+    throw new Error(`[手順4:メンバー削除] ${e instanceof Error ? e.message : e}`);
+  }
 
-  // ② 招待コードを削除（グループ文書はまだ存在する状態）
-  await deleteDoc(doc(db, COLLECTIONS.inviteCodes, group.inviteCode));
+  // [手順5] 招待コードを削除（グループ文書はまだ存在する状態）
+  try {
+    await deleteDoc(doc(db, COLLECTIONS.inviteCodes, group.inviteCode));
+  } catch (e) {
+    throw new Error(`[手順5:招待コード削除] ${e instanceof Error ? e.message : e}`);
+  }
 
-  // ③ グループ文書を削除
-  await deleteDoc(doc(db, COLLECTIONS.groups, groupId));
+  // [手順6] グループ文書を削除
+  try {
+    await deleteDoc(doc(db, COLLECTIONS.groups, groupId));
+  } catch (e) {
+    throw new Error(`[手順6:グループ削除] ${e instanceof Error ? e.message : e}`);
+  }
 
-  // ④ 各メンバーの UserGroupRef を削除（他メンバーのはエラーを無視）
-  await Promise.all(
-    membersSnap.docs.map((m) => {
-      const ug = doc(db, COLLECTIONS.users, m.id, SUB.groups, groupId);
-      const p = deleteDoc(ug);
-      return m.id === ownerUid ? p : p.catch(() => {});
-    }),
-  );
+  // [手順7] 各メンバーの UserGroupRef を削除（他メンバーのはエラーを無視）
+  try {
+    await Promise.all(
+      membersSnap.docs.map((m) => {
+        const ug = doc(db, COLLECTIONS.users, m.id, SUB.groups, groupId);
+        const p = deleteDoc(ug);
+        return m.id === ownerUid ? p : p.catch(() => {});
+      }),
+    );
+  } catch (e) {
+    throw new Error(`[手順7:UserGroupRef削除] ${e instanceof Error ? e.message : e}`);
+  }
 }
 
 export function buildJoinUrl(code: string): string {
