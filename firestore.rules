@@ -85,8 +85,8 @@ service cloud.firestore {
           !request.resource.data.keys().hasAny(['code']);
 
         allow delete: if request.auth != null && (
-          (request.auth.uid == userId && groupOwnerId(groupId) != userId) ||
-          groupOwnerId(groupId) == request.auth.uid
+          request.auth.uid == userId ||
+          memberRole(groupId) in ['owner', 'admin']
         );
       }
 
