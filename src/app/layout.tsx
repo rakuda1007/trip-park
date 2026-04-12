@@ -1,6 +1,7 @@
 import { AppHeader } from "@/components/app-header";
 import { Providers } from "@/components/providers";
-import type { Metadata } from "next";
+import { ServiceWorkerRegister } from "@/components/service-worker-register";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -21,6 +22,22 @@ export const metadata: Metadata = {
   },
   description:
     "旅行・キャンプの計画を共有する Web アプリ（Next.js + Firebase）",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Trip Park",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  applicationName: "Trip Park",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0f766e",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({
@@ -38,6 +55,7 @@ export default function RootLayout({
           <AppHeader />
           <main className="flex flex-1 flex-col">{children}</main>
         </Providers>
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
