@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
-import { listMyGroups } from "@/lib/firestore/groups";
+import { deleteGroup, listMyGroups } from "@/lib/firestore/groups";
 import type { UserGroupRefDoc } from "@/types/group";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -71,11 +71,13 @@ function GroupCard({
   data,
   today,
   highlight = false,
+  onDelete,
 }: {
   groupId: string;
   data: UserGroupRefDoc;
   today: string;
   highlight?: boolean;
+  onDelete?: () => void;
 }) {
   const { tripStartDate, tripEndDate } = data;
   const dateLabel = tripStartDate
@@ -95,37 +97,57 @@ function GroupCard({
   })();
 
   return (
-    <Link
-      href={`/groups/${groupId}`}
-      className={`block rounded-lg border px-4 py-3 shadow-sm transition ${
+    <div
+      className={`flex items-stretch rounded-lg border shadow-sm transition ${
         highlight
-          ? "border-emerald-300 bg-emerald-50 hover:border-emerald-400 dark:border-emerald-700 dark:bg-emerald-950/30 dark:hover:border-emerald-600"
-          : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900/40 dark:hover:border-zinc-600"
+          ? "border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950/30"
+          : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
       }`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-medium text-zinc-900 dark:text-zinc-50">
-          {data.groupName}
-          <RoleBadge role={data.role} />
-        </span>
-        {daysLabel ? (
-          <span
-            className={`text-xs font-semibold ${
-              section === "active"
-                ? "text-emerald-700 dark:text-emerald-400"
-                : "text-blue-700 dark:text-blue-400"
-            }`}
-          >
-            {daysLabel}
+      <Link
+        href={`/groups/${groupId}`}
+        className={`flex-1 px-4 py-3 transition ${
+          highlight
+            ? "hover:border-emerald-400 dark:hover:border-emerald-600"
+            : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
+        } rounded-l-lg`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="font-medium text-zinc-900 dark:text-zinc-50">
+            {data.groupName}
+            <RoleBadge role={data.role} />
           </span>
+          {daysLabel ? (
+            <span
+              className={`text-xs font-semibold ${
+                section === "active"
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : "text-blue-700 dark:text-blue-400"
+              }`}
+            >
+              {daysLabel}
+            </span>
+          ) : null}
+        </div>
+        {dateLabel ? (
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            {dateLabel}
+          </p>
         ) : null}
-      </div>
-      {dateLabel ? (
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          {dateLabel}
-        </p>
+      </Link>
+      {onDelete ? (
+        <button
+          type="button"
+          onClick={onDelete}
+          className="flex items-center border-l border-zinc-200 px-3 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 dark:border-zinc-700 dark:hover:bg-red-950/30 dark:hover:text-red-400 rounded-r-lg"
+          title="旅行を削除"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+            <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
+          </svg>
+        </button>
       ) : null}
-    </Link>
+    </div>
   );
 }
 
@@ -143,6 +165,7 @@ export function GroupsClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pastOpen, setPastOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -161,6 +184,24 @@ export function GroupsClient() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const handleDelete = useCallback(
+    async (groupId: string, groupName: string) => {
+      if (!user) return;
+      if (!window.confirm(`「${groupName}」を削除しますか？\nメンバー・日程・旅程など全てのデータが削除されます。この操作は元に戻せません。`)) return;
+      setDeletingId(groupId);
+      setError(null);
+      try {
+        await deleteGroup(user.uid, groupId);
+        setItems((prev) => prev.filter((x) => x.groupId !== groupId));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "削除に失敗しました");
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [user],
+  );
 
   if (!user) return null;
 
@@ -234,7 +275,15 @@ export function GroupsClient() {
                 data={highlight.data}
                 today={today}
                 highlight
+                onDelete={
+                  highlight.data.role === "owner"
+                    ? () => handleDelete(highlight.groupId, highlight.data.groupName)
+                    : undefined
+                }
               />
+              {deletingId === highlight.groupId && (
+                <p className="mt-1 text-xs text-zinc-500">削除中…</p>
+              )}
             </div>
           ) : null}
 
@@ -245,7 +294,19 @@ export function GroupsClient() {
               <ul className="space-y-3">
                 {active.slice(1).map(({ groupId, data }) => (
                   <li key={groupId}>
-                    <GroupCard groupId={groupId} data={data} today={today} />
+                    <GroupCard
+                      groupId={groupId}
+                      data={data}
+                      today={today}
+                      onDelete={
+                        data.role === "owner"
+                          ? () => handleDelete(groupId, data.groupName)
+                          : undefined
+                      }
+                    />
+                    {deletingId === groupId && (
+                      <p className="mt-1 text-xs text-zinc-500">削除中…</p>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -261,7 +322,19 @@ export function GroupsClient() {
                   .slice(highlight && active.length === 0 ? 1 : 0)
                   .map(({ groupId, data }) => (
                     <li key={groupId}>
-                      <GroupCard groupId={groupId} data={data} today={today} />
+                      <GroupCard
+                        groupId={groupId}
+                        data={data}
+                        today={today}
+                        onDelete={
+                          data.role === "owner"
+                            ? () => handleDelete(groupId, data.groupName)
+                            : undefined
+                        }
+                      />
+                      {deletingId === groupId && (
+                        <p className="mt-1 text-xs text-zinc-500">削除中…</p>
+                      )}
                     </li>
                   ))}
               </ul>
@@ -275,7 +348,19 @@ export function GroupsClient() {
               <ul className="space-y-3">
                 {undecided.map(({ groupId, data }) => (
                   <li key={groupId}>
-                    <GroupCard groupId={groupId} data={data} today={today} />
+                    <GroupCard
+                      groupId={groupId}
+                      data={data}
+                      today={today}
+                      onDelete={
+                        data.role === "owner"
+                          ? () => handleDelete(groupId, data.groupName)
+                          : undefined
+                      }
+                    />
+                    {deletingId === groupId && (
+                      <p className="mt-1 text-xs text-zinc-500">削除中…</p>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -301,7 +386,19 @@ export function GroupsClient() {
                 <ul className="mt-3 space-y-3">
                   {past.map(({ groupId, data }) => (
                     <li key={groupId}>
-                      <GroupCard groupId={groupId} data={data} today={today} />
+                      <GroupCard
+                        groupId={groupId}
+                        data={data}
+                        today={today}
+                        onDelete={
+                          data.role === "owner"
+                            ? () => handleDelete(groupId, data.groupName)
+                            : undefined
+                        }
+                      />
+                      {deletingId === groupId && (
+                        <p className="mt-1 text-xs text-zinc-500">削除中…</p>
+                      )}
                     </li>
                   ))}
                 </ul>
