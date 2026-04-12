@@ -5,7 +5,7 @@
 ## すでに済んでいること
 
 - `git init` 済み、初期コミット済み、既定ブランチは **`main`**
-- リモート **`origin`** は `https://github.com/rakuda/trip-park.git` に設定済み（GitHub のユーザー名が `rakuda` でない場合は `git remote set-url origin https://github.com/<ユーザー名>/trip-park.git` で直してください）
+- リモート **`origin`** は `https://github.com/rakuda1007/trip-park.git` に設定済み
 - このリポジトリだけの作者設定（`git config user.name` / `user.email`）は **ローカル**に入れてあります。表示名やメールを変えたい場合は後述。
 
 ## 初めて GitHub に載せる手順
