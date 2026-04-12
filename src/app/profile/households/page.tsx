@@ -1,29 +1,31 @@
 import { AuthGuard } from "@/components/auth-guard";
-import { NewGroupForm } from "./new-group-form";
+import { HouseholdsClient } from "./households-client";
 import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "旅行を作成",
+  title: "世帯マスタ",
 };
 
-export default function NewGroupPage() {
+export default function HouseholdsPage() {
   return (
     <AuthGuard>
       <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
         <Link
-          href="/groups"
+          href="/profile"
           className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
         >
-          ← 旅行一覧
+          ← プロフィール
         </Link>
         <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          旅行を作成
+          世帯マスタ
         </h1>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          1回の旅行・キャンプ単位のスペースを作ります。作成後に招待リンクを共有してメンバーを招待できます。
+          旅行に参加する世帯の情報を登録します。旅行ごとに「何人参加するか」を指定すると、精算が世帯名単位でまとめられます。
         </p>
-        <NewGroupForm />
+        <div className="mt-6">
+          <HouseholdsClient />
+        </div>
       </div>
     </AuthGuard>
   );

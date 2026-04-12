@@ -5,6 +5,7 @@ export const COLLECTIONS = {
   users: "users",
   groups: "groups",
   inviteCodes: "inviteCodes",
+  circles: "circles",
 } as const;
 
 export const SUB = {
@@ -19,6 +20,12 @@ export const SUB = {
   tripRoutes: "tripRoutes",
   expenses: "expenses",
   families: "families",
+  /** users/{uid}/households/{householdId} */
+  households: "households",
+  /** groups/{groupId}/destinationCandidates/{id} */
+  destinationCandidates: "destinationCandidates",
+  /** groups/{groupId}/destinationVotes/{docId} */
+  destinationVotes: "destinationVotes",
 } as const;
 
 /** groups/{groupId}/config/{docId} の確定情報 */

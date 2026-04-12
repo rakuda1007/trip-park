@@ -9,26 +9,12 @@ import {
   type FamilyInput,
 } from "@/lib/firestore/families";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
+import { listHouseholds, type HouseholdItem } from "@/lib/firestore/households";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import type { FamilyDoc } from "@/types/family";
-import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-
-function formatTs(v: unknown): string {
-  if (!v) return "—";
-  if (v instanceof Timestamp) {
-    return v.toDate().toLocaleString("ja-JP", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-  return "—";
-}
 
 function canManageFamily(
   group: GroupDoc,
@@ -42,27 +28,41 @@ function canManageFamily(
   return uid === createdByUserId;
 }
 
+type FormState = {
+  name: string;
+  adultCount: string;
+  childCount: string;
+  childRatio: string;
+  selectedMembers: Set<string>;
+  householdMasterId: string | null;
+};
+
+function emptyForm(): FormState {
+  return {
+    name: "",
+    adultCount: "1",
+    childCount: "0",
+    childRatio: "0.5",
+    selectedMembers: new Set(),
+    householdMasterId: null,
+  };
+}
+
 export function FamiliesClient() {
   const params = useParams();
   const groupId = params.groupId as string;
   const { user } = useAuth();
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
-  const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>(
-    [],
-  );
-  const [families, setFamilies] = useState<{ id: string; data: FamilyDoc }[]>(
-    [],
-  );
+  const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>([]);
+  const [families, setFamilies] = useState<{ id: string; data: FamilyDoc }[]>([]);
+  const [households, setHouseholds] = useState<HouseholdItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
+  const [form, setForm] = useState<FormState>(emptyForm());
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [adultCount, setAdultCount] = useState("2");
-  const [childCount, setChildCount] = useState("0");
-  const [childRatioInput, setChildRatioInput] = useState("0.5");
-  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
+  const [showHouseholdPicker, setShowHouseholdPicker] = useState(false);
 
   const memberIds = new Set(members.map((m) => m.userId));
 
@@ -73,9 +73,8 @@ export function FamiliesClient() {
       const g = await getGroup(groupId);
       setGroup(g);
       if (g) {
-        const m = await listMembers(groupId);
+        const [m, f] = await Promise.all([listMembers(groupId), listFamilies(groupId)]);
         setMembers(m);
-        const f = await listFamilies(groupId);
         setFamilies(f);
       } else {
         setMembers([]);
@@ -91,47 +90,65 @@ export function FamiliesClient() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!user) return;
+    listHouseholds(user.uid)
+      .then(setHouseholds)
+      .catch(() => {});
+  }, [user]);
+
   function resetForm() {
     setEditingId(null);
-    setName("");
-    setAdultCount("2");
-    setChildCount("0");
-    setChildRatioInput("0.5");
-    setSelectedMembers(new Set());
+    setForm(emptyForm());
+    setShowHouseholdPicker(false);
+  }
+
+  function applyHousehold(h: HouseholdItem) {
+    setForm((prev) => ({
+      ...prev,
+      name: h.data.name,
+      adultCount: String(h.data.defaultAdultCount),
+      childCount: String(h.data.defaultChildCount),
+      childRatio: String(h.data.defaultChildRatio),
+      householdMasterId: h.id,
+    }));
+    setShowHouseholdPicker(false);
   }
 
   function startEdit(row: { id: string; data: FamilyDoc }) {
     setEditingId(row.id);
-    setName(row.data.name);
-    setAdultCount(String(row.data.adultCount));
-    setChildCount(String(row.data.childCount));
-    const cr =
-      typeof row.data.childRatio === "number" && Number.isFinite(row.data.childRatio)
-        ? row.data.childRatio
-        : 0.5;
-    setChildRatioInput(String(cr));
-    setSelectedMembers(new Set(row.data.memberUserIds));
+    setForm({
+      name: row.data.name,
+      adultCount: String(row.data.adultCount),
+      childCount: String(row.data.childCount),
+      childRatio: String(
+        typeof row.data.childRatio === "number" ? row.data.childRatio : 0.5,
+      ),
+      selectedMembers: new Set(row.data.memberUserIds),
+      householdMasterId: row.data.householdMasterId ?? null,
+    });
   }
 
   function toggleMember(uid: string) {
-    setSelectedMembers((prev) => {
-      const next = new Set(prev);
+    setForm((prev) => {
+      const next = new Set(prev.selectedMembers);
       if (next.has(uid)) next.delete(uid);
       else next.add(uid);
-      return next;
+      return { ...prev, selectedMembers: next };
     });
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user || !groupId) return;
-    const crParsed = Number(String(childRatioInput).replace(",", ".").trim());
+    const cr = Number(String(form.childRatio).replace(",", ".").trim());
     const input: FamilyInput = {
-      name: name.trim(),
-      adultCount: Number(adultCount),
-      childCount: Number(childCount),
-      childRatio: selectedMembers.size >= 2 ? crParsed : 1,
-      memberUserIds: [...selectedMembers],
+      name: form.name.trim(),
+      adultCount: Number(form.adultCount),
+      childCount: Number(form.childCount),
+      childRatio: form.selectedMembers.size >= 2 ? cr : 1,
+      memberUserIds: [...form.selectedMembers],
+      householdMasterId: form.householdMasterId,
     };
     setBusy(editingId ? "save" : "add");
     setError(null);
@@ -152,7 +169,7 @@ export function FamiliesClient() {
 
   async function handleDelete(id: string) {
     if (!groupId) return;
-    if (!confirm("この世帯を削除しますか？")) return;
+    if (!confirm("この参加世帯を削除しますか？")) return;
     setBusy(`del-${id}`);
     setError(null);
     try {
@@ -177,13 +194,15 @@ export function FamiliesClient() {
   if (group === null) {
     return (
       <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
-        <p className="text-sm text-zinc-600">グループが見つかりません。</p>
+        <p className="text-sm text-zinc-600">旅行が見つかりません。</p>
         <Link href="/groups" className="mt-4 inline-block text-sm text-zinc-900 underline">
-          グループ一覧へ
+          旅行一覧へ
         </Link>
       </div>
     );
   }
+
+  const showChildRatio = form.selectedMembers.size >= 2;
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
@@ -191,16 +210,15 @@ export function FamiliesClient() {
         href={`/groups/${groupId}`}
         className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
       >
-        ← グループ詳細
+        ← 旅行詳細
       </Link>
 
       <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        家族（世帯）
+        参加世帯
       </h1>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        例: 「奥田」に大人2・子供2、「大木」に大人3・子供1のように登録し、メンバーアカウントを世帯に紐付けます。
-        支出の立て替えは世帯単位です（一人なら一人世帯）。世帯にメンバーが2人以上いる場合は、大人・子供の人数と子供比率（大人1人を1とした子供の重み）を登録してください。
-        精算の目安は世帯単位にまとめて表示できます。1人のメンバーは1つの世帯のみに入れられます。
+        この旅行に参加する世帯を登録します。精算は世帯名単位でまとめられます。
+        世帯マスタに登録済みの世帯を選ぶと人数を自動入力できます。
       </p>
 
       {error ? (
@@ -209,87 +227,150 @@ export function FamiliesClient() {
         </p>
       ) : null}
 
+      {/* 追加・編集フォーム */}
       <section className="mt-8 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
           {editingId ? "世帯を編集" : "世帯を追加"}
         </h2>
+
+        {/* 世帯マスタから選ぶ */}
+        {!editingId && households.length > 0 ? (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setShowHouseholdPicker((v) => !v)}
+              className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-200"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              世帯マスタから選ぶ
+            </button>
+            {showHouseholdPicker ? (
+              <ul className="mt-2 space-y-1 rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-900">
+                {households.map((h) => (
+                  <li key={h.id}>
+                    <button
+                      type="button"
+                      onClick={() => applyHousehold(h)}
+                      className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                    >
+                      <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                        {h.data.name}
+                      </span>
+                      <span className="ml-2 text-xs text-zinc-400">
+                        大人 {h.data.defaultAdultCount}
+                        {h.data.defaultChildCount > 0
+                          ? ` ・ 子供 ${h.data.defaultChildCount}`
+                          : ""}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
+        {form.householdMasterId ? (
+          <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
+            ✓ 世帯マスタからコピーしました（人数は変更可能です）
+          </p>
+        ) : null}
+
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-          <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-            世帯名（例: 奥田、大木）
+          <div>
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              世帯名
+            </label>
             <input
               type="text"
               required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={form.name}
+              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+              placeholder="例: 奥田家"
               className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
             />
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-              大人の人数
-              <input
-                type="number"
-                min={0}
-                required
-                value={adultCount}
-                onChange={(e) => setAdultCount(e.target.value)}
-                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-              />
-            </label>
-            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-              子供の人数
-              <input
-                type="number"
-                min={0}
-                required
-                value={childCount}
-                onChange={(e) => setChildCount(e.target.value)}
-                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-              />
-            </label>
           </div>
-          {selectedMembers.size >= 2 ? (
-            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-              子供比率（大人1人を1としたときの子供1人の重み）
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                大人の人数
+              </label>
               <input
                 type="number"
-                min={0.01}
-                max={1}
-                step={0.05}
+                min={0}
                 required
-                value={childRatioInput}
-                onChange={(e) => setChildRatioInput(e.target.value)}
-                className="mt-1 w-full max-w-[14rem] rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                value={form.adultCount}
+                onChange={(e) => setForm((p) => ({ ...p, adultCount: e.target.value }))}
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
               />
-            </label>
-          ) : (
-            <p className="text-xs text-zinc-500">
-              メンバーが1人だけの世帯では、子供比率は不要です（内部では1として保存されます）。
-            </p>
-          )}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                子供の人数
+              </label>
+              <input
+                type="number"
+                min={0}
+                required
+                value={form.childCount}
+                onChange={(e) => setForm((p) => ({ ...p, childCount: e.target.value }))}
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+              />
+            </div>
+            {showChildRatio ? (
+              <div>
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  子供の負担比率
+                </label>
+                <input
+                  type="number"
+                  min={0.01}
+                  max={1}
+                  step={0.05}
+                  required
+                  value={form.childRatio}
+                  onChange={(e) => setForm((p) => ({ ...p, childRatio: e.target.value }))}
+                  className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                />
+                <p className="mt-0.5 text-[10px] text-zinc-400">大人=1.0</p>
+              </div>
+            ) : null}
+          </div>
+
+          {/* メンバー選択 */}
           <div>
             <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              この世帯に含めるメンバー（アカウント）
+              Trip Park アカウントを紐付ける（任意）
             </p>
-            <ul className="mt-2 space-y-2">
-              {members.map(({ userId, data }) => (
-                <li key={userId}>
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={selectedMembers.has(userId)}
-                      onChange={() => toggleMember(userId)}
-                    />
-                    <span>{data.displayName || userId.slice(0, 8) + "…"}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-1 text-xs text-zinc-500">
-              人数と子供比率は、世帯にメンバーが2人以上いるときの登録必須項目です。実際の負担の分け方は支出画面でメンバーごとに設定します。
+            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              支出を登録したメンバーが自動的にこの世帯として扱われます
             </p>
+            {members.length === 0 ? (
+              <p className="mt-2 text-xs text-zinc-400">メンバーがいません</p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {members.map(({ userId, data }) => (
+                  <li key={userId}>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={form.selectedMembers.has(userId)}
+                        onChange={() => toggleMember(userId)}
+                        className="rounded"
+                      />
+                      <span className="text-zinc-800 dark:text-zinc-200">
+                        {data.displayName || `${userId.slice(0, 8)}…`}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-          <div className="flex flex-wrap gap-2">
+
+          <div className="flex flex-wrap gap-2 pt-1">
             <button
               type="submit"
               disabled={busy !== null || !user}
@@ -310,9 +391,10 @@ export function FamiliesClient() {
         </form>
       </section>
 
+      {/* 登録済みの世帯一覧 */}
       <section className="mt-10">
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-          登録済みの世帯
+          登録済みの参加世帯
         </h2>
         {families.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-500">まだ世帯がありません。</p>
@@ -329,30 +411,37 @@ export function FamiliesClient() {
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <p className="font-semibold text-zinc-900 dark:text-zinc-50">
-                        {row.data.name}
-                      </p>
-                      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                        大人 {row.data.adultCount} 人 · 子供 {row.data.childCount} 人
-                        {row.data.memberUserIds.length >= 2 ? (
-                          <>
-                            {" "}
-                            · 子供比率{" "}
-                            {typeof row.data.childRatio === "number"
-                              ? row.data.childRatio
-                              : "—"}
-                          </>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-zinc-900 dark:text-zinc-50">
+                          {row.data.name}
+                        </p>
+                        {row.data.householdMasterId ? (
+                          <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                            マスタ連携
+                          </span>
                         ) : null}
+                      </div>
+                      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                        大人 {row.data.adultCount} 人
+                        {row.data.childCount > 0
+                          ? ` ・ 子供 ${row.data.childCount} 人（×${row.data.childRatio ?? "—"}）`
+                          : ""}
                       </p>
-                      <p className="mt-2 text-xs text-zinc-500">
-                        メンバー:{" "}
-                        {row.data.memberUserIds
-                          .map((uid) => {
-                            const m = members.find((x) => x.userId === uid);
-                            return m?.data.displayName || uid.slice(0, 8) + "…";
-                          })
-                          .join("、")}
-                      </p>
+                      {row.data.memberUserIds.length > 0 ? (
+                        <p className="mt-1 text-xs text-zinc-500">
+                          アカウント:{" "}
+                          {row.data.memberUserIds
+                            .map((uid) => {
+                              const m = members.find((x) => x.userId === uid);
+                              return m?.data.displayName || `${uid.slice(0, 8)}…`;
+                            })
+                            .join("、")}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-zinc-400">
+                          アカウント未連携（手動精算）
+                        </p>
+                      )}
                     </div>
                     {can ? (
                       <div className="flex gap-2">
@@ -375,9 +464,6 @@ export function FamiliesClient() {
                       </div>
                     ) : null}
                   </div>
-                  <p className="mt-2 text-xs text-zinc-400">
-                    登録: {formatTs(row.data.createdAt)}
-                  </p>
                 </li>
               );
             })}

@@ -1,5 +1,6 @@
 import { LoginForm } from "@/components/auth/login-form";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "ログイン",
@@ -14,7 +15,9 @@ export default function LoginPage() {
       <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
         メールアドレスとパスワードでログインします。Firebase コンソールで「メール／パスワード」認証を有効にしてください。
       </p>
-      <LoginForm />
+      <Suspense>
+        <LoginForm />
+      </Suspense>
     </div>
   );
 }

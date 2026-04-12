@@ -2,19 +2,24 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import { LoadingScreen } from "@/components/loading-screen";
-import { useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, type ReactNode } from "react";
 
-export function AuthGuard({ children }: { children: ReactNode }) {
+function AuthGuardInner({ children }: { children: ReactNode }) {
   const { user, loading, authUnavailable } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (loading || authUnavailable) return;
     if (!user) {
-      router.replace("/login");
+      // 現在のパス+クエリを returnTo として /login に渡す
+      const currentPath =
+        pathname + (searchParams.toString() ? `?${searchParams.toString()}` : "");
+      router.replace(`/login?returnTo=${encodeURIComponent(currentPath)}`);
     }
-  }, [user, loading, authUnavailable, router]);
+  }, [user, loading, authUnavailable, router, pathname, searchParams]);
 
   if (authUnavailable) {
     return (
@@ -33,4 +38,12 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   }
 
   return <>{children}</>;
+}
+
+export function AuthGuard({ children }: { children: ReactNode }) {
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <AuthGuardInner>{children}</AuthGuardInner>
+    </Suspense>
+  );
 }

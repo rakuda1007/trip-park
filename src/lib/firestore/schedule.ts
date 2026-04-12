@@ -4,6 +4,7 @@ import {
   SCHEDULE_CONFIG_DOC,
   SUB,
 } from "@/lib/firestore/collections";
+import { updateGroupTripDates } from "@/lib/firestore/groups";
 import type {
   ScheduleAnswer,
   ScheduleCandidateDoc,
@@ -237,6 +238,12 @@ export async function setScheduleConfirm(
     confirmedBy: actorUid,
     confirmedDate: null,
   });
+  // グループ本体の旅行日程も同期更新（権限不足時は無視）
+  try {
+    await updateGroupTripDates(groupId, startDateISO, endDateISO);
+  } catch {
+    // 管理者など権限がない場合はスキップ
+  }
 }
 
 export async function clearScheduleConfirm(groupId: string): Promise<void> {
@@ -256,4 +263,10 @@ export async function clearScheduleConfirm(groupId: string): Promise<void> {
     confirmedAt: null,
     confirmedBy: null,
   });
+  // グループ本体の旅行日程もクリア（権限不足時は無視）
+  try {
+    await updateGroupTripDates(groupId, null, null);
+  } catch {
+    // 管理者など権限がない場合はスキップ
+  }
 }

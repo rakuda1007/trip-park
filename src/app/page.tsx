@@ -9,8 +9,8 @@ export default function Home() {
           Trip Park
         </h1>
         <p className="mt-3 text-zinc-600 dark:text-zinc-400">
-          グループで旅行やキャンプを計画するときの、日程調整・お知らせ・旅程・精算をまとめるための
-          Web アプリです（Phase 0: 認証とプロフィールの土台）。
+          旅行・キャンプを計画するときの、日程調整・目的地共有・旅程管理・精算をまとめる
+          Web アプリです。
         </p>
         <FirebaseEnvHint />
         <HomeLandingActions />

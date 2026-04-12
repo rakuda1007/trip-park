@@ -34,6 +34,8 @@ export type FamilyInput = {
    */
   childRatio: number;
   memberUserIds: string[];
+  /** 世帯マスタからコピーした場合の参照 ID。手動入力なら null */
+  householdMasterId: string | null;
 };
 
 function validateFamilyInput(input: FamilyInput, memberIds: Set<string>): void {
@@ -104,6 +106,7 @@ export async function addFamily(
     childCount: Math.floor(input.childCount),
     childRatio: ratioStored,
     memberUserIds: ids,
+    householdMasterId: input.householdMasterId ?? null,
     createdByUserId: uid,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -130,6 +133,7 @@ export async function updateFamily(
     childCount: Math.floor(input.childCount),
     childRatio: ratioStored,
     memberUserIds: ids,
+    householdMasterId: input.householdMasterId ?? null,
     updatedAt: serverTimestamp(),
   });
 }

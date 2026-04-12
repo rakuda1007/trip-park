@@ -1,5 +1,6 @@
 import { SignupForm } from "@/components/auth/signup-form";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "新規登録",
@@ -12,9 +13,11 @@ export default function SignupPage() {
         新規登録
       </h1>
       <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
-        アカウントを作成すると、今後追加するグループ・日程調整などの機能が利用できるようになります。
+        アカウントを作成すると、今後追加する旅行・日程調整などの機能が利用できるようになります。
       </p>
-      <SignupForm />
+      <Suspense>
+        <SignupForm />
+      </Suspense>
     </div>
   );
 }

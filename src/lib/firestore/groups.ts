@@ -4,7 +4,7 @@ import {
   SCHEDULE_CONFIG_DOC,
   SUB,
 } from "@/lib/firestore/collections";
-import type { GroupDoc, InviteCodeDoc, MemberDoc, UserGroupRefDoc } from "@/types/group";
+import type { GroupDoc, InviteCodeDoc, MemberDoc, TripStatus, UserGroupRefDoc } from "@/types/group";
 import {
   collection,
   deleteDoc,
@@ -46,6 +46,8 @@ export async function createGroup(
   displayName: string | null,
   name: string,
   description: string | null,
+  tripStartDate?: string | null,
+  tripEndDate?: string | null,
 ): Promise<string> {
   const db = getFirebaseFirestore();
   const code = await ensureUniqueInviteCode(db);
@@ -63,6 +65,10 @@ export async function createGroup(
     inviteCode: code,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    tripStartDate: tripStartDate ?? null,
+    tripEndDate: tripEndDate ?? null,
+    destination: null,
+    status: "planning",
   });
 
   const batch = writeBatch(db);
@@ -147,14 +153,40 @@ export async function listMyGroups(uid: string): Promise<
   const ref = collection(db, COLLECTIONS.users, uid, SUB.groups);
   const q = query(ref, orderBy("joinedAt", "desc"));
   const snap = await getDocs(q);
-  const out: { groupId: string; data: UserGroupRefDoc }[] = [];
+  const items: { groupId: string; data: UserGroupRefDoc }[] = [];
   snap.forEach((d) => {
-    out.push({
-      groupId: d.id,
-      data: d.data() as UserGroupRefDoc,
-    });
+    items.push({ groupId: d.id, data: d.data() as UserGroupRefDoc });
   });
-  return out;
+
+  // グループ本体から旅行日程を並列取得
+  const groupSnaps = await Promise.all(
+    items.map(({ groupId }) => getDoc(doc(db, COLLECTIONS.groups, groupId))),
+  );
+  return items.map((item, i) => {
+    const gd = groupSnaps[i]?.data() as GroupDoc | undefined;
+    return {
+      groupId: item.groupId,
+      data: {
+        ...item.data,
+        tripStartDate: gd?.tripStartDate ?? null,
+        tripEndDate: gd?.tripEndDate ?? null,
+      },
+    };
+  });
+}
+
+/** グループの旅行日程を更新する（オーナーまたは管理者が実行） */
+export async function updateGroupTripDates(
+  groupId: string,
+  startDate: string | null,
+  endDate: string | null,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  await updateDoc(doc(db, COLLECTIONS.groups, groupId), {
+    tripStartDate: startDate,
+    tripEndDate: endDate,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function getGroup(groupId: string): Promise<GroupDoc | null> {
@@ -306,4 +338,50 @@ export function buildJoinUrl(code: string): string {
     return `/join?code=${encodeURIComponent(code)}`;
   }
   return `${window.location.origin}/join?code=${encodeURIComponent(code)}`;
+}
+
+/**
+ * 未ユーザー向け招待ランディングURL（/welcome?code=...）
+ * ログイン済みユーザーは /join へリダイレクトされる
+ */
+export function buildWelcomeUrl(code: string): string {
+  if (typeof window === "undefined") {
+    return `/welcome?code=${encodeURIComponent(code)}`;
+  }
+  return `${window.location.origin}/welcome?code=${encodeURIComponent(code)}`;
+}
+
+/** 招待コードの情報を未ログイン状態でも取得（招待ランディングページ用） */
+export async function getInviteCodeInfo(
+  code: string,
+): Promise<InviteCodeDoc | null> {
+  const db = getFirebaseFirestore();
+  const ref = doc(db, COLLECTIONS.inviteCodes, code.trim().toUpperCase());
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  return snap.data() as InviteCodeDoc;
+}
+
+/** 旅行フェーズを更新する（オーナーのみ） */
+export async function updateTripStatus(
+  groupId: string,
+  status: TripStatus,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  await updateDoc(doc(db, COLLECTIONS.groups, groupId), {
+    status,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** 目的地を更新する（オーナー / 管理者） */
+export async function updateDestination(
+  groupId: string,
+  destination: string | null,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  await updateDoc(doc(db, COLLECTIONS.groups, groupId), {
+    destination,
+    updatedAt: serverTimestamp(),
+  });
 }

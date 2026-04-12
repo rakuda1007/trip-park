@@ -6,12 +6,14 @@ import { getFirebaseAuth } from "@/lib/firebase/client";
 import { isFirebaseConfigured } from "@/lib/firebase/env";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export function LoginForm() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo") ?? "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -19,9 +21,9 @@ export function LoginForm() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace("/dashboard");
+      router.replace(returnTo || "/dashboard");
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, returnTo]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,7 +39,7 @@ export function LoginForm() {
         email.trim(),
         password,
       );
-      router.push("/dashboard");
+      router.push(returnTo || "/dashboard");
       router.refresh();
     } catch (err: unknown) {
       const code =

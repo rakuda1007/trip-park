@@ -15,6 +15,11 @@ export type FamilyDoc = {
   childRatio?: number;
   /** この世帯に含めるグループメンバー（アカウント）の userId */
   memberUserIds: string[];
+  /**
+   * 参照元の世帯マスタ ID（users/{uid}/households/{id}）
+   * マスタから選んで追加した場合に保存。手動入力の場合は null
+   */
+  householdMasterId: string | null;
   createdByUserId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
