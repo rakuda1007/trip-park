@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#0f766e"/>
+  <!-- Mountain -->
+  <polygon points="256,140 380,360 132,360" fill="white" opacity="0.95"/>
+  <polygon points="300,220 380,360 220,360" fill="#0f766e" opacity="0.3"/>
+  <!-- Location pin -->
+  <circle cx="256" cy="110" r="38" fill="white"/>
+  <circle cx="256" cy="110" r="18" fill="#0f766e"/>
+  <polygon points="256,165 236,118 276,118" fill="white"/>
+</svg>
