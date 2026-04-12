@@ -166,21 +166,21 @@ export async function listMyGroups(uid: string): Promise<
     ),
   );
 
-  return items
-    .map((item, i) => {
-      const gSnap = groupSnaps[i];
-      if (!gSnap) return null; // アクセス不可 → スキップ
-      const gd = gSnap.data() as GroupDoc | undefined;
-      return {
+  return items.flatMap((item, i) => {
+    const gSnap = groupSnaps[i];
+    if (!gSnap) return []; // アクセス不可 → スキップ
+    const gd = gSnap.data() as GroupDoc | undefined;
+    return [
+      {
         groupId: item.groupId,
         data: {
           ...item.data,
           tripStartDate: gd?.tripStartDate ?? null,
           tripEndDate: gd?.tripEndDate ?? null,
         },
-      };
-    })
-    .filter((item): item is { groupId: string; data: UserGroupRefDoc } => item !== null);
+      },
+    ];
+  });
 }
 
 /** グループの旅行日程を更新する（オーナーまたは管理者が実行） */
