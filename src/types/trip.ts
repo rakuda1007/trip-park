@@ -27,8 +27,6 @@ export type TripRouteDoc = {
   memo: string | null;
   /** この日が完了済みか */
   isDone: boolean;
-  /** Directions APIで描画したルートのエンコード済みポリライン（キャッシュ） */
-  routePolyline: string | null;
   sortOrder: number;
   createdByUserId: string;
   createdByDisplayName: string | null;

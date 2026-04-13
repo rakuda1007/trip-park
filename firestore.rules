@@ -163,7 +163,7 @@ service cloud.firestore {
           request.resource.data.keys().hasAll([
             'dayNumber', 'departurePoint', 'departureMapUrl',
             'destinationName', 'destinationMapUrl',
-            'waypoints', 'routeMapUrl', 'memo', 'isDone', 'routePolyline',
+            'waypoints', 'routeMapUrl', 'memo', 'isDone',
             'sortOrder', 'routeLabel', 'title', 'destinationAddress', 'destinationMemo',
             'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt'
           ]);

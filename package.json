@@ -15,7 +15,6 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@react-google-maps/api": "^2.20.8",
     "client-only": "^0.0.1",
     "firebase": "^12.12.0",
     "next": "^15.5.15",

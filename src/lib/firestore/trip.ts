@@ -48,7 +48,6 @@ export async function listTripRoutes(groupId: string): Promise<
         isDone: raw.isDone === true,
         dayNumber: typeof raw.dayNumber === "number" ? raw.dayNumber : (raw.sortOrder as number ?? 0) + 1,
         memo: typeof raw.memo === "string" ? raw.memo : (raw.destinationMemo as string | null ?? null),
-        routePolyline: typeof raw.routePolyline === "string" ? raw.routePolyline : null,
         departurePoint: typeof raw.departurePoint === "string" ? raw.departurePoint : null,
         departureMapUrl: typeof raw.departureMapUrl === "string" ? raw.departureMapUrl : null,
       },
@@ -87,7 +86,6 @@ export async function addTripRoute(
     routeMapUrl: input.routeMapUrl?.trim() || null,
     memo: input.memo?.trim() || null,
     isDone: input.isDone,
-    routePolyline: null,
     sortOrder: input.dayNumber,
     // legacy fields for backward compat with rules
     routeLabel: null,
@@ -119,8 +117,6 @@ export async function updateTripRoute(
     routeMapUrl: input.routeMapUrl?.trim() || null,
     memo: input.memo?.trim() || null,
     isDone: input.isDone,
-    // clear polyline cache when route changes
-    routePolyline: null,
     sortOrder: input.dayNumber,
     // legacy
     routeLabel: null,
@@ -143,18 +139,6 @@ export async function updateDayDone(
   );
 }
 
-/** Directions APIで得たポリラインをキャッシュとして保存する */
-export async function saveRoutePolyline(
-  groupId: string,
-  routeId: string,
-  polyline: string,
-): Promise<void> {
-  const db = getFirebaseFirestore();
-  await updateDoc(
-    doc(db, COLLECTIONS.groups, groupId, SUB.tripRoutes, routeId),
-    { routePolyline: polyline, updatedAt: serverTimestamp() },
-  );
-}
 
 export async function deleteTripRoute(
   groupId: string,
