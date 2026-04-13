@@ -14,7 +14,6 @@ import {
   aggregateBalancesByFamilyUnit,
   computeBalancesYen,
   computeKeyedSettlementTransfers,
-  computeSettlementTransfers,
   distributeWeightedSharesYen,
   resolveSettlementUnitLabel,
 } from "@/lib/settlement";
@@ -39,8 +38,6 @@ const CATEGORY_OPTIONS: ExpenseCategory[] = [
   "lodging",
   "other",
 ];
-
-type ParticipantRole = "adult" | "child";
 
 function formatYen(n: number): string {
   return `¥${n.toLocaleString("ja-JP")}`;
@@ -68,79 +65,8 @@ function formatTs(v: unknown): string {
   return "—";
 }
 
-function parseChildRatio(s: string): number {
-  const n = Number(String(s).replace(",", ".").trim());
-  if (!Number.isFinite(n) || n <= 0 || n > 1) return 0.5;
-  return n;
-}
-
-/** 保存済みの重みから大人/子供 UI を復元（近似） */
-function inferFamilyRolesFromWeights(
-  weights: Record<string, number>,
-  participantIds: string[],
-): { childRatio: number; roles: Record<string, ParticipantRole> } {
-  const ids = [...participantIds];
-  const wvals = ids
-    .map((id) => weights[id])
-    .filter((w): w is number => w != null && w > 0);
-  if (wvals.length === 0) {
-    return {
-      childRatio: 0.5,
-      roles: Object.fromEntries(ids.map((id) => [id, "adult" as const])),
-    };
-  }
-  const maxW = Math.max(...wvals);
-  const minW = Math.min(...wvals);
-  const roles: Record<string, ParticipantRole> = {};
-  for (const id of ids) {
-    const w = weights[id] ?? 0;
-    roles[id] = Math.abs(w - maxW) < 1e-5 ? "adult" : "child";
-  }
-  const ratio = maxW > 0 ? minW / maxW : 0.5;
-  return {
-    childRatio: ratio > 0 && ratio <= 1 ? ratio : 0.5,
-    roles,
-  };
-}
-
-function buildFamilyWeights(
-  ids: string[],
-  roles: Record<string, ParticipantRole>,
-  childRatio: number,
-): Record<string, number> {
-  const cr = Math.min(1, Math.max(0.01, childRatio));
-  const o: Record<string, number> = {};
-  for (const id of ids) {
-    o[id] = roles[id] === "child" ? cr : 1;
-  }
-  return o;
-}
-
 function splitModeLabel(mode: ExpenseSplitMode): string {
-  return mode === "weighted" ? "比率割（大人・子供）" : "均等割";
-}
-
-/** 一覧用: 重みが同一なら null（大人・子供の区別なし） */
-function countAdultChildFromExpense(
-  r: ExpenseDoc,
-): { adults: number; children: number } | null {
-  if (r.splitMode !== "weighted" || !r.weightByUserId) return null;
-  const ids = r.participantUserIds;
-  const wvals = ids
-    .map((id) => r.weightByUserId![id])
-    .filter((w): w is number => w != null && w > 0);
-  if (wvals.length === 0) return null;
-  const maxW = Math.max(...wvals);
-  const minW = Math.min(...wvals);
-  if (Math.abs(maxW - minW) < 1e-5) return null;
-  let adults = 0;
-  let children = 0;
-  for (const id of ids) {
-    const w = r.weightByUserId[id] ?? 0;
-    if (Math.abs(w - maxW) < 1e-5) adults += 1;
-    else children += 1;
-  }
-  return { adults, children };
+  return mode === "weighted" ? "人数割" : "均等割";
 }
 
 function canManageExpense(
@@ -155,21 +81,22 @@ function canManageExpense(
   return uid === createdByUserId;
 }
 
+/** 世帯の人数割重みを計算（大人 * 1 + 子供 * childRatio） */
+function familyWeight(data: FamilyDoc): number {
+  const cr = typeof data.childRatio === "number" ? data.childRatio : 1;
+  const w = data.adultCount + data.childCount * cr;
+  return w > 0 ? w : 1;
+}
+
 export function ExpensesClient() {
   const params = useParams();
   const groupId = params.groupId as string;
   const { user } = useAuth();
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
-  const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>(
-    [],
-  );
-  const [expenses, setExpenses] = useState<{ id: string; data: ExpenseDoc }[]>(
-    [],
-  );
-  const [families, setFamilies] = useState<{ id: string; data: FamilyDoc }[]>(
-    [],
-  );
+  const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>([]);
+  const [expenses, setExpenses] = useState<{ id: string; data: ExpenseDoc }[]>([]);
+  const [families, setFamilies] = useState<{ id: string; data: FamilyDoc }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -181,21 +108,12 @@ export function ExpensesClient() {
   const [category, setCategory] = useState<ExpenseCategory>("food");
   const [memo, setMemo] = useState("");
   const [splitMode, setSplitMode] = useState<ExpenseSplitMode>("equal");
-  const [childRatioInput, setChildRatioInput] = useState("0.5");
-  const [roles, setRoles] = useState<Record<string, ParticipantRole>>({});
-  const [selectedParticipants, setSelectedParticipants] = useState<Set<string>>(
-    new Set(),
-  );
-
-  const memberIds = useMemo(
-    () => new Set(members.map((m) => m.userId)),
-    [members],
-  );
+  const [selectedFamilyIds, setSelectedFamilyIds] = useState<Set<string>>(new Set());
 
   const userToFamilyId = useMemo(() => {
     const m = new Map<string, string>();
     for (const f of families) {
-      for (const uid of f.data.memberUserIds) m.set(uid, f.id);
+      for (const uid of f.data.memberUserIds ?? []) m.set(uid, f.id);
     }
     return m;
   }, [families]);
@@ -207,13 +125,15 @@ export function ExpensesClient() {
       const g = await getGroup(groupId);
       setGroup(g);
       if (g) {
-        const m = await listMembers(groupId);
+        const [m, ex, fam] = await Promise.all([
+          listMembers(groupId),
+          listExpenses(groupId),
+          listFamilies(groupId),
+        ]);
         setMembers(m);
-        const ex = await listExpenses(groupId);
         setExpenses(ex);
-        const fam = await listFamilies(groupId);
         setFamilies(fam);
-        setSelectedParticipants(new Set(m.map((x) => x.userId)));
+        setSelectedFamilyIds(new Set(fam.map((f) => f.id)));
       } else {
         setMembers([]);
         setExpenses([]);
@@ -233,67 +153,24 @@ export function ExpensesClient() {
     if (families.length === 0) return;
     setPaidByFamilyId((prev) => {
       if (prev && families.some((f) => f.id === prev)) return prev;
-      if (user?.uid) {
-        const mine = families.find((f) =>
-          f.data.memberUserIds.includes(user.uid),
-        );
-        if (mine) return mine.id;
-      }
       return families[0]!.id;
     });
-  }, [families, user]);
-
-  useEffect(() => {
-    setRoles((prev) => {
-      const next: Record<string, ParticipantRole> = { ...prev };
-      for (const uid of selectedParticipants) {
-        if (!(uid in next)) next[uid] = "adult";
-      }
-      for (const uid of Object.keys(next)) {
-        if (!selectedParticipants.has(uid)) delete next[uid];
-      }
-      return next;
-    });
-  }, [selectedParticipants]);
+  }, [families]);
 
   const balances = useMemo(
     () => computeBalancesYen(expenses, userToFamilyId),
     [expenses, userToFamilyId],
   );
-  const transfers = useMemo(
-    () => computeSettlementTransfers(balances),
-    [balances],
+
+  const familyBalances = useMemo(
+    () => aggregateBalancesByFamilyUnit(balances, families),
+    [balances, families],
   );
 
-  const familyBalances = useMemo(() => {
-    if (families.length === 0) return null;
-    return aggregateBalancesByFamilyUnit(balances, families);
-  }, [balances, families]);
-
-  const familyTransfers = useMemo(() => {
-    if (!familyBalances) return [];
-    return computeKeyedSettlementTransfers(familyBalances);
-  }, [familyBalances]);
-
-  const previewShares = useMemo(() => {
-    const n = Number(amount.replace(/,/g, ""));
-    if (!Number.isFinite(n) || n < 1 || selectedParticipants.size === 0) {
-      return null;
-    }
-    const amt = Math.floor(n);
-    const ids = [...selectedParticipants].sort();
-    if (splitMode === "equal") {
-      const m = new Map<string, number>();
-      for (const id of ids) m.set(id, 1);
-      return distributeWeightedSharesYen(amt, m);
-    }
-    const cr = parseChildRatio(childRatioInput);
-    const w = new Map<string, number>();
-    for (const id of ids) {
-      w.set(id, roles[id] === "child" ? cr : 1);
-    }
-    return distributeWeightedSharesYen(amt, w);
-  }, [amount, selectedParticipants, splitMode, childRatioInput, roles]);
+  const familyTransfers = useMemo(
+    () => computeKeyedSettlementTransfers(familyBalances),
+    [familyBalances],
+  );
 
   const displayName = useCallback(
     (uid: string) => {
@@ -303,33 +180,45 @@ export function ExpensesClient() {
     [members],
   );
 
-  const resolveBalanceRowLabel = useCallback(
-    (key: string) => {
-      if (key.startsWith("family:") || key.startsWith("user:")) {
-        return resolveSettlementUnitLabel(key, families, displayName);
-      }
-      return displayName(key);
+  const familyName = useCallback(
+    (fid: string) => {
+      const f = families.find((x) => x.id === fid);
+      return f ? f.data.name : fid;
     },
-    [displayName, families],
+    [families],
   );
 
   const resolvePaidByLabel = useCallback(
     (row: ExpenseDoc) => {
       if (row.paidByFamilyId) {
         const f = families.find((x) => x.id === row.paidByFamilyId);
-        return f ? `${f.data.name}（世帯）` : row.paidByFamilyId;
+        return f ? f.data.name : row.paidByFamilyId;
       }
       if (row.paidByUserId) {
         const f = families.find((x) =>
-          x.data.memberUserIds.includes(row.paidByUserId!),
+          (x.data.memberUserIds ?? []).includes(row.paidByUserId!),
         );
-        if (f) return `${f.data.name}（世帯・旧形式）`;
-        return `${displayName(row.paidByUserId)}（メンバー・旧形式）`;
+        if (f) return f.data.name;
+        return displayName(row.paidByUserId);
       }
       return "—";
     },
     [displayName, families],
   );
+
+  const previewShares = useMemo(() => {
+    const n = Number(amount.replace(/,/g, ""));
+    if (!Number.isFinite(n) || n < 1 || selectedFamilyIds.size === 0) return null;
+    const amt = Math.floor(n);
+    const wmap = new Map<string, number>();
+    for (const fid of selectedFamilyIds) {
+      const fam = families.find((f) => f.id === fid);
+      if (!fam) continue;
+      const w = splitMode === "weighted" ? familyWeight(fam.data) : 1;
+      wmap.set(fid, w);
+    }
+    return distributeWeightedSharesYen(amt, wmap);
+  }, [amount, selectedFamilyIds, splitMode, families]);
 
   function resetForm() {
     setEditingId(null);
@@ -338,14 +227,9 @@ export function ExpensesClient() {
     setCategory("food");
     setMemo("");
     setSplitMode("equal");
-    setChildRatioInput("0.5");
-    setRoles({});
-    setSelectedParticipants(new Set(members.map((m) => m.userId)));
+    setSelectedFamilyIds(new Set(families.map((f) => f.id)));
     if (families.length > 0) {
-      const mine = user
-        ? families.find((f) => f.data.memberUserIds.includes(user.uid))
-        : undefined;
-      setPaidByFamilyId(mine?.id ?? families[0]!.id);
+      setPaidByFamilyId(families[0]!.id);
     } else {
       setPaidByFamilyId("");
     }
@@ -356,44 +240,29 @@ export function ExpensesClient() {
     setAmount(String(row.data.amount));
     if (row.data.paidByFamilyId) {
       setPaidByFamilyId(row.data.paidByFamilyId);
-    } else if (row.data.paidByUserId) {
-      const fid = families.find((f) =>
-        f.data.memberUserIds.includes(row.data.paidByUserId!),
-      )?.id;
-      setPaidByFamilyId(fid ?? "");
     } else {
       setPaidByFamilyId("");
     }
     setExpenseDate(row.data.expenseDate);
     setCategory(row.data.category);
     setMemo(row.data.memo ?? "");
-    setSelectedParticipants(new Set(row.data.participantUserIds));
-    if (row.data.splitMode === "weighted" && row.data.weightByUserId) {
-      setSplitMode("weighted");
-      const { childRatio, roles: r } = inferFamilyRolesFromWeights(
-        row.data.weightByUserId,
-        row.data.participantUserIds,
-      );
-      setChildRatioInput(String(childRatio));
-      setRoles(r);
+    // 新形式
+    if (row.data.participantFamilyIds && row.data.participantFamilyIds.length > 0) {
+      setSelectedFamilyIds(new Set(row.data.participantFamilyIds));
     } else {
-      setSplitMode("equal");
-      setChildRatioInput("0.5");
-      setRoles({});
+      // 旧形式: 全世帯を選択
+      setSelectedFamilyIds(new Set(families.map((f) => f.id)));
     }
+    setSplitMode(row.data.splitMode ?? "equal");
   }
 
-  function toggleParticipant(uid: string) {
-    setSelectedParticipants((prev) => {
+  function toggleFamily(fid: string) {
+    setSelectedFamilyIds((prev) => {
       const next = new Set(prev);
-      if (next.has(uid)) next.delete(uid);
-      else next.add(uid);
+      if (next.has(fid)) next.delete(fid);
+      else next.add(fid);
       return next;
     });
-  }
-
-  function setRole(uid: string, role: ParticipantRole) {
-    setRoles((prev) => ({ ...prev, [uid]: role }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -404,12 +273,17 @@ export function ExpensesClient() {
       setError("金額を入力してください。");
       return;
     }
-    const cr = parseChildRatio(childRatioInput);
-    const pids = [...selectedParticipants];
-    const weightByUserId =
+    const selectedList = [...selectedFamilyIds];
+    const weightByFamilyId: Record<string, number> | undefined =
       splitMode === "weighted"
-        ? buildFamilyWeights(pids, roles, cr)
+        ? Object.fromEntries(
+            selectedList.map((fid) => {
+              const fam = families.find((f) => f.id === fid);
+              return [fid, fam ? familyWeight(fam.data) : 1];
+            }),
+          )
         : undefined;
+
     const input: ExpenseInput = {
       amount: Math.floor(n),
       paidByFamilyId,
@@ -417,20 +291,17 @@ export function ExpensesClient() {
       category,
       memo,
       splitMode,
-      participantUserIds: pids,
-      weightByUserId,
+      participantFamilyIds: selectedList,
+      weightByFamilyId,
     };
-    const familyRefs = families.map((f) => ({
-      id: f.id,
-      memberUserIds: f.data.memberUserIds,
-    }));
+    const familyRefs = families.map((f) => ({ id: f.id }));
     setBusy(editingId ? "save" : "add");
     setError(null);
     try {
       if (editingId) {
-        await updateExpense(groupId, editingId, memberIds, familyRefs, input);
+        await updateExpense(groupId, editingId, familyRefs, input);
       } else {
-        await addExpense(groupId, user.uid, memberIds, familyRefs, input);
+        await addExpense(groupId, user.uid, familyRefs, input);
       }
       resetForm();
       await load();
@@ -482,28 +353,23 @@ export function ExpensesClient() {
         href={`/groups/${groupId}`}
         className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
       >
-        ← グループ詳細
+        ← 旅行詳細
       </Link>
 
       <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
         支出・精算
       </h1>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        チェックを付けたメンバーだけが負担に含まれます（
-        <span className="font-semibold">メンバー除外</span>
-        ＝チェックを外す）。立て替えは
+        立て替えと負担の対象は
         <span className="font-semibold">世帯単位</span>
-        です（一人なら一人世帯）。
+        です。
         <Link
           href={`/groups/${groupId}/families`}
           className="font-medium text-emerald-800 underline dark:text-emerald-400"
         >
-          家族（世帯）の登録
+          参加世帯の登録
         </Link>
-        が必須です。負担の分け方は
-        <span className="font-semibold">均等割</span>か
-        <span className="font-semibold">比率割（大人・子供）</span>
-        を選べます。下の「家族別の精算」で世帯同士の目安も確認できます。
+        が必要です。
       </p>
 
       {error ? (
@@ -541,6 +407,7 @@ export function ExpensesClient() {
               />
             </label>
           </div>
+
           <label className="block text-xs text-zinc-600 dark:text-zinc-400">
             立て替えた世帯
             <select
@@ -551,7 +418,7 @@ export function ExpensesClient() {
               className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900"
             >
               {families.length === 0 ? (
-                <option value="">先に家族（世帯）を登録してください</option>
+                <option value="">先に参加世帯を登録してください</option>
               ) : (
                 families.map(({ id, data }) => (
                   <option key={id} value={id}>
@@ -561,6 +428,7 @@ export function ExpensesClient() {
               )}
             </select>
           </label>
+
           {families.length === 0 ? (
             <p className="text-xs text-amber-800 dark:text-amber-200">
               支出を登録するには、
@@ -568,18 +436,17 @@ export function ExpensesClient() {
                 href={`/groups/${groupId}/families`}
                 className="font-medium underline"
               >
-                家族（世帯）
+                参加世帯
               </Link>
-              で少なくとも1件の世帯を作成し、メンバーを紐付けてください。
+              を先に登録してください。
             </p>
           ) : null}
+
           <label className="block text-xs text-zinc-600 dark:text-zinc-400">
             カテゴリ
             <select
               value={category}
-              onChange={(e) =>
-                setCategory(e.target.value as ExpenseCategory)
-              }
+              onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
               className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
             >
               {CATEGORY_OPTIONS.map((c) => (
@@ -589,6 +456,7 @@ export function ExpensesClient() {
               ))}
             </select>
           </label>
+
           <label className="block text-xs text-zinc-600 dark:text-zinc-400">
             メモ
             <input
@@ -599,32 +467,40 @@ export function ExpensesClient() {
             />
           </label>
 
+          {/* 負担の対象 */}
           <div>
             <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              負担に含めるメンバー
+              負担の対象
             </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              チェックを外した人はこの支出の負担から除外されます。
+            <p className="mt-0.5 text-xs text-zinc-500">
+              チェックを外した世帯はこの支出の負担から除外されます。
             </p>
-            <ul className="mt-2 space-y-2">
-              {members.map(({ userId, data }) => (
-                <li key={userId}>
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={selectedParticipants.has(userId)}
-                      onChange={() => toggleParticipant(userId)}
-                    />
-                    <span>{data.displayName || userId.slice(0, 8) + "…"}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-1 text-xs text-zinc-500">
-              立て替えた世帯のメンバーも負担に含める場合はチェックを入れてください。
-            </p>
+            {families.length === 0 ? (
+              <p className="mt-2 text-xs text-zinc-400">世帯がありません</p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {families.map(({ id, data }) => (
+                  <li key={id}>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedFamilyIds.has(id)}
+                        onChange={() => toggleFamily(id)}
+                      />
+                      <span className="text-zinc-800 dark:text-zinc-200">
+                        {data.name}
+                      </span>
+                      <span className="text-xs text-zinc-400">
+                        大人{data.adultCount}・子供{data.childCount}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
+          {/* 負担の分け方 */}
           <div>
             <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
               負担の分け方
@@ -635,99 +511,52 @@ export function ExpensesClient() {
                   type="radio"
                   name="splitMode"
                   checked={splitMode === "equal"}
-                  onChange={() => {
-                    setSplitMode("equal");
-                    setRoles({});
-                  }}
+                  onChange={() => setSplitMode("equal")}
                 />
-                均等割
+                均等割（世帯ごとに同額）
               </label>
               <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="radio"
                   name="splitMode"
                   checked={splitMode === "weighted"}
-                  onChange={() => {
-                    setSplitMode("weighted");
-                    setRoles(
-                      Object.fromEntries(
-                        [...selectedParticipants].map((id) => [id, "adult" as const]),
-                      ),
-                    );
-                  }}
+                  onChange={() => setSplitMode("weighted")}
                 />
-                比率割（大人・子供）
+                人数割（大人・子供比率考慮）
               </label>
             </div>
+            {splitMode === "weighted" && selectedFamilyIds.size > 0 ? (
+              <div className="mt-2 rounded-md border border-zinc-200 bg-white p-3 text-xs text-zinc-600 dark:border-zinc-600 dark:bg-zinc-900/40 dark:text-zinc-400">
+                <p className="font-medium text-zinc-700 dark:text-zinc-300">各世帯の重み（参考）</p>
+                <ul className="mt-1.5 space-y-0.5">
+                  {[...selectedFamilyIds].map((fid) => {
+                    const fam = families.find((f) => f.id === fid);
+                    if (!fam) return null;
+                    const w = familyWeight(fam.data);
+                    return (
+                      <li key={fid}>
+                        {fam.data.name}: {w.toFixed(1)}
+                        <span className="ml-1 text-zinc-400">
+                          （大人{fam.data.adultCount} × 1 + 子供{fam.data.childCount} × {fam.data.childRatio ?? 1}）
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
           </div>
 
-          {splitMode === "weighted" ? (
-            <div className="rounded-md border border-zinc-200 bg-white p-3 dark:border-zinc-600 dark:bg-zinc-900/40">
-              <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-                子供の重み（大人を 1 としたとき）
-                <input
-                  type="number"
-                  min={0.01}
-                  max={1}
-                  step={0.05}
-                  value={childRatioInput}
-                  onChange={(e) => setChildRatioInput(e.target.value)}
-                  className="mt-1 w-full max-w-[12rem] rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                />
-              </label>
-              <p className="mt-2 text-xs text-zinc-500">
-                例: 0.5 ＝子供は大人の半分負担。4人家族で大人3・子供1なら、該当する1人を「子供」にします。
-              </p>
-              <p className="mt-3 text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                各メンバーの区分
-              </p>
-              <ul className="mt-2 space-y-2">
-                {[...selectedParticipants].sort().map((uid) => (
-                  <li
-                    key={uid}
-                    className="flex flex-wrap items-center gap-3 text-sm"
-                  >
-                    <span className="min-w-[6rem]">
-                      {displayName(uid)}
-                    </span>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="radio"
-                        name={`role-${uid}`}
-                        checked={(roles[uid] ?? "adult") === "adult"}
-                        onChange={() => setRole(uid, "adult")}
-                      />
-                      大人
-                    </label>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="radio"
-                        name={`role-${uid}`}
-                        checked={(roles[uid] ?? "adult") === "child"}
-                        onChange={() => setRole(uid, "child")}
-                      />
-                      子供
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              {selectedParticipants.size === 0 ? (
-                <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">
-                  負担メンバーを1人以上選んでください。
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {previewShares && selectedParticipants.size > 0 ? (
+          {/* プレビュー */}
+          {previewShares && selectedFamilyIds.size > 0 ? (
             <div className="rounded-md border border-emerald-200 bg-emerald-50/80 p-3 text-xs text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
               <p className="font-medium">負担の目安（円）</p>
               <ul className="mt-2 space-y-0.5">
                 {[...previewShares.entries()]
                   .sort((a, b) => a[0].localeCompare(b[0]))
-                  .map(([uid, yen]) => (
-                    <li key={uid}>
-                      {displayName(uid)}: {formatYen(yen)}
+                  .map(([fid, yen]) => (
+                    <li key={fid}>
+                      {familyName(fid)}: {formatYen(yen)}
                     </li>
                   ))}
               </ul>
@@ -764,6 +593,7 @@ export function ExpensesClient() {
         </form>
       </section>
 
+      {/* 精算の目安 */}
       <section className="mt-10">
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
           精算の目安
@@ -773,16 +603,16 @@ export function ExpensesClient() {
             支出がまだありません。登録すると残高と送金リストが表示されます。
           </p>
         ) : (
-          <>
-            <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              メンバー別
+          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50/60 p-4 dark:border-emerald-900 dark:bg-emerald-950/20">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-900 dark:text-emerald-200">
+              世帯別の残高
             </h3>
-            <ul className="mt-2 space-y-1 text-sm text-zinc-700 dark:text-zinc-300">
-              {[...balances.entries()]
+            <ul className="mt-2 space-y-1 text-sm text-emerald-950 dark:text-emerald-100">
+              {[...familyBalances.entries()]
                 .sort((a, b) => a[0].localeCompare(b[0]))
                 .map(([key, bal]) => (
                   <li key={key}>
-                    {resolveBalanceRowLabel(key)}:{" "}
+                    {resolveSettlementUnitLabel(key, families, displayName)}:{" "}
                     {bal > 0.5
                       ? `${formatYen(Math.round(bal))} 受け取り`
                       : bal < -0.5
@@ -792,81 +622,30 @@ export function ExpensesClient() {
                 ))}
             </ul>
             <div className="mt-4">
-              <p className="text-xs font-medium text-zinc-500">
-                送金（最小回数のたたき）
+              <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                送金（最小回数）
               </p>
-              {transfers.length === 0 ? (
-                <p className="mt-1 text-sm text-zinc-600">精算不要です。</p>
+              {familyTransfers.length === 0 ? (
+                <p className="mt-1 text-sm text-emerald-900/80 dark:text-emerald-200/80">
+                  精算不要です。
+                </p>
               ) : (
                 <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
-                  {transfers.map((t, i) => (
+                  {familyTransfers.map((t, i) => (
                     <li key={i}>
-                      {resolveBalanceRowLabel(t.fromUserId)} は{" "}
-                      {resolveBalanceRowLabel(t.toUserId)} に{" "}
+                      {resolveSettlementUnitLabel(t.fromKey, families, displayName)} は{" "}
+                      {resolveSettlementUnitLabel(t.toKey, families, displayName)} に{" "}
                       {formatYen(t.amountYen)} を払う
                     </li>
                   ))}
                 </ol>
               )}
             </div>
-
-            {families.length > 0 && familyBalances ? (
-              <div className="mt-8 rounded-lg border border-emerald-200 bg-emerald-50/60 p-4 dark:border-emerald-900 dark:bg-emerald-950/20">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-900 dark:text-emerald-200">
-                  家族別の精算（世帯単位）
-                </h3>
-                <p className="mt-2 text-xs text-emerald-900/90 dark:text-emerald-100/90">
-                  登録した世帯に属するメンバーの残高を合算し、奥田・大木のように世帯同士の送金の目安を出します。どの世帯にも属さないメンバーは「未所属」として表示されます。
-                </p>
-                <ul className="mt-3 space-y-1 text-sm text-emerald-950 dark:text-emerald-100">
-                  {[...familyBalances.entries()]
-                    .sort((a, b) => a[0].localeCompare(b[0]))
-                    .map(([key, bal]) => (
-                      <li key={key}>
-                        {resolveSettlementUnitLabel(key, families, displayName)}:{" "}
-                        {bal > 0.5
-                          ? `${formatYen(Math.round(bal))} 受け取り`
-                          : bal < -0.5
-                            ? `${formatYen(Math.round(-bal))} 支払い`
-                            : "±0"}
-                      </li>
-                    ))}
-                </ul>
-                <div className="mt-4">
-                  <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
-                    世帯間の送金（最小回数のたたき）
-                  </p>
-                  {familyTransfers.length === 0 ? (
-                    <p className="mt-1 text-sm text-emerald-900/80 dark:text-emerald-200/80">
-                      精算不要です。
-                    </p>
-                  ) : (
-                    <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
-                      {familyTransfers.map((t, i) => (
-                        <li key={i}>
-                          {resolveSettlementUnitLabel(
-                            t.fromKey,
-                            families,
-                            displayName,
-                          )}{" "}
-                          は{" "}
-                          {resolveSettlementUnitLabel(
-                            t.toKey,
-                            families,
-                            displayName,
-                          )}{" "}
-                          に {formatYen(t.amountYen)} を払う
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </>
+          </div>
         )}
       </section>
 
+      {/* 支出一覧 */}
       <section className="mt-10">
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
           支出一覧
@@ -879,7 +658,6 @@ export function ExpensesClient() {
               const can = user
                 ? canManageExpense(group, members, user.uid, row.data.createdByUserId)
                 : false;
-              const ac = countAdultChildFromExpense(row.data);
               return (
                 <li
                   key={row.id}
@@ -890,17 +668,11 @@ export function ExpensesClient() {
                       <p className="font-semibold text-zinc-900 dark:text-zinc-50">
                         {formatYen(row.data.amount)}{" "}
                         <span className="text-xs font-normal text-zinc-500">
-                          {CATEGORY_LABELS[row.data.category]} ·{" "}
-                          {row.data.expenseDate}
+                          {CATEGORY_LABELS[row.data.category]} · {row.data.expenseDate}
                         </span>
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
                         {splitModeLabel(row.data.splitMode)}
-                        {ac && ac.children > 0
-                          ? `（大人${ac.adults}・子供${ac.children}）`
-                          : row.data.splitMode === "weighted"
-                            ? "（大人・子供）"
-                            : ""}
                       </p>
                       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                         立て替え: {resolvePaidByLabel(row.data)}
@@ -912,9 +684,13 @@ export function ExpensesClient() {
                       ) : null}
                       <p className="mt-2 text-xs text-zinc-500">
                         負担:{" "}
-                        {row.data.participantUserIds
-                          .map((id) => displayName(id))
-                          .join("、")}
+                        {row.data.participantFamilyIds && row.data.participantFamilyIds.length > 0
+                          ? row.data.participantFamilyIds
+                              .map((fid) => familyName(fid))
+                              .join("、")
+                          : row.data.participantUserIds
+                              .map((uid) => displayName(uid))
+                              .join("、")}
                       </p>
                     </div>
                     {can ? (

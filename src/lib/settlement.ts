@@ -47,6 +47,26 @@ export function distributeWeightedSharesYen(
 }
 
 function expenseSharesYen(e: ExpenseDoc): Map<string, number> {
+  // 新形式: 世帯ベース
+  if (e.participantFamilyIds && e.participantFamilyIds.length > 0) {
+    const familyIds = [...e.participantFamilyIds].sort();
+    if (e.splitMode === "weighted" && e.weightByFamilyId) {
+      const wmap = new Map<string, number>();
+      for (const fid of familyIds) {
+        const w = e.weightByFamilyId[fid];
+        if (w != null && w > 0 && Number.isFinite(w)) wmap.set(`family:${fid}`, w);
+      }
+      if (wmap.size > 0) return distributeWeightedSharesYen(e.amount, wmap);
+    }
+    const shares = distributeEqualSharesYen(e.amount, familyIds.length);
+    const out = new Map<string, number>();
+    for (let i = 0; i < familyIds.length; i++) {
+      out.set(`family:${familyIds[i]!}`, shares[i] ?? 0);
+    }
+    return out;
+  }
+
+  // 旧形式: ユーザーベース（後方互換）
   const ids = [...e.participantUserIds].sort();
   const n = ids.length;
   if (n === 0) return new Map();

@@ -26,37 +26,35 @@ export async function listExpenses(groupId: string): Promise<
   return out;
 }
 
-export type FamilyRefsForExpense = { id: string; memberUserIds: string[] };
-
 export type ExpenseInput = {
   amount: number;
-  /** 立て替えた世帯のドキュメント ID */
+  /** 立て替えた世帯の ID */
   paidByFamilyId: string;
   expenseDate: string;
   category: ExpenseCategory;
   memo: string;
   splitMode: ExpenseSplitMode;
-  participantUserIds: string[];
-  /** splitMode が weighted のとき必須（uid -> 正の重み） */
-  weightByUserId?: Record<string, number>;
+  /** 負担の対象となる世帯 ID リスト（paidByFamilyId を含むこと） */
+  participantFamilyIds: string[];
+  /** 人数割のとき: familyId -> 重み（adultCount + childCount * childRatio） */
+  weightByFamilyId?: Record<string, number>;
 };
 
-function buildWeightByUserId(input: ExpenseInput): Record<string, number> {
-  const participants = [...new Set(input.participantUserIds)];
+function buildWeightByFamilyId(input: ExpenseInput): Record<string, number> {
+  const parts = [...new Set(input.participantFamilyIds)];
+  const o: Record<string, number> = {};
   if (input.splitMode === "equal") {
-    const o: Record<string, number> = {};
-    for (const id of participants) o[id] = 1;
+    for (const id of parts) o[id] = 1;
     return o;
   }
-  const w = input.weightByUserId;
+  const w = input.weightByFamilyId;
   if (!w || typeof w !== "object") {
-    throw new Error("比率割の重みが不正です。");
+    throw new Error("人数割の重みが設定されていません。");
   }
-  const o: Record<string, number> = {};
-  for (const id of participants) {
+  for (const id of parts) {
     const val = w[id];
     if (val == null || !Number.isFinite(val) || val <= 0) {
-      throw new Error("負担する全員に正の重みを設定してください。");
+      throw new Error("負担する全ての世帯に正の重みを設定してください。");
     }
     o[id] = val;
   }
@@ -65,8 +63,7 @@ function buildWeightByUserId(input: ExpenseInput): Record<string, number> {
 
 function validateExpenseInput(
   input: ExpenseInput,
-  memberIds: Set<string>,
-  families: FamilyRefsForExpense[],
+  families: { id: string }[],
 ): void {
   const amount = Math.floor(input.amount);
   if (!Number.isFinite(amount) || amount < 1) {
@@ -77,50 +74,33 @@ function validateExpenseInput(
   }
   const payerFam = families.find((f) => f.id === input.paidByFamilyId);
   if (!payerFam) {
-    throw new Error("立て替えた世帯が見つかりません。先に家族（世帯）を登録してください。");
+    throw new Error("立て替えた世帯が見つかりません。先に世帯を登録してください。");
   }
-  const payerMembers = payerFam.memberUserIds.filter((id) => memberIds.has(id));
-  if (payerMembers.length === 0) {
-    throw new Error("立て替えた世帯にメンバーがいません。");
-  }
-  const parts = [...new Set(input.participantUserIds)].filter((id) =>
-    memberIds.has(id),
+  const parts = [...new Set(input.participantFamilyIds)].filter((id) =>
+    families.some((f) => f.id === id),
   );
   if (parts.length === 0) {
-    throw new Error("負担するメンバーを 1 人以上選んでください。");
+    throw new Error("負担の対象となる世帯を 1 つ以上選んでください。");
   }
-  if (!payerMembers.some((id) => parts.includes(id))) {
-    throw new Error(
-      "負担メンバーに、立て替えた世帯のメンバーを少なくとも1人含めてください。",
-    );
-  }
-  if (input.splitMode === "weighted") {
-    const w = input.weightByUserId;
-    if (!w) throw new Error("比率割では重みを設定してください。");
-    for (const id of parts) {
-      const val = w[id];
-      if (val == null || !Number.isFinite(val) || val <= 0) {
-        throw new Error("負担する全員に正の重みを設定してください。");
-      }
-    }
+  if (!parts.includes(input.paidByFamilyId)) {
+    throw new Error("立て替えた世帯を「負担の対象」に含めてください。");
   }
 }
 
 export async function addExpense(
   groupId: string,
   uid: string,
-  memberIds: Set<string>,
-  families: FamilyRefsForExpense[],
+  families: { id: string }[],
   input: ExpenseInput,
 ): Promise<string> {
-  validateExpenseInput(input, memberIds, families);
+  validateExpenseInput(input, families);
   const amount = Math.floor(input.amount);
-  const participants = [...new Set(input.participantUserIds)].filter((id) =>
-    memberIds.has(id),
+  const parts = [...new Set(input.participantFamilyIds)].filter((id) =>
+    families.some((f) => f.id === id),
   );
-  const weightByUserId = buildWeightByUserId({
+  const weightByFamilyId = buildWeightByFamilyId({
     ...input,
-    participantUserIds: participants,
+    participantFamilyIds: parts,
   });
   const db = getFirebaseFirestore();
   const col = collection(db, COLLECTIONS.groups, groupId, SUB.expenses);
@@ -131,8 +111,9 @@ export async function addExpense(
     category: input.category,
     memo: input.memo.trim(),
     splitMode: input.splitMode,
-    participantUserIds: participants,
-    weightByUserId,
+    participantFamilyIds: parts,
+    weightByFamilyId,
+    participantUserIds: [],
     createdByUserId: uid,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -143,18 +124,17 @@ export async function addExpense(
 export async function updateExpense(
   groupId: string,
   expenseId: string,
-  memberIds: Set<string>,
-  families: FamilyRefsForExpense[],
+  families: { id: string }[],
   input: ExpenseInput,
 ): Promise<void> {
-  validateExpenseInput(input, memberIds, families);
+  validateExpenseInput(input, families);
   const amount = Math.floor(input.amount);
-  const participants = [...new Set(input.participantUserIds)].filter((id) =>
-    memberIds.has(id),
+  const parts = [...new Set(input.participantFamilyIds)].filter((id) =>
+    families.some((f) => f.id === id),
   );
-  const weightByUserId = buildWeightByUserId({
+  const weightByFamilyId = buildWeightByFamilyId({
     ...input,
-    participantUserIds: participants,
+    participantFamilyIds: parts,
   });
   const db = getFirebaseFirestore();
   const ref = doc(db, COLLECTIONS.groups, groupId, SUB.expenses, expenseId);
@@ -165,8 +145,9 @@ export async function updateExpense(
     category: input.category,
     memo: input.memo.trim(),
     splitMode: input.splitMode,
-    participantUserIds: participants,
-    weightByUserId,
+    participantFamilyIds: parts,
+    weightByFamilyId,
+    participantUserIds: [],
     updatedAt: serverTimestamp(),
   });
 }

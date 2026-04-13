@@ -180,40 +180,38 @@ service cloud.firestore {
         allow create: if request.auth != null && isGroupMember(groupId) &&
           request.resource.data.createdByUserId == request.auth.uid &&
           request.resource.data.splitMode in ['equal', 'weighted'] &&
-          request.resource.data.weightByUserId is map &&
-          request.resource.data.weightByUserId.size() >= 1 &&
+          request.resource.data.weightByFamilyId is map &&
+          request.resource.data.weightByFamilyId.size() >= 1 &&
           request.resource.data.amount is int &&
           request.resource.data.amount >= 1 &&
-          request.resource.data.participantUserIds is list &&
-          request.resource.data.participantUserIds.size() >= 1 &&
+          request.resource.data.participantFamilyIds is list &&
+          request.resource.data.participantFamilyIds.size() >= 1 &&
           exists(/databases/$(database)/documents/groups/$(groupId)/families/$(request.resource.data.paidByFamilyId)) &&
-          request.resource.data.participantUserIds.hasAny(
-            get(/databases/$(database)/documents/groups/$(groupId)/families/$(request.resource.data.paidByFamilyId)).data.memberUserIds
-          ) &&
+          request.resource.data.participantFamilyIds.hasAll([request.resource.data.paidByFamilyId]) &&
           request.resource.data.category in ['food', 'transport', 'lodging', 'other'] &&
           request.resource.data.keys().hasAll([
             'amount', 'paidByFamilyId', 'expenseDate', 'category', 'memo', 'splitMode',
-            'participantUserIds', 'weightByUserId', 'createdByUserId', 'createdAt', 'updatedAt'
+            'participantFamilyIds', 'weightByFamilyId', 'participantUserIds',
+            'createdByUserId', 'createdAt', 'updatedAt'
           ]);
         allow update: if request.auth != null && isGroupMember(groupId) &&
           request.resource.data.createdByUserId == resource.data.createdByUserId &&
           request.resource.data.createdAt == resource.data.createdAt &&
           request.resource.data.splitMode in ['equal', 'weighted'] &&
-          request.resource.data.weightByUserId is map &&
-          request.resource.data.weightByUserId.size() >= 1 &&
+          request.resource.data.weightByFamilyId is map &&
+          request.resource.data.weightByFamilyId.size() >= 1 &&
           request.resource.data.amount is int &&
           request.resource.data.amount >= 1 &&
-          request.resource.data.participantUserIds is list &&
-          request.resource.data.participantUserIds.size() >= 1 &&
+          request.resource.data.participantFamilyIds is list &&
+          request.resource.data.participantFamilyIds.size() >= 1 &&
           exists(/databases/$(database)/documents/groups/$(groupId)/families/$(request.resource.data.paidByFamilyId)) &&
-          request.resource.data.participantUserIds.hasAny(
-            get(/databases/$(database)/documents/groups/$(groupId)/families/$(request.resource.data.paidByFamilyId)).data.memberUserIds
-          ) &&
+          request.resource.data.participantFamilyIds.hasAll([request.resource.data.paidByFamilyId]) &&
           request.resource.data.category in ['food', 'transport', 'lodging', 'other'] &&
           (isOwnerOrAdmin(groupId) || resource.data.createdByUserId == request.auth.uid) &&
           request.resource.data.keys().hasAll([
             'amount', 'paidByFamilyId', 'expenseDate', 'category', 'memo', 'splitMode',
-            'participantUserIds', 'weightByUserId', 'createdByUserId', 'createdAt', 'updatedAt'
+            'participantFamilyIds', 'weightByFamilyId', 'participantUserIds',
+            'createdByUserId', 'createdAt', 'updatedAt'
           ]);
         allow delete: if request.auth != null && isGroupMember(groupId) && (
           isOwnerOrAdmin(groupId) || resource.data.createdByUserId == request.auth.uid
