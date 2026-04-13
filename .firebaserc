@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "trip-park-dev"
+    "default": "trip-park-dev",
+    "production": "trip-park"
   }
 }

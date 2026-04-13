@@ -296,9 +296,7 @@ async function deleteBulletinPostsTree(db: Firestore, groupId: string) {
 
 export async function deleteGroup(ownerUid: string, groupId: string): Promise<void> {
   const db = getFirebaseFirestore();
-  console.log("[deleteGroup] start", { ownerUid, groupId });
   const group = await getGroup(groupId);
-  console.log("[deleteGroup] group loaded", { ownerId: group?.ownerId, inviteCode: group?.inviteCode });
   if (!group) throw new Error("旅行が見つかりません。");
   if (group.ownerId !== ownerUid) throw new Error("旅行を削除できるのはオーナーのみです。");
 
@@ -327,24 +325,17 @@ export async function deleteGroup(ownerUid: string, groupId: string): Promise<vo
     .then((snap) => (snap.exists() ? deleteDoc(scheduleCfgRef) : undefined))
     .catch(() => {});
 
-  // ② 招待コードを削除（メンバー削除より前に実行 — groupOwnerId() が group doc を参照するため）
-  console.log("[deleteGroup] deleting inviteCode", group.inviteCode);
+  // ② 招待コードを削除（メンバー削除より前に実行）
   await deleteDoc(doc(db, COLLECTIONS.inviteCodes, group.inviteCode));
-  console.log("[deleteGroup] inviteCode deleted");
 
   // ③ メンバードキュメントを順次削除（並行するとオーナーの member doc が消えて
   //    memberRole() が null になる競合が起きるため for...of で直列実行）
-  console.log("[deleteGroup] deleting", membersSnap.size, "member(s)");
   for (const m of membersSnap.docs) {
-    console.log("[deleteGroup] deleting member", m.id);
     await deleteDoc(m.ref);
-    console.log("[deleteGroup] member deleted", m.id);
   }
 
   // ④ グループ文書を削除
-  console.log("[deleteGroup] deleting group doc");
   await deleteDoc(doc(db, COLLECTIONS.groups, groupId));
-  console.log("[deleteGroup] group doc deleted");
 
   // ⑤ 各メンバーの UserGroupRef を削除（他メンバーのはエラーを無視）
   await Promise.all(
