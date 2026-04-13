@@ -13,21 +13,16 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ["travel", "lifestyle"],
     icons: [
       {
-        src: "/icon",
-        sizes: "192x192",
+        src: "/icons/icon.png",
+        sizes: "512x512",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icon-maskable",
+        src: "/icons/icon.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
-      },
-      {
-        src: "/icons/icon.svg",
-        sizes: "any",
-        type: "image/svg+xml",
       },
     ],
   };
