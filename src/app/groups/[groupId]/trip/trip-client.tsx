@@ -4,7 +4,6 @@ import { useAuth } from "@/contexts/auth-context";
 import { getGroup } from "@/lib/firestore/groups";
 import {
   addTripRoute,
-  dayRouteExists,
   deleteTripRoute,
   listTripRoutes,
   updateDayDone,
