@@ -36,10 +36,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let unsub: (() => void) | undefined;
+    let resolved = false;
+
+    // Firebase Auth が応答しない場合のフォールバック（5秒でタイムアウト）
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        setLoading(false);
+      }
+    }, 5000);
 
     try {
       const auth = getFirebaseAuth();
       unsub = onAuthStateChanged(auth, async (u) => {
+        if (!resolved) resolved = true;
+        clearTimeout(timeout);
         setUser(u);
         if (u) {
           try {
@@ -51,11 +62,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       });
     } catch {
+      clearTimeout(timeout);
       setAuthUnavailable(true);
       setLoading(false);
     }
 
-    return () => unsub?.();
+    return () => {
+      clearTimeout(timeout);
+      unsub?.();
+    };
   }, []);
 
   const value = useMemo(
