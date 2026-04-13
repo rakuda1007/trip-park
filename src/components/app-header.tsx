@@ -54,7 +54,7 @@ export function AppHeader() {
       <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4 sm:px-6">
         {/* ロゴ */}
         <Link
-          href="/"
+          href={!loading && user ? "/dashboard" : "/"}
           className="shrink-0 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
         >
           Trip Park
