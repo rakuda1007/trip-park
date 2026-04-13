@@ -9,6 +9,7 @@ import {
   listMembers,
   removeMember,
   updateDestination,
+  updateGroupDescription,
   updateGroupTripDates,
   updateTripStatus,
 } from "@/lib/firestore/groups";
@@ -52,6 +53,10 @@ export function GroupDetailClient() {
   // 目的地編集用
   const [editingDest, setEditingDest] = useState(false);
   const [draftDest, setDraftDest] = useState("");
+
+  // 説明編集用
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [draftDesc, setDraftDesc] = useState("");
 
   // 旅行ページを開いたら直近アクセス旅行として記録
   useEffect(() => {
@@ -287,11 +292,68 @@ export function GroupDetailClient() {
         ) : null}
       </div>
 
-      {group.description ? (
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          {group.description}
-        </p>
-      ) : null}
+      {/* 説明 */}
+      {editingDesc ? (
+        <div className="mt-2">
+          <textarea
+            rows={3}
+            value={draftDesc}
+            onChange={(e) => setDraftDesc(e.target.value)}
+            placeholder="旅行の説明を入力"
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+          />
+          <div className="mt-1.5 flex gap-2">
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={async () => {
+                setBusy("desc");
+                try {
+                  await updateGroupDescription(groupId, draftDesc.trim() || null);
+                  setGroup((g) => g ? { ...g, description: draftDesc.trim() || null } : g);
+                  setEditingDesc(false);
+                } catch {
+                  // ignore
+                } finally {
+                  setBusy(null);
+                }
+              }}
+              className="rounded-md bg-zinc-900 px-3 py-1 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              {busy === "desc" ? "保存中…" : "保存"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditingDesc(false)}
+              className="rounded-md px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 flex items-start gap-2">
+          {group.description ? (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">{group.description}</p>
+          ) : (
+            isOwner ? (
+              <span className="text-xs text-zinc-400 dark:text-zinc-500">説明未設定</span>
+            ) : null
+          )}
+          {isOwner ? (
+            <button
+              type="button"
+              onClick={() => {
+                setDraftDesc(group.description ?? "");
+                setEditingDesc(true);
+              }}
+              className="shrink-0 text-xs text-zinc-400 underline hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
+            >
+              {group.description ? "編集" : "説明を追加"}
+            </button>
+          ) : null}
+        </div>
+      )}
 
       {/* 目的地 */}
       <div className="mt-3 flex flex-wrap items-center gap-2">

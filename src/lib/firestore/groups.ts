@@ -391,6 +391,18 @@ export async function updateTripStatus(
   });
 }
 
+/** 旅行の説明文を更新する（オーナー） */
+export async function updateGroupDescription(
+  groupId: string,
+  description: string | null,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  await updateDoc(doc(db, COLLECTIONS.groups, groupId), {
+    description,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 /** 目的地を更新する（オーナー / 管理者） */
 export async function updateDestination(
   groupId: string,
