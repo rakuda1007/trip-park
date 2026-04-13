@@ -13,7 +13,6 @@ import {
 } from "@/lib/firestore/trip";
 import type { GroupDoc } from "@/types/group";
 import type { TripRouteDoc, TripWaypoint } from "@/types/trip";
-import { TripRouteMapPanel } from "@/components/trip/trip-route-map-panel";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -205,8 +204,6 @@ function DayForm({
 
 function DayCard({
   route,
-  routeId,
-  groupId,
   canEdit,
   busy,
   onEdit,
@@ -214,8 +211,6 @@ function DayCard({
   onToggleDone,
 }: {
   route: TripRouteDoc;
-  routeId: string;
-  groupId: string;
   canEdit: boolean;
   busy: boolean;
   onEdit: () => void;
@@ -302,9 +297,6 @@ function DayCard({
           <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">{route.memo}</p>
         </div>
       )}
-
-      {/* ルート地図（API / キャッシュ） */}
-      <TripRouteMapPanel route={route} groupId={groupId} routeId={routeId} />
 
       {/* アクション */}
       <div className="flex flex-wrap items-center gap-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
@@ -604,8 +596,6 @@ export function TripClient() {
           ) : (
             <DayCard
               route={currentRoute.data}
-              routeId={currentRoute.id}
-              groupId={groupId}
               canEdit={isOwnerOrAdmin || (!!user && currentRoute.data.createdByUserId === user.uid)}
               busy={busy !== null}
               onEdit={() => setEditingId(currentRoute.id)}
