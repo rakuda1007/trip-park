@@ -314,15 +314,15 @@ export function FamiliesClient() {
                 </label>
                 <input
                   type="number"
-                  min={0.01}
+                  min={0.1}
                   max={1}
-                  step={0.05}
+                  step={0.1}
                   required
                   value={form.childRatio}
                   onChange={(e) => setForm((p) => ({ ...p, childRatio: e.target.value }))}
                   className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
                 />
-                <p className="mt-0.5 text-[10px] text-zinc-400">大人=1.0</p>
+                <p className="mt-0.5 text-[10px] text-zinc-400">大人=1.0・0.1刻みで設定</p>
               </div>
             ) : null}
           </div>
