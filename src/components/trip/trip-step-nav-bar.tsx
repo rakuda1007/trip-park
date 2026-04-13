@@ -39,7 +39,6 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
   if (!isGroupPage(pathname, groupId)) return null;
 
   const activeStep = getActiveStep(pathname, groupId);
-  const isDetailPage = pathname === `/groups/${groupId}`;
 
   const datesDone = !!group?.tripStartDate;
   const destDone = !!group?.destination;
@@ -98,17 +97,6 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
     <div className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <div className="mx-auto max-w-3xl px-4">
         <div className="flex items-center gap-2 overflow-x-auto py-2">
-          {/* 左端リンク: 詳細ページなら「旅行一覧」、サブページなら「旅行詳細」 */}
-          <Link
-            href={isDetailPage ? "/groups" : `/groups/${groupId}`}
-            className="shrink-0 mr-2 flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-              <path fillRule="evenodd" d="M9.78 4.22a.75.75 0 0 1 0 1.06L7.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L5.47 8.53a.75.75 0 0 1 0-1.06l3.25-3.25a.75.75 0 0 1 1.06 0Z" clipRule="evenodd" />
-            </svg>
-            {isDetailPage ? "旅行一覧" : "旅行詳細"}
-          </Link>
-
           {/* ステップ */}
           {steps.map((step, idx) => {
             const isActive = step.key === activeStep;
