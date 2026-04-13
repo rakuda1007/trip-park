@@ -464,18 +464,6 @@ export function GroupDetailClient() {
 
         const steps: Step[] = [
           {
-            key: "destination",
-            label: "目的地",
-            sublabel: destDone ? group.destination! : "未定",
-            done: destDone,
-            href: `/groups/${groupId}/destination-votes`,
-            icon: (
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-                <path fillRule="evenodd" d="m9.69 18.933.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 0 0 .281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 1 0 3 9c0 3.492 1.698 5.988 3.355 7.584a13.731 13.731 0 0 0 2.273 1.765 11.842 11.842 0 0 0 .953.524l.004.002.006.003ZM10 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" clipRule="evenodd" />
-              </svg>
-            ),
-          },
-          {
             key: "schedule",
             label: "日程",
             sublabel: datesDone ? "設定済み" : "未設定",
@@ -484,6 +472,18 @@ export function GroupDetailClient() {
             icon: (
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
                 <path fillRule="evenodd" d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z" clipRule="evenodd" />
+              </svg>
+            ),
+          },
+          {
+            key: "destination",
+            label: "目的地",
+            sublabel: destDone ? group.destination! : "未定",
+            done: destDone,
+            href: `/groups/${groupId}/destination-votes`,
+            icon: (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                <path fillRule="evenodd" d="m9.69 18.933.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 0 0 .281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 1 0 3 9c0 3.492 1.698 5.988 3.355 7.584a13.731 13.731 0 0 0 2.273 1.765 11.842 11.842 0 0 0 .953.524l.004.002.006.003ZM10 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" clipRule="evenodd" />
               </svg>
             ),
           },
@@ -523,12 +523,19 @@ export function GroupDetailClient() {
               </p>
               <div className="flex items-start">
                 {steps.map((step, idx) => {
+                  // 日程(0)・目的地(1) はどちらが先に完了してもよいので、
+                  // 両ステップのどちらかが未完のうちは両方をハイライト対象にする
+                  const firstTwoBothDone = steps[0].done && steps[1].done;
+                  const isCurrent = !step.done && (
+                    (idx <= 1 && !firstTwoBothDone) ||
+                    (idx > 1 && firstTwoBothDone && idx === steps.findIndex((s, i) => i > 1 && !s.done))
+                  );
                   const circle = (
                     <div
                       className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
                         step.done
                           ? "border-emerald-500 bg-emerald-500 text-white"
-                          : idx === steps.findIndex((s) => !s.done)
+                          : isCurrent
                             ? "border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
                             : "border-zinc-300 bg-zinc-100 text-zinc-400 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-500"
                       }`}
