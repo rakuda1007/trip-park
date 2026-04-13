@@ -10,12 +10,8 @@ function waypointQuery(w: TripWaypoint): string | null {
 }
 
 function destinationQuery(route: TripRouteDoc): string | null {
-  const addr = route.destinationAddress?.trim() ?? "";
   const name = route.destinationName?.trim() ?? "";
-  if (addr && name) return `${addr} ${name}`;
-  if (addr) return addr;
-  if (name) return name;
-  return null;
+  return name || null;
 }
 
 /**
