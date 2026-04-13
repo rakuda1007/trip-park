@@ -446,12 +446,21 @@ export function GroupDetailClient() {
       ) : null}
 
       <p className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
-        <Link
-          href={`/groups/${groupId}/schedule`}
-          className="text-sm font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300"
-        >
-          日程調整へ
-        </Link>
+        {group.tripStartDate ? (
+          <span
+            className="text-sm text-zinc-400 dark:text-zinc-500 cursor-default"
+            title="旅行日程が設定済みのため日程調整は不要です"
+          >
+            既に日程は確定済み
+          </span>
+        ) : (
+          <Link
+            href={`/groups/${groupId}/schedule`}
+            className="text-sm font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300"
+          >
+            日程調整へ
+          </Link>
+        )}
         {(group.status ?? "planning") === "planning" ? (
           <Link
             href={`/groups/${groupId}/destination-votes`}
