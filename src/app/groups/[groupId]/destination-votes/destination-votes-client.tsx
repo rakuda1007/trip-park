@@ -87,11 +87,10 @@ function CandidateForm({
       </div>
       <div>
         <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-          一泊あたりの費用（円） <span className="text-red-500">*</span>
+          費用（円）（任意）
         </label>
         <input
           type="number"
-          required
           min={0}
           value={costPerNight}
           onChange={(e) => setCostPerNight(e.target.value)}
@@ -180,15 +179,16 @@ export function DestinationVotesClient() {
 
   async function handleAddCandidate(draft: EditDraft) {
     if (!user || !groupId) return;
-    const cost = parseInt(draft.costPerNight, 10);
-    if (isNaN(cost) || cost < 0) { setError("費用を正しく入力してください"); return; }
+    const costRaw = draft.costPerNight.trim();
+    const cost = costRaw === "" ? null : parseInt(costRaw, 10);
+    if (cost !== null && (isNaN(cost) || cost < 0)) { setError("費用を正しく入力してください"); return; }
     setBusy("add");
     setError(null);
     try {
       await addDestinationCandidate(groupId, user.uid, user.displayName, {
         name: draft.name.trim(),
         url: draft.url.trim() || null,
-        costPerNight: cost,
+        costPerNight: cost ?? 0,
         description: draft.description.trim() || null,
       });
       setShowAddForm(false);
@@ -202,15 +202,16 @@ export function DestinationVotesClient() {
 
   async function handleUpdateCandidate(candidateId: string, draft: EditDraft) {
     if (!groupId) return;
-    const cost = parseInt(draft.costPerNight, 10);
-    if (isNaN(cost) || cost < 0) { setError("費用を正しく入力してください"); return; }
+    const costRaw = draft.costPerNight.trim();
+    const cost = costRaw === "" ? null : parseInt(costRaw, 10);
+    if (cost !== null && (isNaN(cost) || cost < 0)) { setError("費用を正しく入力してください"); return; }
     setBusy(`edit-${candidateId}`);
     setError(null);
     try {
       await updateDestinationCandidate(groupId, candidateId, {
         name: draft.name.trim(),
         url: draft.url.trim() || null,
-        costPerNight: cost,
+        costPerNight: cost ?? 0,
         description: draft.description.trim() || null,
       });
       setEditingId(null);
@@ -330,7 +331,7 @@ export function DestinationVotesClient() {
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-xs font-semibold text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400">
                   <th className="px-4 py-3">目的地</th>
-                  <th className="px-4 py-3 text-right">一泊費用</th>
+                  <th className="px-4 py-3 text-right">費用</th>
                   <th className="px-4 py-3">補足</th>
                 </tr>
               </thead>
@@ -442,7 +443,7 @@ export function DestinationVotesClient() {
                       </td>
                       {/* 費用 */}
                       <td className="px-4 py-3 text-right align-top font-mono font-semibold text-zinc-800 dark:text-zinc-200">
-                        {formatCost(c.data.costPerNight ?? 0)}
+                        {c.data.costPerNight ? formatCost(c.data.costPerNight) : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
                       </td>
                       {/* 補足 */}
                       <td className="break-words px-4 py-3 align-top text-xs text-zinc-500 dark:text-zinc-400">

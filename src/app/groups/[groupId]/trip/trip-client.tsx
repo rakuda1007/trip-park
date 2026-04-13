@@ -118,6 +118,8 @@ function DayForm({
   busy: boolean;
   submitLabel: string;
 }) {
+  const [departure, setDeparture] = useState(initial?.departurePoint ?? "");
+  const [departureMapUrl, setDepartureMapUrl] = useState(initial?.departureMapUrl ?? "");
   const [destName, setDestName] = useState(initial?.destinationName ?? "");
   const [destMapUrl, setDestMapUrl] = useState(initial?.destinationMapUrl ?? "");
   const [waypoints, setWaypoints] = useState<WaypointDraft[]>(
@@ -131,6 +133,8 @@ function DayForm({
     if (!destName.trim()) return;
     onSubmit({
       dayNumber,
+      departurePoint: departure.trim() || null,
+      departureMapUrl: departureMapUrl.trim() || null,
       destinationName: destName.trim(),
       destinationMapUrl: destMapUrl.trim() || null,
       waypoints: fromDrafts(waypoints),
@@ -142,6 +146,18 @@ function DayForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+        出発地（任意）
+        <input type="text" value={departure} onChange={(e) => setDeparture(e.target.value)}
+          placeholder="例: 自宅・東京駅"
+          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900" />
+      </label>
+      <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+        出発地の地図リンク（任意）
+        <input type="url" value={departureMapUrl} onChange={(e) => setDepartureMapUrl(e.target.value)}
+          placeholder="https://maps.google.com/..."
+          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900" />
+      </label>
       <label className="block text-xs text-zinc-600 dark:text-zinc-400">
         目的地 <span className="text-red-500">*</span>
         <input required type="text" value={destName} onChange={(e) => setDestName(e.target.value)}
@@ -208,6 +224,22 @@ function DayCard({
 }) {
   return (
     <div className="space-y-3">
+      {/* 出発地 */}
+      {route.departurePoint && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">出発地</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span className="text-base font-semibold text-zinc-900 dark:text-zinc-50">{route.departurePoint}</span>
+            {route.departureMapUrl && (
+              <a href={route.departureMapUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400">
+                地図
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 目的地 */}
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">目的地</p>

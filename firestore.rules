@@ -161,7 +161,8 @@ service cloud.firestore {
           request.resource.data.createdByUserId == request.auth.uid &&
           request.resource.data.waypoints is list &&
           request.resource.data.keys().hasAll([
-            'dayNumber', 'destinationName', 'destinationMapUrl',
+            'dayNumber', 'departurePoint', 'departureMapUrl',
+            'destinationName', 'destinationMapUrl',
             'waypoints', 'routeMapUrl', 'memo', 'isDone', 'routePolyline',
             'sortOrder', 'routeLabel', 'title', 'destinationAddress', 'destinationMemo',
             'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt'

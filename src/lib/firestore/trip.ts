@@ -42,13 +42,15 @@ export async function listTripRoutes(groupId: string): Promise<
     const raw = d.data() as Record<string, unknown>;
     out.push({
       id: d.id,
-      data: {
+        data: {
         ...(raw as TripRouteDoc),
         waypoints: normalizeWaypoints(raw.waypoints),
         isDone: raw.isDone === true,
         dayNumber: typeof raw.dayNumber === "number" ? raw.dayNumber : (raw.sortOrder as number ?? 0) + 1,
         memo: typeof raw.memo === "string" ? raw.memo : (raw.destinationMemo as string | null ?? null),
         routePolyline: typeof raw.routePolyline === "string" ? raw.routePolyline : null,
+        departurePoint: typeof raw.departurePoint === "string" ? raw.departurePoint : null,
+        departureMapUrl: typeof raw.departureMapUrl === "string" ? raw.departureMapUrl : null,
       },
     });
   });
@@ -57,6 +59,8 @@ export async function listTripRoutes(groupId: string): Promise<
 
 export type TripRouteInput = {
   dayNumber: number;
+  departurePoint: string | null;
+  departureMapUrl: string | null;
   destinationName: string;
   destinationMapUrl: string | null;
   waypoints: TripWaypoint[];
@@ -75,6 +79,8 @@ export async function addTripRoute(
   const col = collection(db, COLLECTIONS.groups, groupId, SUB.tripRoutes);
   const ref = await addDoc(col, {
     dayNumber: input.dayNumber,
+    departurePoint: input.departurePoint?.trim() || null,
+    departureMapUrl: input.departureMapUrl?.trim() || null,
     destinationName: input.destinationName.trim(),
     destinationMapUrl: input.destinationMapUrl?.trim() || null,
     waypoints: normalizeWaypoints(input.waypoints),
@@ -105,6 +111,8 @@ export async function updateTripRoute(
   const ref = doc(db, COLLECTIONS.groups, groupId, SUB.tripRoutes, routeId);
   await updateDoc(ref, {
     dayNumber: input.dayNumber,
+    departurePoint: input.departurePoint?.trim() || null,
+    departureMapUrl: input.departureMapUrl?.trim() || null,
     destinationName: input.destinationName.trim(),
     destinationMapUrl: input.destinationMapUrl?.trim() || null,
     waypoints: normalizeWaypoints(input.waypoints),

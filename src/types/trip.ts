@@ -11,6 +11,10 @@ export type TripWaypoint = {
 export type TripRouteDoc = {
   /** Day番号（1始まり） */
   dayNumber: number;
+  /** 出発地（任意） */
+  departurePoint: string | null;
+  /** 出発地の地図リンク（任意） */
+  departureMapUrl: string | null;
   /** 目的地名 */
   destinationName: string;
   /** 目的地の地図リンク（任意） */
