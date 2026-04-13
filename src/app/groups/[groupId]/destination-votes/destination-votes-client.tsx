@@ -317,15 +317,15 @@ export function DestinationVotesClient() {
         <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>
       ) : null}
 
-      {/* ── 比較テーブル（名前・費用・補足のみ） ── */}
+      {/* ── 比較テーブル ── */}
       {candidates.length > 0 ? (
         <>
           <div className="mt-6 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
             <table className="w-full table-fixed text-sm">
               <colgroup>
                 <col className="w-[45%]" />
-                <col className="w-[20%]" />
-                <col className="w-[35%]" />
+                <col className="w-[18%]" />
+                <col className="w-[37%]" />
               </colgroup>
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-xs font-semibold text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400">
@@ -336,13 +336,16 @@ export function DestinationVotesClient() {
               </thead>
               <tbody>
                 {candidates.map((c) => {
+                  const s = stats.find((x) => x.id === c.id)!;
+                  const myVote = votes.find((v) => v.data.candidateId === c.id && v.data.userId === user?.uid);
                   const isDecided = group.destination === c.data.name;
                   return (
                     <tr
                       key={c.id}
                       className={`border-b border-zinc-100 last:border-0 dark:border-zinc-800 ${isDecided ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-white dark:bg-zinc-900/40"}`}
                     >
-                      <td className="break-words px-4 py-3 align-top">
+                      {/* 目的地名 + 投票バー + 投票ボタン */}
+                      <td className="px-4 py-3 align-top">
                         <div className="flex flex-wrap items-start gap-1.5">
                           {isDecided ? (
                             <span className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
@@ -356,10 +359,45 @@ export function DestinationVotesClient() {
                         <p className="mt-0.5 text-[10px] text-zinc-400">
                           提案: {c.data.proposedByDisplayName ?? "—"}
                         </p>
+                        {/* 投票バー */}
+                        <div className="mt-2 space-y-1">
+                          {(["first", "want", "reserve"] as DestinationAnswer[]).map((a) => {
+                            const count = a === "first" ? s.first : a === "want" ? s.want : s.reserve;
+                            const pct = s.total > 0 ? Math.round((count / s.total) * 100) : 0;
+                            return (
+                              <div key={a} className="flex items-center gap-1.5 text-xs">
+                                <span className="w-20 shrink-0 truncate text-zinc-500">{ANSWER_LABELS[a]}</span>
+                                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-700">
+                                  <div className={`h-full ${ANSWER_BAR_COLORS[a]} transition-all`} style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className="w-3 shrink-0 text-right text-[10px] text-zinc-400">{count}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* 投票ボタン */}
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {(["first", "want", "reserve"] as DestinationAnswer[]).map((a) => {
+                            const isSelected = myVote?.data.answer === a;
+                            return (
+                              <button
+                                key={a}
+                                type="button"
+                                onClick={() => handleVote(c.id, a)}
+                                disabled={busy !== null}
+                                className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition ${isSelected ? ANSWER_COLORS[a] + " ring-2 ring-offset-1" : "border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"} disabled:opacity-50`}
+                              >
+                                {ANSWER_LABELS[a]}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </td>
+                      {/* 費用 */}
                       <td className="px-4 py-3 text-right align-top font-mono font-semibold text-zinc-800 dark:text-zinc-200">
                         {formatCost(c.data.costPerNight ?? 0)}
                       </td>
+                      {/* 補足 */}
                       <td className="break-words px-4 py-3 align-top text-xs text-zinc-500 dark:text-zinc-400">
                         {c.data.description ?? (
                           <span className="text-zinc-300 dark:text-zinc-600">—</span>
@@ -372,11 +410,9 @@ export function DestinationVotesClient() {
             </table>
           </div>
 
-          {/* ── 投票・操作カード ── */}
-          <div className="mt-4 space-y-3">
+          {/* ── URL・操作（編集フォームまたはコンパクト表示） ── */}
+          <div className="mt-3 space-y-2">
             {candidates.map((c) => {
-              const s = stats.find((x) => x.id === c.id)!;
-              const myVote = votes.find((v) => v.data.candidateId === c.id && v.data.userId === user?.uid);
               const isDecided = group.destination === c.data.name;
               const canEdit = user && (isOwner || c.data.proposedByUserId === user.uid);
 
@@ -400,93 +436,42 @@ export function DestinationVotesClient() {
                 );
               }
 
+              const hasUrl = !!c.data.url;
+              const hasActions = isOwner || canEdit;
+              if (!hasUrl && !hasActions) return null;
+
               return (
-                <div
-                  key={c.id}
-                  className={`rounded-xl border px-4 py-3 ${isDecided ? "border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950/20" : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"}`}
-                >
-                  {/* ヘッダー行：名前 + 操作 */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-medium text-zinc-900 dark:text-zinc-50">{c.data.name}</p>
-                      {c.data.url ? (
-                        <a
-                          href={c.data.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-0.5 block truncate text-xs text-blue-600 underline hover:text-blue-800 dark:text-blue-400"
-                        >
-                          {c.data.url}
-                        </a>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 gap-1 text-xs">
-                      {isOwner && !isDecided ? (
-                        <button
-                          type="button"
-                          onClick={() => handleDecide(c.id)}
-                          disabled={busy !== null}
-                          className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
-                        >
-                          {busy === `decide-${c.id}` ? "…" : "確定"}
-                        </button>
-                      ) : null}
-                      {canEdit ? (
-                        <button
-                          type="button"
-                          onClick={() => setEditingId(c.id)}
-                          disabled={busy !== null}
-                          className="rounded-md border border-zinc-300 px-2 py-1 text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300"
-                        >
-                          編集
-                        </button>
-                      ) : null}
-                      {(isOwner || c.data.proposedByUserId === user?.uid) ? (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteCandidate(c.id)}
-                          disabled={busy !== null}
-                          className="rounded-md px-2 py-1 text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400"
-                        >
-                          削除
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {/* 投票状況バー */}
-                  <div className="mt-3 space-y-1 text-xs">
-                    {(["first", "want", "reserve"] as DestinationAnswer[]).map((a) => {
-                      const count = a === "first" ? s.first : a === "want" ? s.want : s.reserve;
-                      const pct = s.total > 0 ? Math.round((count / s.total) * 100) : 0;
-                      return (
-                        <div key={a} className="flex items-center gap-2">
-                          <span className="w-24 shrink-0 text-zinc-500">{ANSWER_LABELS[a]}</span>
-                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-700">
-                            <div className={`h-full ${ANSWER_BAR_COLORS[a]} transition-all`} style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="w-4 text-right text-zinc-400">{count}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* 投票ボタン */}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {(["first", "want", "reserve"] as DestinationAnswer[]).map((a) => {
-                      const isSelected = myVote?.data.answer === a;
-                      return (
-                        <button
-                          key={a}
-                          type="button"
-                          onClick={() => handleVote(c.id, a)}
-                          disabled={busy !== null}
-                          className={`rounded-full px-3 py-1 text-xs font-medium transition ${isSelected ? ANSWER_COLORS[a] + " ring-2 ring-offset-1" : "border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"} disabled:opacity-50`}
-                        >
-                          {ANSWER_LABELS[a]}
-                        </button>
-                      );
-                    })}
+                <div key={c.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-zinc-100 bg-zinc-50 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-900/30">
+                  <span className="shrink-0 text-xs font-medium text-zinc-500">{c.data.name}</span>
+                  {hasUrl ? (
+                    <a
+                      href={c.data.url!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="min-w-0 truncate text-xs text-blue-600 underline hover:text-blue-800 dark:text-blue-400"
+                    >
+                      {c.data.url}
+                    </a>
+                  ) : null}
+                  <div className="ml-auto flex shrink-0 gap-1 text-xs">
+                    {isOwner && !isDecided ? (
+                      <button type="button" onClick={() => handleDecide(c.id)} disabled={busy !== null}
+                        className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">
+                        {busy === `decide-${c.id}` ? "…" : "確定"}
+                      </button>
+                    ) : null}
+                    {canEdit ? (
+                      <button type="button" onClick={() => setEditingId(c.id)} disabled={busy !== null}
+                        className="rounded-md border border-zinc-300 px-2 py-1 text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300">
+                        編集
+                      </button>
+                    ) : null}
+                    {(isOwner || c.data.proposedByUserId === user?.uid) ? (
+                      <button type="button" onClick={() => handleDeleteCandidate(c.id)} disabled={busy !== null}
+                        className="rounded-md px-2 py-1 text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400">
+                        削除
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               );
