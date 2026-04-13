@@ -272,7 +272,10 @@ service cloud.firestore {
           isOwnerOrAdmin(groupId) ||
           resource.data.proposedByUserId == request.auth.uid
         );
-        allow update: if false;
+        allow update: if request.auth != null && isGroupMember(groupId) && (
+          isOwnerOrAdmin(groupId) ||
+          resource.data.proposedByUserId == request.auth.uid
+        );
       }
 
       match /destinationVotes/{voteId} {

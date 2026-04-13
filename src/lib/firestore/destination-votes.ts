@@ -15,6 +15,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
 } from "firebase/firestore";
 
 export type CandidateItem = { id: string; data: DestinationCandidateDoc };
@@ -43,7 +44,7 @@ export async function addDestinationCandidate(
   groupId: string,
   uid: string,
   displayName: string | null,
-  params: { name: string; description: string | null },
+  params: { name: string; url: string | null; costPerNight: number; description: string | null },
 ): Promise<string> {
   const db = getFirebaseFirestore();
   const ref = collection(
@@ -59,6 +60,19 @@ export async function addDestinationCandidate(
     createdAt: serverTimestamp(),
   });
   return docRef.id;
+}
+
+/** 目的地候補を編集 */
+export async function updateDestinationCandidate(
+  groupId: string,
+  candidateId: string,
+  params: { name: string; url: string | null; costPerNight: number; description: string | null },
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  await updateDoc(
+    doc(db, COLLECTIONS.groups, groupId, SUB.destinationCandidates, candidateId),
+    { ...params },
+  );
 }
 
 /** 目的地候補を削除 */
