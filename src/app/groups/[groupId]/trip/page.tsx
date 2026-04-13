@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { TripClient } from "./trip-client";
 
 export const metadata: Metadata = {
-  title: "目的地・旅程",
+  title: "旅程",
 };
 
 export default function GroupTripPage() {

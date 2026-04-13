@@ -1,86 +1,326 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
-import { getGroup, listMembers } from "@/lib/firestore/groups";
+import { getGroup } from "@/lib/firestore/groups";
 import {
   addTripRoute,
+  dayRouteExists,
   deleteTripRoute,
   listTripRoutes,
+  updateDayDone,
   updateTripRoute,
   type TripRouteInput,
 } from "@/lib/firestore/trip";
-import type { GroupDoc, MemberDoc } from "@/types/group";
+import type { GroupDoc } from "@/types/group";
 import type { TripRouteDoc, TripWaypoint } from "@/types/trip";
-import { Timestamp } from "firebase/firestore";
 import { TripRouteMapPanel } from "@/components/trip/trip-route-map-panel";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+// ────────────────────────────────
+// ユーティリティ
+// ────────────────────────────────
+
+function calcNumDays(start: string | null, end: string | null): number {
+  if (!start) return 0;
+  const s = new Date(start);
+  const e = end ? new Date(end) : s;
+  const diff = Math.round((e.getTime() - s.getTime()) / 86_400_000);
+  return Math.max(1, diff + 1);
+}
+
+function dateForDay(start: string | null, dayIndex: number): string | null {
+  if (!start) return null;
+  const d = new Date(start);
+  d.setDate(d.getDate() + dayIndex);
+  return d.toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" });
+}
+
 type WaypointDraft = { name: string; memo: string; mapUrl: string };
 
-function emptyDrafts(): WaypointDraft[] {
-  return [];
+function emptyDrafts(): WaypointDraft[] { return []; }
+function toDrafts(wp: TripWaypoint[]): WaypointDraft[] {
+  return wp.map((w) => ({ name: w.name, memo: w.memo ?? "", mapUrl: w.mapUrl ?? "" }));
 }
-
-function toDrafts(waypoints: TripWaypoint[]): WaypointDraft[] {
-  return waypoints.map((w) => ({
-    name: w.name,
-    memo: typeof w.memo === "string" ? w.memo : "",
-    mapUrl: typeof w.mapUrl === "string" ? w.mapUrl : "",
-  }));
-}
-
-function draftsToWaypoints(drafts: WaypointDraft[]): TripWaypoint[] {
+function fromDrafts(drafts: WaypointDraft[]): TripWaypoint[] {
   return drafts
-    .map((d) => ({
-      name: d.name.trim(),
-      memo: d.memo.trim() || null,
-      mapUrl: d.mapUrl.trim() || null,
-    }))
+    .map((d) => ({ name: d.name.trim(), memo: d.memo.trim() || null, mapUrl: d.mapUrl.trim() || null }))
     .filter((w) => w.name.length > 0);
 }
 
-function formatTs(v: unknown): string {
-  if (!v) return "—";
-  if (v instanceof Timestamp) {
-    return v.toDate().toLocaleString("ja-JP", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-  return "—";
-}
+// ────────────────────────────────
+// Waypoint フォーム部品
+// ────────────────────────────────
 
-function canManageTrip(
-  group: GroupDoc,
-  members: { userId: string; data: MemberDoc }[],
-  uid: string,
-  createdByUserId: string,
-): boolean {
-  if (group.ownerId === uid) return true;
-  const m = members.find((x) => x.userId === uid);
-  if (m?.data.role === "admin") return true;
-  return uid === createdByUserId;
-}
-
-function MapLink({ href, label }: { href: string; label: string }) {
-  const u = href.trim();
-  if (!u) return null;
+function WaypointEditor({
+  waypoints,
+  onChange,
+}: {
+  waypoints: WaypointDraft[];
+  onChange: (next: WaypointDraft[]) => void;
+}) {
   return (
-    <a
-      href={u}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-sm font-medium text-emerald-700 underline underline-offset-2 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300"
-    >
-      {label}
-    </a>
+    <div>
+      <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">経由地（順路順）</p>
+      {waypoints.length > 0 && (
+        <ul className="mt-2 space-y-2">
+          {waypoints.map((w, i) => (
+            <li key={i} className="rounded-md border border-zinc-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-900/40">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={w.name}
+                  onChange={(e) => { const n = [...waypoints]; n[i] = { ...n[i]!, name: e.target.value }; onChange(n); }}
+                  placeholder="経由地名"
+                  className="min-w-0 flex-1 rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                />
+                <button type="button" onClick={() => onChange(waypoints.filter((_, j) => j !== i))}
+                  className="text-xs text-red-500 hover:underline">削除</button>
+              </div>
+              <input type="text" value={w.memo}
+                onChange={(e) => { const n = [...waypoints]; n[i] = { ...n[i]!, memo: e.target.value }; onChange(n); }}
+                placeholder="メモ（任意）"
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900" />
+              <input type="url" value={w.mapUrl}
+                onChange={(e) => { const n = [...waypoints]; n[i] = { ...n[i]!, mapUrl: e.target.value }; onChange(n); }}
+                placeholder="地図リンク（任意）"
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900" />
+            </li>
+          ))}
+        </ul>
+      )}
+      <button type="button"
+        onClick={() => onChange([...waypoints, { name: "", memo: "", mapUrl: "" }])}
+        className="mt-2 text-xs text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+        ＋ 経由地を追加
+      </button>
+    </div>
   );
 }
+
+// ────────────────────────────────
+// Day 編集フォーム
+// ────────────────────────────────
+
+function DayForm({
+  dayNumber,
+  initial,
+  onSubmit,
+  onCancel,
+  busy,
+  submitLabel,
+}: {
+  dayNumber: number;
+  initial?: Partial<TripRouteDoc>;
+  onSubmit: (input: TripRouteInput) => void;
+  onCancel?: () => void;
+  busy: boolean;
+  submitLabel: string;
+}) {
+  const [destName, setDestName] = useState(initial?.destinationName ?? "");
+  const [destMapUrl, setDestMapUrl] = useState(initial?.destinationMapUrl ?? "");
+  const [waypoints, setWaypoints] = useState<WaypointDraft[]>(
+    initial?.waypoints ? toDrafts(initial.waypoints) : emptyDrafts(),
+  );
+  const [routeMapUrl, setRouteMapUrl] = useState(initial?.routeMapUrl ?? "");
+  const [memo, setMemo] = useState(initial?.memo ?? "");
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!destName.trim()) return;
+    onSubmit({
+      dayNumber,
+      destinationName: destName.trim(),
+      destinationMapUrl: destMapUrl.trim() || null,
+      waypoints: fromDrafts(waypoints),
+      routeMapUrl: routeMapUrl.trim() || null,
+      memo: memo.trim() || null,
+      isDone: initial?.isDone ?? false,
+    });
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+        目的地 <span className="text-red-500">*</span>
+        <input required type="text" value={destName} onChange={(e) => setDestName(e.target.value)}
+          placeholder="例: 九十九里シーサイドキャンプ場"
+          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900" />
+      </label>
+      <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+        目的地の地図リンク（任意）
+        <input type="url" value={destMapUrl} onChange={(e) => setDestMapUrl(e.target.value)}
+          placeholder="https://maps.google.com/..."
+          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900" />
+      </label>
+      <WaypointEditor waypoints={waypoints} onChange={setWaypoints} />
+      <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+        全体のルート地図リンク（任意）
+        <input type="url" value={routeMapUrl} onChange={(e) => setRouteMapUrl(e.target.value)}
+          placeholder="https://maps.google.com/..."
+          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900" />
+      </label>
+      <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+        メモ（任意）
+        <textarea value={memo} onChange={(e) => setMemo(e.target.value)} rows={2}
+          placeholder="チェックイン時間・持ち物など"
+          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900" />
+      </label>
+      <div className="flex gap-2">
+        <button type="submit" disabled={busy || !destName.trim()}
+          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">
+          {busy ? "保存中…" : submitLabel}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel}
+            className="rounded-md border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-600">
+            キャンセル
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+// ────────────────────────────────
+// Day カード（表示モード）
+// ────────────────────────────────
+
+function DayCard({
+  route,
+  routeId,
+  groupId,
+  canEdit,
+  busy,
+  onEdit,
+  onDelete,
+  onToggleDone,
+}: {
+  route: TripRouteDoc;
+  routeId: string;
+  groupId: string;
+  canEdit: boolean;
+  busy: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggleDone: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      {/* 目的地 */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">目的地</p>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <span className="text-base font-semibold text-zinc-900 dark:text-zinc-50">{route.destinationName}</span>
+          {route.destinationMapUrl && (
+            <a href={route.destinationMapUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                <path fillRule="evenodd" d="m9.69 18.933.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 0 0 .281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 1 0 3 9c0 3.492 1.698 5.988 3.355 7.584a13.731 13.731 0 0 0 2.273 1.765 11.842 11.842 0 0 0 .953.524l.004.002.006.003ZM10 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" clipRule="evenodd" />
+              </svg>
+              地図
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* 経由地 */}
+      {route.waypoints && route.waypoints.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">経由地</p>
+          <ol className="mt-1 space-y-1.5 pl-1">
+            {route.waypoints.map((w, i) => (
+              <li key={i} className="flex flex-wrap items-start gap-2 text-sm">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[10px] font-bold text-zinc-500 dark:bg-zinc-800">
+                  {i + 1}
+                </span>
+                <span className="font-medium text-zinc-800 dark:text-zinc-200">{w.name}</span>
+                {w.memo && <span className="text-zinc-500">{w.memo}</span>}
+                {w.mapUrl && (
+                  <a href={w.mapUrl} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-blue-600 underline hover:text-blue-800 dark:text-blue-400">
+                    地図
+                  </a>
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {/* ルート地図リンク */}
+      {route.routeMapUrl && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">全体のルート</p>
+          <a href={route.routeMapUrl} target="_blank" rel="noopener noreferrer"
+            className="mt-1 inline-flex items-center gap-1 text-sm text-blue-600 underline hover:text-blue-800 dark:text-blue-400">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+              <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
+            </svg>
+            ルートを地図で開く
+          </a>
+        </div>
+      )}
+
+      {/* メモ */}
+      {route.memo && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">メモ</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">{route.memo}</p>
+        </div>
+      )}
+
+      {/* ルート地図（API / キャッシュ） */}
+      <TripRouteMapPanel route={route} groupId={groupId} routeId={routeId} />
+
+      {/* アクション */}
+      <div className="flex flex-wrap items-center gap-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+        {/* Day完了チェック */}
+        <button type="button" onClick={onToggleDone} disabled={busy}
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition disabled:opacity-50 ${
+            route.isDone
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+              : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400"
+          }`}>
+          {route.isDone ? (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
+              </svg>
+              完了済み
+            </>
+          ) : (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                <path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
+                <path fillRule="evenodd" d="M1.38 8a6.62 6.62 0 1 1 13.24 0A6.62 6.62 0 0 1 1.38 8ZM8 3a5 5 0 1 0 0 10A5 5 0 0 0 8 3Z" clipRule="evenodd" />
+              </svg>
+              完了にする
+            </>
+          )}
+        </button>
+
+        {canEdit && (
+          <>
+            <button type="button" onClick={onEdit} disabled={busy}
+              className="text-xs text-zinc-500 underline hover:text-zinc-800 disabled:opacity-50 dark:text-zinc-400">
+              編集
+            </button>
+            <button type="button" onClick={onDelete} disabled={busy}
+              className="text-xs text-red-600 hover:underline disabled:opacity-50">
+              削除
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────
+// メインコンポーネント
+// ────────────────────────────────
 
 export function TripClient() {
   const params = useParams();
@@ -88,34 +328,12 @@ export function TripClient() {
   const { user } = useAuth();
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
-  const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>(
-    [],
-  );
   const [routes, setRoutes] = useState<{ id: string; data: TripRouteDoc }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-
+  const [selectedDay, setSelectedDay] = useState<number>(1);
   const [editingId, setEditingId] = useState<string | null>(null);
-
-  const [newRouteLabel, setNewRouteLabel] = useState("");
-  const [newTitle, setNewTitle] = useState("");
-  const [newDestName, setNewDestName] = useState("");
-  const [newDestAddress, setNewDestAddress] = useState("");
-  const [newDestMemo, setNewDestMemo] = useState("");
-  const [newDestMapUrl, setNewDestMapUrl] = useState("");
-  const [newRouteMapUrl, setNewRouteMapUrl] = useState("");
-  const [newSortOrder, setNewSortOrder] = useState("");
-  const [newWaypoints, setNewWaypoints] = useState<WaypointDraft[]>(emptyDrafts());
-
-  const [editRouteLabel, setEditRouteLabel] = useState("");
-  const [editTitle, setEditTitle] = useState("");
-  const [editDestName, setEditDestName] = useState("");
-  const [editDestAddress, setEditDestAddress] = useState("");
-  const [editDestMemo, setEditDestMemo] = useState("");
-  const [editDestMapUrl, setEditDestMapUrl] = useState("");
-  const [editRouteMapUrl, setEditRouteMapUrl] = useState("");
-  const [editSortOrder, setEditSortOrder] = useState("");
-  const [editWaypoints, setEditWaypoints] = useState<WaypointDraft[]>(emptyDrafts());
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const load = useCallback(async () => {
     if (!groupId) return;
@@ -124,13 +342,12 @@ export function TripClient() {
       const g = await getGroup(groupId);
       setGroup(g);
       if (g) {
-        const m = await listMembers(groupId);
-        setMembers(m);
         const r = await listTripRoutes(groupId);
         setRoutes(r);
-      } else {
-        setMembers([]);
-        setRoutes([]);
+        // 初期表示: 最初の未完了 Day をデフォルト選択
+        const firstIncomplete = r.find((x) => !x.data.isDone);
+        if (firstIncomplete) setSelectedDay(firstIncomplete.data.dayNumber);
+        else if (r.length > 0) setSelectedDay(r[r.length - 1]!.data.dayNumber);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -138,141 +355,97 @@ export function TripClient() {
     }
   }, [groupId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  const nextSortOrder = useMemo(() => {
-    if (routes.length === 0) return 0;
-    return Math.max(...routes.map((x) => x.data.sortOrder)) + 1;
-  }, [routes]);
+  // Day数 = 旅程日数 OR 登録済み最大Day + 1（余裕）
+  const numDays = useMemo(() => {
+    const fromDates = calcNumDays(group?.tripStartDate ?? null, group?.tripEndDate ?? null);
+    const maxRoute = routes.reduce((m, r) => Math.max(m, r.data.dayNumber), 0);
+    return Math.max(fromDates, maxRoute, 1);
+  }, [group, routes]);
 
-  function startEdit(r: { id: string; data: TripRouteDoc }) {
-    setEditingId(r.id);
-    setEditRouteLabel(r.data.routeLabel ?? "");
-    setEditTitle(r.data.title);
-    setEditDestName(r.data.destinationName);
-    setEditDestAddress(r.data.destinationAddress ?? "");
-    setEditDestMemo(r.data.destinationMemo ?? "");
-    setEditDestMapUrl(r.data.destinationMapUrl ?? "");
-    setEditRouteMapUrl(r.data.routeMapUrl ?? "");
-    setEditSortOrder(String(r.data.sortOrder));
-    setEditWaypoints(
-      r.data.waypoints?.length ? toDrafts(r.data.waypoints) : emptyDrafts(),
-    );
+  const dayNumbers = useMemo(() => Array.from({ length: numDays }, (_, i) => i + 1), [numDays]);
+
+  const currentRoute = useMemo(
+    () => routes.find((r) => r.data.dayNumber === selectedDay) ?? null,
+    [routes, selectedDay],
+  );
+
+  const isOwnerOrAdmin = useMemo(() => {
+    if (!user || !group) return false;
+    return group.ownerId === user.uid;
+  }, [user, group]);
+
+  // Day追加（+1日）
+  async function handleAddDay() {
+    const newDay = numDays + 1;
+    setSelectedDay(newDay);
+    setShowAddForm(true);
   }
 
-  function cancelEdit() {
-    setEditingId(null);
-  }
-
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    if (!user || !groupId) return;
-    const title = newTitle.trim();
-    const dest = newDestName.trim();
-    if (!title || !dest) {
-      setError("見出しと目的地名は必須です。");
-      return;
-    }
-    let sort = nextSortOrder;
-    if (newSortOrder.trim() !== "") {
-      const n = Number(newSortOrder);
-      if (!Number.isFinite(n)) {
-        setError("表示順は数値で入力してください。");
-        return;
-      }
-      sort = Math.floor(n);
-    }
-    const input: TripRouteInput = {
-      routeLabel: newRouteLabel.trim() || null,
-      title,
-      destinationName: dest,
-      destinationAddress: newDestAddress.trim() || null,
-      destinationMemo: newDestMemo.trim() || null,
-      destinationMapUrl: newDestMapUrl.trim() || null,
-      waypoints: draftsToWaypoints(newWaypoints),
-      routeMapUrl: newRouteMapUrl.trim() || null,
-      sortOrder: sort,
-    };
+  async function handleAddRoute(input: TripRouteInput) {
+    if (!user) return;
     setBusy("add");
     setError(null);
     try {
-      await addTripRoute(
-        groupId,
-        user.uid,
-        user.displayName ?? null,
-        input,
-      );
-      setNewRouteLabel("");
-      setNewTitle("");
-      setNewDestName("");
-      setNewDestAddress("");
-      setNewDestMemo("");
-      setNewDestMapUrl("");
-      setNewRouteMapUrl("");
-      setNewSortOrder("");
-      setNewWaypoints(emptyDrafts());
+      await addTripRoute(groupId, user.uid, user.displayName ?? null, input);
+      setShowAddForm(false);
       await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "保存に失敗しました");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "追加に失敗しました");
     } finally {
       setBusy(null);
     }
   }
 
-  async function handleSaveEdit(routeId: string) {
-    if (!user || !groupId) return;
-    const title = editTitle.trim();
-    const dest = editDestName.trim();
-    if (!title || !dest) {
-      setError("見出しと目的地名は必須です。");
-      return;
-    }
-    const n = Number(editSortOrder);
-    if (!Number.isFinite(n)) {
-      setError("表示順は数値で入力してください。");
-      return;
-    }
-    const input: TripRouteInput = {
-      routeLabel: editRouteLabel.trim() || null,
-      title,
-      destinationName: dest,
-      destinationAddress: editDestAddress.trim() || null,
-      destinationMemo: editDestMemo.trim() || null,
-      destinationMapUrl: editDestMapUrl.trim() || null,
-      waypoints: draftsToWaypoints(editWaypoints),
-      routeMapUrl: editRouteMapUrl.trim() || null,
-      sortOrder: Math.floor(n),
-    };
+  async function handleUpdateRoute(routeId: string, input: TripRouteInput) {
     setBusy(`edit-${routeId}`);
     setError(null);
     try {
       await updateTripRoute(groupId, routeId, input);
       setEditingId(null);
       await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "更新に失敗しました");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "更新に失敗しました");
     } finally {
       setBusy(null);
     }
   }
 
   async function handleDelete(routeId: string) {
-    if (!groupId) return;
-    if (!confirm("この旅程ブロックを削除しますか？")) return;
+    if (!confirm("この日のプランを削除しますか？")) return;
     setBusy(`del-${routeId}`);
-    setError(null);
     try {
       await deleteTripRoute(groupId, routeId);
-      if (editingId === routeId) setEditingId(null);
+      setEditingId(null);
       await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "削除に失敗しました");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "削除に失敗しました");
     } finally {
       setBusy(null);
     }
   }
+
+  async function handleToggleDone(routeId: string, current: boolean) {
+    setBusy(`done-${routeId}`);
+    try {
+      await updateDayDone(groupId, routeId, !current);
+      await load();
+      // 完了にしたら次の未完日へ移動
+      if (!current) {
+        const nextIncomplete = routes.find((r) => r.id !== routeId && !r.data.isDone);
+        if (nextIncomplete) setSelectedDay(nextIncomplete.data.dayNumber);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "更新に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // ────────────────────────────────
+  // ローディング / エラー
+  // ────────────────────────────────
 
   if (group === undefined) {
     return (
@@ -281,488 +454,142 @@ export function TripClient() {
       </div>
     );
   }
-
   if (group === null) {
     return (
       <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
         <p className="text-sm text-zinc-600">グループが見つかりません。</p>
-        <Link href="/groups" className="mt-4 inline-block text-sm text-zinc-900 underline">
-          グループ一覧へ
-        </Link>
+        <Link href="/groups" className="mt-4 inline-block text-sm underline">グループ一覧へ</Link>
       </div>
     );
   }
 
+  // ────────────────────────────────
+  // レンダリング
+  // ────────────────────────────────
+
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
-      <Link
-        href={`/groups/${groupId}`}
-        className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-      >
-        ← グループ詳細
+      <Link href={`/groups/${groupId}`}
+        className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+        ← 旅行詳細
       </Link>
 
-      <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        目的地・旅程
-      </h1>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        目的地・経由地・地図リンクをメンバー全員で共有します。複数ルートがある場合はラベル（例:
-        A車）を付けて区別できます。
+      <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">旅程</h1>
+      <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+        {group.name}
+        {group.tripStartDate && (
+          <span className="ml-2 text-zinc-400">
+            {group.tripStartDate}{group.tripEndDate && group.tripEndDate !== group.tripStartDate ? ` 〜 ${group.tripEndDate}` : ""}
+          </span>
+        )}
       </p>
 
-      {error ? (
-        <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
+      {error && (
+        <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400" role="alert">
           {error}
         </p>
-      ) : null}
+      )}
 
-      <section className="mt-8 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
-        <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-          旅程ブロックを追加
-        </h2>
-        <form onSubmit={handleAdd} className="mt-4 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-              ルートラベル（任意）
-              <input
-                type="text"
-                value={newRouteLabel}
-                onChange={(e) => setNewRouteLabel(e.target.value)}
-                placeholder="例: A車・行き"
-                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-              />
-            </label>
-            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-              表示順（空欄なら末尾）
-              <input
-                type="text"
-                inputMode="numeric"
-                value={newSortOrder}
-                onChange={(e) => setNewSortOrder(e.target.value)}
-                placeholder={String(nextSortOrder)}
-                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-              />
-            </label>
-          </div>
-          <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-            見出し <span className="text-red-600">*</span>
-            <input
-              type="text"
-              required
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="例: Day1 キャンプ場へ"
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-            />
-          </label>
-          <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-            目的地の名称 <span className="text-red-600">*</span>
-            <input
-              type="text"
-              required
-              value={newDestName}
-              onChange={(e) => setNewDestName(e.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-            />
-          </label>
-          <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-            住所・位置のメモ
-            <input
-              type="text"
-              value={newDestAddress}
-              onChange={(e) => setNewDestAddress(e.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-            />
-          </label>
-          <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-            メモ（チェックイン時間・URL など）
-            <textarea
-              value={newDestMemo}
-              onChange={(e) => setNewDestMemo(e.target.value)}
-              rows={2}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-            />
-          </label>
-          <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-            目的地の地図リンク（Google Maps など）
-            <input
-              type="url"
-              value={newDestMapUrl}
-              onChange={(e) => setNewDestMapUrl(e.target.value)}
-              placeholder="https://..."
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-            />
-          </label>
-          <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-            全体のルート地図リンク（任意）
-            <input
-              type="url"
-              value={newRouteMapUrl}
-              onChange={(e) => setNewRouteMapUrl(e.target.value)}
-              placeholder="https://..."
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-            />
-          </label>
-
-          <div>
-            <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              経由地（上から順に移動順）
-            </p>
-            <ul className="mt-2 space-y-2">
-              {newWaypoints.map((w, i) => (
-                <li
-                  key={i}
-                  className="rounded-md border border-zinc-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-900/40"
-                >
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      type="text"
-                      value={w.name}
-                      onChange={(e) => {
-                        const next = [...newWaypoints];
-                        next[i] = { ...next[i]!, name: e.target.value };
-                        setNewWaypoints(next);
-                      }}
-                      placeholder="経由地名"
-                      className="min-w-[8rem] flex-1 rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setNewWaypoints(newWaypoints.filter((_, j) => j !== i))
-                      }
-                      className="text-xs text-red-600 hover:underline"
-                    >
-                      削除
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={w.memo}
-                    onChange={(e) => {
-                      const next = [...newWaypoints];
-                      next[i] = { ...next[i]!, memo: e.target.value };
-                      setNewWaypoints(next);
-                    }}
-                    placeholder="メモ（任意）"
-                    className="mt-1 w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900"
-                  />
-                  <input
-                    type="url"
-                    value={w.mapUrl}
-                    onChange={(e) => {
-                      const next = [...newWaypoints];
-                      next[i] = { ...next[i]!, mapUrl: e.target.value };
-                      setNewWaypoints(next);
-                    }}
-                    placeholder="地図リンク（任意）"
-                    className="mt-1 w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900"
-                  />
-                </li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              onClick={() =>
-                setNewWaypoints([...newWaypoints, { name: "", memo: "", mapUrl: "" }])
-              }
-              className="mt-2 text-xs text-zinc-700 underline dark:text-zinc-300"
-            >
-              + 経由地を追加
+      {/* Day タブ */}
+      <div className="mt-6 flex items-center gap-1 overflow-x-auto pb-1">
+        {dayNumbers.map((day) => {
+          const r = routes.find((x) => x.data.dayNumber === day);
+          const done = r?.data.isDone ?? false;
+          const hasData = !!r;
+          return (
+            <button key={day} type="button" onClick={() => { setSelectedDay(day); setShowAddForm(false); setEditingId(null); }}
+              className={`relative flex shrink-0 flex-col items-center rounded-xl border px-3 py-2 text-xs font-medium transition ${
+                selectedDay === day
+                  ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                  : done
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                    : hasData
+                      ? "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+                      : "border-dashed border-zinc-200 bg-zinc-50 text-zinc-400 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900/30"
+              }`}>
+              <span>Day {day}</span>
+              {group.tripStartDate && (
+                <span className={`text-[10px] ${selectedDay === day ? "text-zinc-300" : "text-zinc-400"}`}>
+                  {dateForDay(group.tripStartDate, day - 1)}
+                </span>
+              )}
+              {done && (
+                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor" className="h-2.5 w-2.5">
+                    <path fillRule="evenodd" d="M10.293 2.293a1 1 0 0 1 0 1.414l-5.5 5.5a1 1 0 0 1-1.414 0l-2.5-2.5a1 1 0 1 1 1.414-1.414L4.5 7.086l4.793-4.793a1 1 0 0 1 1.414 0Z" clipRule="evenodd" />
+                  </svg>
+                </span>
+              )}
             </button>
-          </div>
+          );
+        })}
+        {/* + Day 追加ボタン */}
+        <button type="button" onClick={handleAddDay}
+          className="shrink-0 rounded-xl border border-dashed border-zinc-300 px-3 py-2 text-xs text-zinc-400 hover:border-zinc-400 hover:text-zinc-600 dark:border-zinc-600">
+          ＋
+        </button>
+      </div>
 
-          <button
-            type="submit"
-            disabled={busy !== null || !user}
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
-          >
-            {busy === "add" ? "保存中…" : "追加する"}
-          </button>
-        </form>
-      </section>
+      {/* 選択中の Day コンテンツ */}
+      <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900/60">
+        <div className="mb-4 flex items-center gap-3">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Day {selectedDay}</h2>
+          {group.tripStartDate && (
+            <span className="text-sm text-zinc-400">{dateForDay(group.tripStartDate, selectedDay - 1)}</span>
+          )}
+        </div>
 
-      <section className="mt-10">
-        <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-          登録済みの旅程
-        </h2>
-        {routes.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">
-            まだ旅程がありません。上のフォームから追加してください。
-          </p>
+        {currentRoute === null ? (
+          /* このDayのプランがない */
+          showAddForm ? (
+            <DayForm
+              dayNumber={selectedDay}
+              onSubmit={handleAddRoute}
+              onCancel={() => setShowAddForm(false)}
+              busy={busy === "add"}
+              submitLabel="追加する"
+            />
+          ) : (
+            <div className="py-4 text-center">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">この日のプランはまだ登録されていません。</p>
+              <button type="button" onClick={() => setShowAddForm(true)}
+                className="mt-3 rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200">
+                ＋ プランを追加
+              </button>
+            </div>
+          )
         ) : (
-          <ul className="mt-4 space-y-4">
-            {routes.map((r) => {
-              const can = user
-                ? canManageTrip(group, members, user.uid, r.data.createdByUserId)
-                : false;
-              const isEditing = editingId === r.id;
-
-              return (
-                <li
-                  key={r.id}
-                  className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/40"
-                >
-                  {isEditing ? (
-                    <div className="space-y-3">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-                          ルートラベル
-                          <input
-                            type="text"
-                            value={editRouteLabel}
-                            onChange={(e) => setEditRouteLabel(e.target.value)}
-                            className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                          />
-                        </label>
-                        <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-                          表示順
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={editSortOrder}
-                            onChange={(e) => setEditSortOrder(e.target.value)}
-                            className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                          />
-                        </label>
-                      </div>
-                      <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-                        見出し
-                        <input
-                          type="text"
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                        />
-                      </label>
-                      <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-                        目的地の名称
-                        <input
-                          type="text"
-                          value={editDestName}
-                          onChange={(e) => setEditDestName(e.target.value)}
-                          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                        />
-                      </label>
-                      <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-                        住所・位置のメモ
-                        <input
-                          type="text"
-                          value={editDestAddress}
-                          onChange={(e) => setEditDestAddress(e.target.value)}
-                          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                        />
-                      </label>
-                      <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-                        メモ
-                        <textarea
-                          value={editDestMemo}
-                          onChange={(e) => setEditDestMemo(e.target.value)}
-                          rows={2}
-                          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                        />
-                      </label>
-                      <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-                        目的地の地図リンク
-                        <input
-                          type="url"
-                          value={editDestMapUrl}
-                          onChange={(e) => setEditDestMapUrl(e.target.value)}
-                          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                        />
-                      </label>
-                      <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-                        全体のルート地図リンク
-                        <input
-                          type="url"
-                          value={editRouteMapUrl}
-                          onChange={(e) => setEditRouteMapUrl(e.target.value)}
-                          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                        />
-                      </label>
-                      <div>
-                        <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                          経由地
-                        </p>
-                        <ul className="mt-2 space-y-2">
-                          {editWaypoints.map((w, i) => (
-                            <li
-                              key={i}
-                              className="rounded-md border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-600 dark:bg-zinc-900/60"
-                            >
-                              <div className="flex flex-wrap gap-2">
-                                <input
-                                  type="text"
-                                  value={w.name}
-                                  onChange={(e) => {
-                                    const next = [...editWaypoints];
-                                    next[i] = { ...next[i]!, name: e.target.value };
-                                    setEditWaypoints(next);
-                                  }}
-                                  className="min-w-[8rem] flex-1 rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setEditWaypoints(
-                                      editWaypoints.filter((_, j) => j !== i),
-                                    )
-                                  }
-                                  className="text-xs text-red-600 hover:underline"
-                                >
-                                  削除
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={w.memo}
-                                onChange={(e) => {
-                                  const next = [...editWaypoints];
-                                  next[i] = { ...next[i]!, memo: e.target.value };
-                                  setEditWaypoints(next);
-                                }}
-                                placeholder="メモ"
-                                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900"
-                              />
-                              <input
-                                type="url"
-                                value={w.mapUrl}
-                                onChange={(e) => {
-                                  const next = [...editWaypoints];
-                                  next[i] = { ...next[i]!, mapUrl: e.target.value };
-                                  setEditWaypoints(next);
-                                }}
-                                placeholder="地図リンク"
-                                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900"
-                              />
-                            </li>
-                          ))}
-                        </ul>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setEditWaypoints([
-                              ...editWaypoints,
-                              { name: "", memo: "", mapUrl: "" },
-                            ])
-                          }
-                          className="mt-2 text-xs text-zinc-700 underline dark:text-zinc-300"
-                        >
-                          + 経由地を追加
-                        </button>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleSaveEdit(r.id)}
-                          disabled={busy !== null}
-                          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-                        >
-                          {busy === `edit-${r.id}` ? "保存中…" : "保存"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={cancelEdit}
-                          disabled={busy !== null}
-                          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-600"
-                        >
-                          キャンセル
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div>
-                          {r.data.routeLabel ? (
-                            <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200">
-                              {r.data.routeLabel}
-                            </span>
-                          ) : null}
-                          <h3 className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                            {r.data.title}
-                          </h3>
-                        </div>
-                        {can ? (
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => startEdit(r)}
-                              disabled={busy !== null}
-                              className="text-xs text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400"
-                            >
-                              編集
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(r.id)}
-                              disabled={busy !== null}
-                              className="text-xs text-red-600 hover:underline"
-                            >
-                              削除
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                        <span className="font-medium text-zinc-800 dark:text-zinc-200">
-                          目的地:{" "}
-                        </span>
-                        {r.data.destinationName}
-                      </p>
-                      {r.data.destinationAddress ? (
-                        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                          {r.data.destinationAddress}
-                        </p>
-                      ) : null}
-                      {r.data.destinationMemo ? (
-                        <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
-                          {r.data.destinationMemo}
-                        </p>
-                      ) : null}
-                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                        <MapLink href={r.data.destinationMapUrl ?? ""} label="目的地を地図で開く" />
-                        <MapLink href={r.data.routeMapUrl ?? ""} label="ルート全体を地図で開く" />
-                      </div>
-                      {r.data.waypoints && r.data.waypoints.length > 0 ? (
-                        <div className="mt-4">
-                          <p className="text-xs font-medium text-zinc-500">
-                            経由地（順路順）
-                          </p>
-                          <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm">
-                            {r.data.waypoints.map((w, wi) => (
-                              <li key={wi}>
-                                <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                                  {w.name}
-                                </span>
-                                {w.memo ? (
-                                  <span className="ml-2 text-zinc-600 dark:text-zinc-400">
-                                    {w.memo}
-                                  </span>
-                                ) : null}
-                                {w.mapUrl ? (
-                                  <span className="ml-2">
-                                    <MapLink href={w.mapUrl} label="地図" />
-                                  </span>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                      ) : null}
-                      <TripRouteMapPanel route={r.data} />
-                      <p className="mt-3 text-xs text-zinc-500">
-                        登録: {formatTs(r.data.createdAt)} ·{" "}
-                        {r.data.createdByDisplayName || r.data.createdByUserId.slice(0, 8) + "…"}
-                      </p>
-                    </>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          /* このDayのプランがある */
+          editingId === currentRoute.id ? (
+            <DayForm
+              dayNumber={selectedDay}
+              initial={currentRoute.data}
+              onSubmit={(input) => handleUpdateRoute(currentRoute.id, input)}
+              onCancel={() => setEditingId(null)}
+              busy={busy === `edit-${currentRoute.id}`}
+              submitLabel="保存"
+            />
+          ) : (
+            <DayCard
+              route={currentRoute.data}
+              routeId={currentRoute.id}
+              groupId={groupId}
+              canEdit={isOwnerOrAdmin || (!!user && currentRoute.data.createdByUserId === user.uid)}
+              busy={busy !== null}
+              onEdit={() => setEditingId(currentRoute.id)}
+              onDelete={() => handleDelete(currentRoute.id)}
+              onToggleDone={() => handleToggleDone(currentRoute.id, currentRoute.data.isDone)}
+            />
+          )
         )}
-      </section>
+      </div>
+
+      {/* 進捗サマリー */}
+      {routes.length > 0 && (
+        <p className="mt-3 text-right text-xs text-zinc-400">
+          {routes.filter((r) => r.data.isDone).length} / {numDays} 日完了
+        </p>
+      )}
     </div>
   );
 }

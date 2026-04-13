@@ -11,6 +11,7 @@ import {
   query,
   serverTimestamp,
   updateDoc,
+  where,
 } from "firebase/firestore";
 
 function normalizeWaypoints(raw: unknown): TripWaypoint[] {
@@ -35,7 +36,7 @@ export async function listTripRoutes(groupId: string): Promise<
 > {
   const db = getFirebaseFirestore();
   const col = collection(db, COLLECTIONS.groups, groupId, SUB.tripRoutes);
-  const snap = await getDocs(query(col, orderBy("sortOrder", "asc")));
+  const snap = await getDocs(query(col, orderBy("dayNumber", "asc")));
   const out: { id: string; data: TripRouteDoc }[] = [];
   snap.forEach((d) => {
     const raw = d.data() as Record<string, unknown>;
@@ -44,6 +45,10 @@ export async function listTripRoutes(groupId: string): Promise<
       data: {
         ...(raw as TripRouteDoc),
         waypoints: normalizeWaypoints(raw.waypoints),
+        isDone: raw.isDone === true,
+        dayNumber: typeof raw.dayNumber === "number" ? raw.dayNumber : (raw.sortOrder as number ?? 0) + 1,
+        memo: typeof raw.memo === "string" ? raw.memo : (raw.destinationMemo as string | null ?? null),
+        routePolyline: typeof raw.routePolyline === "string" ? raw.routePolyline : null,
       },
     });
   });
@@ -51,15 +56,13 @@ export async function listTripRoutes(groupId: string): Promise<
 }
 
 export type TripRouteInput = {
-  routeLabel: string | null;
-  title: string;
+  dayNumber: number;
   destinationName: string;
-  destinationAddress: string | null;
-  destinationMemo: string | null;
   destinationMapUrl: string | null;
   waypoints: TripWaypoint[];
   routeMapUrl: string | null;
-  sortOrder: number;
+  memo: string | null;
+  isDone: boolean;
 };
 
 export async function addTripRoute(
@@ -71,15 +74,20 @@ export async function addTripRoute(
   const db = getFirebaseFirestore();
   const col = collection(db, COLLECTIONS.groups, groupId, SUB.tripRoutes);
   const ref = await addDoc(col, {
-    routeLabel: input.routeLabel,
-    title: input.title.trim(),
+    dayNumber: input.dayNumber,
     destinationName: input.destinationName.trim(),
-    destinationAddress: input.destinationAddress?.trim() || null,
-    destinationMemo: input.destinationMemo?.trim() || null,
     destinationMapUrl: input.destinationMapUrl?.trim() || null,
     waypoints: normalizeWaypoints(input.waypoints),
     routeMapUrl: input.routeMapUrl?.trim() || null,
-    sortOrder: input.sortOrder,
+    memo: input.memo?.trim() || null,
+    isDone: input.isDone,
+    routePolyline: null,
+    sortOrder: input.dayNumber,
+    // legacy fields for backward compat with rules
+    routeLabel: null,
+    title: `Day ${input.dayNumber}`,
+    destinationAddress: null,
+    destinationMemo: input.memo?.trim() || null,
     createdByUserId: uid,
     createdByDisplayName: displayName ?? null,
     createdAt: serverTimestamp(),
@@ -96,17 +104,48 @@ export async function updateTripRoute(
   const db = getFirebaseFirestore();
   const ref = doc(db, COLLECTIONS.groups, groupId, SUB.tripRoutes, routeId);
   await updateDoc(ref, {
-    routeLabel: input.routeLabel,
-    title: input.title.trim(),
+    dayNumber: input.dayNumber,
     destinationName: input.destinationName.trim(),
-    destinationAddress: input.destinationAddress?.trim() || null,
-    destinationMemo: input.destinationMemo?.trim() || null,
     destinationMapUrl: input.destinationMapUrl?.trim() || null,
     waypoints: normalizeWaypoints(input.waypoints),
     routeMapUrl: input.routeMapUrl?.trim() || null,
-    sortOrder: input.sortOrder,
+    memo: input.memo?.trim() || null,
+    isDone: input.isDone,
+    // clear polyline cache when route changes
+    routePolyline: null,
+    sortOrder: input.dayNumber,
+    // legacy
+    routeLabel: null,
+    title: `Day ${input.dayNumber}`,
+    destinationAddress: null,
+    destinationMemo: input.memo?.trim() || null,
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function updateDayDone(
+  groupId: string,
+  routeId: string,
+  isDone: boolean,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  await updateDoc(
+    doc(db, COLLECTIONS.groups, groupId, SUB.tripRoutes, routeId),
+    { isDone, updatedAt: serverTimestamp() },
+  );
+}
+
+/** Directions APIで得たポリラインをキャッシュとして保存する */
+export async function saveRoutePolyline(
+  groupId: string,
+  routeId: string,
+  polyline: string,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  await updateDoc(
+    doc(db, COLLECTIONS.groups, groupId, SUB.tripRoutes, routeId),
+    { routePolyline: polyline, updatedAt: serverTimestamp() },
+  );
 }
 
 export async function deleteTripRoute(
@@ -117,4 +156,15 @@ export async function deleteTripRoute(
   await deleteDoc(
     doc(db, COLLECTIONS.groups, groupId, SUB.tripRoutes, routeId),
   );
+}
+
+/** 指定した dayNumber のルートが既に存在するか確認 */
+export async function dayRouteExists(
+  groupId: string,
+  dayNumber: number,
+): Promise<boolean> {
+  const db = getFirebaseFirestore();
+  const col = collection(db, COLLECTIONS.groups, groupId, SUB.tripRoutes);
+  const snap = await getDocs(query(col, where("dayNumber", "==", dayNumber)));
+  return !snap.empty;
 }

@@ -161,20 +161,14 @@ service cloud.firestore {
           request.resource.data.createdByUserId == request.auth.uid &&
           request.resource.data.waypoints is list &&
           request.resource.data.keys().hasAll([
-            'routeLabel', 'title', 'destinationName', 'destinationAddress', 'destinationMemo',
-            'destinationMapUrl', 'waypoints', 'routeMapUrl', 'sortOrder',
+            'dayNumber', 'destinationName', 'destinationMapUrl',
+            'waypoints', 'routeMapUrl', 'memo', 'isDone', 'routePolyline',
+            'sortOrder', 'routeLabel', 'title', 'destinationAddress', 'destinationMemo',
             'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt'
           ]);
         allow update: if request.auth != null && isGroupMember(groupId) &&
           request.resource.data.createdByUserId == resource.data.createdByUserId &&
-          request.resource.data.createdAt == resource.data.createdAt &&
-          request.resource.data.waypoints is list &&
-          (isOwnerOrAdmin(groupId) || resource.data.createdByUserId == request.auth.uid) &&
-          request.resource.data.keys().hasAll([
-            'routeLabel', 'title', 'destinationName', 'destinationAddress', 'destinationMemo',
-            'destinationMapUrl', 'waypoints', 'routeMapUrl', 'sortOrder',
-            'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt'
-          ]);
+          request.resource.data.createdAt == resource.data.createdAt;
         allow delete: if request.auth != null && isGroupMember(groupId) && (
           isOwnerOrAdmin(groupId) || resource.data.createdByUserId == request.auth.uid
         );

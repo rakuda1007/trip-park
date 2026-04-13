@@ -7,19 +7,24 @@ export type TripWaypoint = {
   mapUrl?: string | null;
 };
 
-/** 旅程ブロック（目的地・経由地・地図リンク） */
+/** 旅程ブロック（1日分） */
 export type TripRouteDoc = {
-  /** 例: A車・行き */
-  routeLabel: string | null;
-  /** ブロックの見出し */
-  title: string;
+  /** Day番号（1始まり） */
+  dayNumber: number;
+  /** 目的地名 */
   destinationName: string;
-  destinationAddress: string | null;
-  destinationMemo: string | null;
+  /** 目的地の地図リンク（任意） */
   destinationMapUrl: string | null;
+  /** 経由地リスト */
   waypoints: TripWaypoint[];
-  /** 全体のルートをまとめた地図リンク（任意） */
+  /** 全体のルート地図リンク（任意） */
   routeMapUrl: string | null;
+  /** メモ（任意） */
+  memo: string | null;
+  /** この日が完了済みか */
+  isDone: boolean;
+  /** Directions APIで描画したルートのエンコード済みポリライン（キャッシュ） */
+  routePolyline: string | null;
   sortOrder: number;
   createdByUserId: string;
   createdByDisplayName: string | null;

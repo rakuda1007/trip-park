@@ -18,12 +18,9 @@ const mapContainerStyle: CSSProperties = {
 };
 
 const defaultCenter = { lat: 36.2, lng: 138.25 };
-
 const MAX_INTERMEDIATE_WAYPOINTS = 25;
 
-function directionsErrorMessage(
-  status: google.maps.DirectionsStatus,
-): string {
+function directionsErrorMessage(status: google.maps.DirectionsStatus): string {
   switch (status) {
     case "ZERO_RESULTS":
       return "ルートが見つかりませんでした。住所や地名を具体的にしてみてください。";
@@ -61,21 +58,17 @@ function runDirections(
   stops: string[],
   onSummary: (s: string | null) => void,
   onError: (e: string | null) => void,
+  onPolyline?: (p: string) => void,
 ): () => void {
   onError(null);
   onSummary(null);
   let cancelled = false;
-  const renderer = new google.maps.DirectionsRenderer({
-    map,
-    suppressMarkers: false,
-  });
+  const renderer = new google.maps.DirectionsRenderer({ map, suppressMarkers: false });
   let marker: google.maps.Marker | null = null;
 
   if (stops.length === 0) {
-    onError("地点が登録されていません。経由地・目的地の名称 or 住所を入力してください。");
-    return () => {
-      renderer.setMap(null);
-    };
+    onError("地点が登録されていません。経由地・目的地の名称を入力してください。");
+    return () => { renderer.setMap(null); };
   }
 
   if (stops.length === 1) {
@@ -91,21 +84,13 @@ function runDirections(
       map.setZoom(14);
       marker = new google.maps.Marker({ map, position: loc });
     });
-    return () => {
-      cancelled = true;
-      marker?.setMap(null);
-      renderer.setMap(null);
-    };
+    return () => { cancelled = true; marker?.setMap(null); renderer.setMap(null); };
   }
 
   const intermediate = stops.slice(1, -1);
   if (intermediate.length > MAX_INTERMEDIATE_WAYPOINTS) {
-    onError(
-      `経由地が多すぎます（中間は最大 ${MAX_INTERMEDIATE_WAYPOINTS} か所まで）。`,
-    );
-    return () => {
-      renderer.setMap(null);
-    };
+    onError(`経由地が多すぎます（中間は最大 ${MAX_INTERMEDIATE_WAYPOINTS} か所まで）。`);
+    return () => { renderer.setMap(null); };
   }
 
   const service = new google.maps.DirectionsService();
@@ -126,22 +111,25 @@ function runDirections(
       }
       renderer.setDirections(result);
       onSummary(formatRouteSummary(result));
+      // ポリラインをキャッシュ用に返す
+      const polyline = result.routes[0]?.overview_polyline;
+      if (polyline && onPolyline) {
+        onPolyline(polyline);
+      }
     },
   );
 
-  return () => {
-    cancelled = true;
-    marker?.setMap(null);
-    renderer.setMap(null);
-  };
+  return () => { cancelled = true; marker?.setMap(null); renderer.setMap(null); };
 }
 
 export function TripRouteMapInner({
   route,
   apiKey,
+  onPolyline,
 }: {
   route: TripRouteDoc;
   apiKey: string;
+  onPolyline?: (polyline: string) => void;
 }) {
   const stops = useMemo(() => buildOrderedStopQueries(route), [route]);
   const { isLoaded, loadError } = useJsApiLoader({
@@ -155,40 +143,30 @@ export function TripRouteMapInner({
   const [summary, setSummary] = useState<string | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
 
-  const onMapLoad = useCallback((m: google.maps.Map) => {
-    setMap(m);
-  }, []);
-
-  const onUnmount = useCallback(() => {
-    setMap(null);
-  }, []);
+  const onMapLoad = useCallback((m: google.maps.Map) => { setMap(m); }, []);
+  const onUnmount = useCallback(() => { setMap(null); }, []);
 
   useEffect(() => {
     if (!isLoaded || !map) return;
-    return runDirections(map, stops, setSummary, setRouteError);
-  }, [isLoaded, map, stops]);
+    return runDirections(map, stops, setSummary, setRouteError, onPolyline);
+  }, [isLoaded, map, stops]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loadError) {
     return (
       <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
-        Google マップの読み込みに失敗しました。API キーと Maps JavaScript API
-        の有効化を確認してください。
+        Google マップの読み込みに失敗しました。API キーと Maps JavaScript API の有効化を確認してください。
       </p>
     );
   }
 
   if (!isLoaded) {
-    return (
-      <p className="mt-2 text-sm text-zinc-500">地図を読み込み中…</p>
-    );
+    return <p className="mt-2 text-sm text-zinc-500">地図を読み込み中…</p>;
   }
 
   return (
     <div className="mt-3 space-y-2">
       {routeError ? (
-        <p className="text-sm text-amber-800 dark:text-amber-200" role="alert">
-          {routeError}
-        </p>
+        <p className="text-sm text-amber-800 dark:text-amber-200" role="alert">{routeError}</p>
       ) : null}
       {summary ? (
         <p className="text-sm text-zinc-700 dark:text-zinc-300">{summary}</p>
@@ -199,11 +177,7 @@ export function TripRouteMapInner({
         zoom={7}
         onLoad={onMapLoad}
         onUnmount={onUnmount}
-        options={{
-          streetViewControl: false,
-          mapTypeControl: false,
-          fullscreenControl: true,
-        }}
+        options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: true }}
       />
     </div>
   );
