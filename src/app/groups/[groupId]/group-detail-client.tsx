@@ -17,6 +17,7 @@ import {
   createBulletinTopic,
   listBulletinTopicsWithReplyCounts,
 } from "@/lib/firestore/bulletin";
+import { sendNotification } from "@/lib/notify";
 import { saveLastTripId } from "@/lib/last-trip";
 import type { GroupDoc, MemberDoc, TripStatus } from "@/types/group";
 import type { BulletinCategory, BulletinImportance, BulletinTopicDoc } from "@/types/bulletin";
@@ -120,10 +121,21 @@ export function GroupDetailClient() {
     setBusy("create-topic");
     setError(null);
     try {
-      await createBulletinTopic(groupId, user.uid, user.displayName, newTitle, newBody, newCategory, newImportance);
+      const topicId = await createBulletinTopic(groupId, user.uid, user.displayName, newTitle, newBody, newCategory, newImportance);
+      const savedTitle = newTitle.trim();
       setNewTitle(""); setNewBody(""); setNewCategory("general"); setNewImportance("normal");
       setShowNewTopicForm(false);
       await load();
+      // 通知送信（失敗しても続行）
+      sendNotification({
+        type: "bulletin_topic",
+        groupId,
+        groupName: group?.name ?? "",
+        topicId,
+        topicTitle: savedTitle,
+        authorName: user.displayName ?? "メンバー",
+        authorUid: user.uid,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "投稿に失敗しました");
     } finally {

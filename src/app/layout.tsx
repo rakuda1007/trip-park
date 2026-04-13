@@ -1,5 +1,6 @@
 import { AppHeader } from "@/components/app-header";
 import { Providers } from "@/components/providers";
+import { PushNotificationManager } from "@/components/push-notification-manager";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -53,6 +54,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         <Providers>
           <AppHeader />
+          <PushNotificationManager />
           <main className="flex flex-1 flex-col">{children}</main>
         </Providers>
         <ServiceWorkerRegister />

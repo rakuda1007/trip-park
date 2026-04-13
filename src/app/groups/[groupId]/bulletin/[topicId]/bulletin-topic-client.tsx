@@ -12,6 +12,7 @@ import {
   updateBulletinTopic,
 } from "@/lib/firestore/bulletin";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
+import { sendNotification } from "@/lib/notify";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import type {
   BulletinCategory,
@@ -223,6 +224,19 @@ export function BulletinTopicClient() {
       );
       setNewReplyBody("");
       await load();
+      // 話題の作者に通知（自分でなければ）
+      if (topic && topic.authorUserId !== user.uid) {
+        sendNotification({
+          type: "bulletin_reply",
+          groupId,
+          groupName: group?.name ?? "",
+          topicId,
+          topicTitle: topic.title,
+          authorName: user.displayName ?? "メンバー",
+          authorUid: user.uid,
+          topicAuthorUid: topic.authorUserId,
+        });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "返信に失敗しました");
     } finally {

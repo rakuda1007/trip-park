@@ -6,6 +6,7 @@ import {
   listBulletinTopicsWithReplyCounts,
 } from "@/lib/firestore/bulletin";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
+import { sendNotification } from "@/lib/notify";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import type {
   BulletinCategory,
@@ -108,7 +109,7 @@ export function BulletinClient() {
     setBusy("create");
     setError(null);
     try {
-      await createBulletinTopic(
+      const topicId = await createBulletinTopic(
         groupId,
         user.uid,
         user.displayName,
@@ -122,6 +123,16 @@ export function BulletinClient() {
       setNewCategory("general");
       setNewImportance("normal");
       await load();
+      // 通知送信（失敗しても続行）
+      sendNotification({
+        type: "bulletin_topic",
+        groupId,
+        groupName: group?.name ?? "",
+        topicId,
+        topicTitle: newTitle.trim(),
+        authorName: user.displayName ?? "メンバー",
+        authorUid: user.uid,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "投稿に失敗しました");
     } finally {
