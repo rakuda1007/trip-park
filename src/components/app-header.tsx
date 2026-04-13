@@ -6,18 +6,39 @@ import { isFirebaseConfigured } from "@/lib/firebase/env";
 import { clearLastTripId } from "@/lib/last-trip";
 import { TripSelector } from "@/components/trip-selector";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "firebase/auth";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export function AppHeader() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [signingOut, setSigningOut] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // パス変化でメニューを閉じる
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  // 外クリックで閉じる
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, [menuOpen]);
 
   async function handleLogout() {
     if (!isFirebaseConfigured()) return;
     setSigningOut(true);
+    setMenuOpen(false);
     try {
       if (user) clearLastTripId(user.uid);
       await signOut(getFirebaseAuth());
@@ -47,26 +68,95 @@ export function AppHeader() {
         )}
 
         {/* 右ナビ */}
-        <nav className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2 text-sm sm:gap-3">
+        <div className="ml-auto shrink-0">
           {!loading && user ? (
-            <>
-              <Link
-                href="/profile"
-                className="rounded-md px-2 py-1 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                プロフィール
-              </Link>
+            /* ── ハンバーガーメニュー ── */
+            <div ref={menuRef} className="relative">
               <button
                 type="button"
-                onClick={handleLogout}
-                disabled={signingOut}
-                className="rounded-md px-2 py-1 text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                aria-label="メニューを開く"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((v) => !v)}
+                className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
               >
-                {signingOut ? "ログアウト中…" : "ログアウト"}
+                {menuOpen ? (
+                  /* × アイコン */
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                    <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                  </svg>
+                ) : (
+                  /* ≡ アイコン */
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                    <path fillRule="evenodd" d="M2 4.75A.75.75 0 0 1 2.75 4h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.75ZM2 10a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 10Zm0 5.25a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z" clipRule="evenodd" />
+                  </svg>
+                )}
               </button>
-            </>
+
+              {/* ドロップダウン */}
+              {menuOpen && (
+                <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                  {/* ユーザー情報（小さく） */}
+                  <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
+                    <p className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">
+                      {user.displayName ?? "ユーザー"}
+                    </p>
+                    <p className="truncate text-[11px] text-zinc-400 dark:text-zinc-500">
+                      {user.email}
+                    </p>
+                  </div>
+
+                  {/* ナビリンク */}
+                  <nav className="py-1">
+                    <Link
+                      href="/dashboard"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
+                        <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+                      </svg>
+                      ダッシュボード
+                    </Link>
+                    <Link
+                      href="/groups"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
+                        <path d="M10 1a6 6 0 0 0-3.815 10.631C7.237 12.5 8 13.443 8 14.456v.644a.75.75 0 0 0 .572.729 6.016 6.016 0 0 0 2.856 0A.75.75 0 0 0 12 15.1v-.644c0-1.013.762-1.957 1.815-2.825A6 6 0 0 0 10 1ZM8.863 17.414a.75.75 0 0 0-.226 1.483 9.066 9.066 0 0 0 2.726 0 .75.75 0 0 0-.226-1.483 7.553 7.553 0 0 1-2.274 0Z" />
+                      </svg>
+                      旅行一覧
+                    </Link>
+                    <Link
+                      href="/profile"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
+                        <path d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.465 14.493a1.23 1.23 0 0 0 .41 1.412A9.957 9.957 0 0 0 10 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 0 0-13.074.003Z" />
+                      </svg>
+                      プロフィール
+                    </Link>
+                  </nav>
+
+                  {/* ログアウト */}
+                  <div className="border-t border-zinc-100 py-1 dark:border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      disabled={signingOut}
+                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0">
+                        <path fillRule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25Z" clipRule="evenodd" />
+                        <path fillRule="evenodd" d="M19 10a.75.75 0 0 0-.75-.75H8.704l1.048-1.08a.75.75 0 1 0-1.004-1.114l-2.5 2.571a.75.75 0 0 0 0 1.087l2.5 2.571a.75.75 0 1 0 1.004-1.114l-1.048-1.079h9.546A.75.75 0 0 0 19 10Z" clipRule="evenodd" />
+                      </svg>
+                      {signingOut ? "ログアウト中…" : "ログアウト"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
-            <>
+            /* 未ログイン */
+            <nav className="flex items-center gap-2 text-sm">
               <Link
                 href="/login"
                 className="rounded-md px-2 py-1 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
@@ -79,9 +169,9 @@ export function AppHeader() {
               >
                 新規登録
               </Link>
-            </>
+            </nav>
           )}
-        </nav>
+        </div>
       </div>
     </header>
   );
