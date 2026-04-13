@@ -305,7 +305,8 @@ export async function deleteGroup(ownerUid: string, groupId: string): Promise<vo
     collection(db, COLLECTIONS.groups, groupId, SUB.members),
   );
 
-  // サブコレクション削除（エラーは無視して続行）
+  // ① サブコレクション削除（エラーは無視して続行）
+  // この時点ではメンバードキュメントが存在するので isGroupMember が有効
   const cleanups = [
     SUB.scheduleCandidates,
     SUB.scheduleResponses,
@@ -324,16 +325,16 @@ export async function deleteGroup(ownerUid: string, groupId: string): Promise<vo
     .then((snap) => (snap.exists() ? deleteDoc(scheduleCfgRef) : undefined))
     .catch(() => {});
 
-  // ① メンバードキュメントを個別に削除（グループ文書はまだ存在する状態）
-  await Promise.all(membersSnap.docs.map((m) => deleteDoc(m.ref)));
-
-  // ② 招待コードを削除（グループ文書はまだ存在する状態）
+  // ② 招待コードを削除（メンバー削除より前に実行 — groupOwnerId() が group doc を参照するため）
   await deleteDoc(doc(db, COLLECTIONS.inviteCodes, group.inviteCode));
 
-  // ③ グループ文書を削除
+  // ③ メンバードキュメントを個別に削除
+  await Promise.all(membersSnap.docs.map((m) => deleteDoc(m.ref)));
+
+  // ④ グループ文書を削除
   await deleteDoc(doc(db, COLLECTIONS.groups, groupId));
 
-  // ④ 各メンバーの UserGroupRef を削除（他メンバーのはエラーを無視）
+  // ⑤ 各メンバーの UserGroupRef を削除（他メンバーのはエラーを無視）
   await Promise.all(
     membersSnap.docs.map((m) => {
       const ug = doc(db, COLLECTIONS.users, m.id, SUB.groups, groupId);
