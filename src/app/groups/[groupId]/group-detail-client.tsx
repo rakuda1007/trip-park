@@ -13,11 +13,30 @@ import {
   updateGroupTripDates,
   updateTripStatus,
 } from "@/lib/firestore/groups";
+import {
+  createBulletinTopic,
+  listBulletinTopicsWithReplyCounts,
+} from "@/lib/firestore/bulletin";
 import { saveLastTripId } from "@/lib/last-trip";
 import type { GroupDoc, MemberDoc, TripStatus } from "@/types/group";
+import type { BulletinCategory, BulletinImportance, BulletinTopicDoc } from "@/types/bulletin";
+import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+
+const CATEGORY_LABELS: Record<BulletinCategory, string> = {
+  general: "全体連絡", gear: "持ち物", dayof: "当日の連絡", other: "その他",
+};
+const CATEGORY_OPTIONS: BulletinCategory[] = ["general", "gear", "dayof", "other"];
+
+function formatTs(v: unknown): string {
+  if (!v) return "—";
+  if (v instanceof Timestamp) {
+    return v.toDate().toLocaleString("ja-JP", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+  return "—";
+}
 
 function formatDateRange(start: string, end?: string | null): string {
   const ps = start.split("-").map(Number);
@@ -58,6 +77,14 @@ export function GroupDetailClient() {
   const [editingDesc, setEditingDesc] = useState(false);
   const [draftDesc, setDraftDesc] = useState("");
 
+  // 掲示板
+  const [topics, setTopics] = useState<{ id: string; data: BulletinTopicDoc; replyCount: number }[]>([]);
+  const [showNewTopicForm, setShowNewTopicForm] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newBody, setNewBody] = useState("");
+  const [newCategory, setNewCategory] = useState<BulletinCategory>("general");
+  const [newImportance, setNewImportance] = useState<BulletinImportance>("normal");
+
   // 旅行ページを開いたら直近アクセス旅行として記録
   useEffect(() => {
     if (user && groupId) {
@@ -72,16 +99,37 @@ export function GroupDetailClient() {
       const g = await getGroup(groupId);
       setGroup(g);
       if (g) {
-        const m = await listMembers(groupId);
+        const [m, t] = await Promise.all([
+          listMembers(groupId),
+          listBulletinTopicsWithReplyCounts(groupId),
+        ]);
         setMembers(m);
+        setTopics(t);
       } else {
         setMembers([]);
+        setTopics([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
       setGroup(null);
     }
   }, [groupId]);
+
+  async function handleCreateTopic() {
+    if (!user || !groupId || !newTitle.trim() || !newBody.trim()) return;
+    setBusy("create-topic");
+    setError(null);
+    try {
+      await createBulletinTopic(groupId, user.uid, user.displayName, newTitle, newBody, newCategory, newImportance);
+      setNewTitle(""); setNewBody(""); setNewCategory("general"); setNewImportance("normal");
+      setShowNewTopicForm(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "投稿に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   useEffect(() => {
     load();
@@ -653,16 +701,6 @@ export function GroupDetailClient() {
             {/* セカンダリメニュー */}
             <div className="mt-4 flex gap-0 border-t border-zinc-100 dark:border-zinc-700/60">
               <Link
-                href={`/groups/${groupId}/bulletin`}
-                className="flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/40 dark:hover:text-zinc-100"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                  <path fillRule="evenodd" d="M2 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5Zm3.293 1.293a1 1 0 0 1 1.414 0l3 3a1 1 0 0 1 0 1.414l-3 3a1 1 0 0 1-1.414-1.414L7.586 10 5.293 7.707a1 1 0 0 1 0-1.414Zm4.961 1.455a1 1 0 1 0-1.508 1.308l1.418 1.632-1.418 1.632a1 1 0 1 0 1.508 1.308l1.5-1.727a1 1 0 0 0 0-1.308l-1.5-1.727Z" clipRule="evenodd" />
-                </svg>
-                掲示板
-              </Link>
-              <div className="w-px bg-zinc-100 dark:bg-zinc-700/60" />
-              <Link
                 href={`/groups/${groupId}/families`}
                 className="flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/40 dark:hover:text-zinc-100"
               >
@@ -675,6 +713,131 @@ export function GroupDetailClient() {
           </div>
         );
       })()}
+
+      {/* ── 掲示板 ── */}
+      <section className="mt-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60">
+        <div className="flex items-center justify-between px-4 pt-4">
+          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">掲示板</h2>
+          <div className="flex items-center gap-2">
+            {!showNewTopicForm && (
+              <button
+                type="button"
+                onClick={() => setShowNewTopicForm(true)}
+                className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                ＋ 新しい話題
+              </button>
+            )}
+            <Link
+              href={`/groups/${groupId}/bulletin`}
+              className="text-xs text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
+            >
+              すべて見る →
+            </Link>
+          </div>
+        </div>
+
+        {/* 新規話題フォーム */}
+        {showNewTopicForm && (
+          <div className="mx-4 mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
+            <p className="mb-3 text-xs font-semibold text-zinc-700 dark:text-zinc-300">新しい話題を立てる</p>
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                maxLength={200}
+                placeholder="タイトル（件名）"
+                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+              />
+              <textarea
+                value={newBody}
+                onChange={(e) => setNewBody(e.target.value)}
+                rows={3}
+                placeholder="本文"
+                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+              />
+              <div className="flex flex-wrap gap-3">
+                <select
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value as BulletinCategory)}
+                  className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                >
+                  {CATEGORY_OPTIONS.map((c) => (
+                    <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+                  ))}
+                </select>
+                <select
+                  value={newImportance}
+                  onChange={(e) => setNewImportance(e.target.value as BulletinImportance)}
+                  className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="normal">通常</option>
+                  <option value="important">重要</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleCreateTopic}
+                  disabled={busy !== null || !newTitle.trim() || !newBody.trim()}
+                  className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+                >
+                  {busy === "create-topic" ? "作成中…" : "話題を作成"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowNewTopicForm(false); setNewTitle(""); setNewBody(""); }}
+                  className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 話題一覧 */}
+        <div className="mt-3 pb-2">
+          {topics.length === 0 ? (
+            <p className="px-4 pb-4 text-sm text-zinc-400 dark:text-zinc-500">まだ話題がありません。</p>
+          ) : (
+            <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+              {topics.map(({ id, data, replyCount }) => (
+                <li key={id}>
+                  <Link
+                    href={`/groups/${groupId}/bulletin/${id}`}
+                    className={`flex items-start justify-between gap-3 px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
+                      data.importance === "important" || data.pinned
+                        ? "bg-amber-50/60 dark:bg-amber-950/15"
+                        : ""
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {data.pinned && <span className="text-xs text-amber-600">📌</span>}
+                        <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-800">
+                          {CATEGORY_LABELS[data.category]}
+                        </span>
+                        {data.importance === "important" && (
+                          <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">重要</span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        {data.title}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-zinc-400">
+                        {data.authorDisplayName || data.authorUserId.slice(0, 8) + "…"} · {formatTs(data.createdAt)}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs text-zinc-400">返信 {replyCount}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
 
       {error ? (
         <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
