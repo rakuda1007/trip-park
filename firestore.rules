@@ -225,12 +225,11 @@ service cloud.firestore {
         allow create: if request.auth != null && isGroupMember(groupId) &&
           request.resource.data.createdByUserId == request.auth.uid &&
           request.resource.data.memberUserIds is list &&
-          request.resource.data.memberUserIds.size() >= 1 &&
           request.resource.data.adultCount is int &&
           request.resource.data.childCount is int &&
           request.resource.data.adultCount >= 0 &&
           request.resource.data.childCount >= 0 &&
-          request.resource.data.childRatio is float &&
+          (request.resource.data.childRatio is float || request.resource.data.childRatio is int) &&
           request.resource.data.childRatio > 0 &&
           request.resource.data.childRatio <= 1 &&
           request.resource.data.keys().hasAll([
@@ -241,12 +240,11 @@ service cloud.firestore {
           request.resource.data.createdByUserId == resource.data.createdByUserId &&
           request.resource.data.createdAt == resource.data.createdAt &&
           request.resource.data.memberUserIds is list &&
-          request.resource.data.memberUserIds.size() >= 1 &&
           request.resource.data.adultCount is int &&
           request.resource.data.childCount is int &&
           request.resource.data.adultCount >= 0 &&
           request.resource.data.childCount >= 0 &&
-          request.resource.data.childRatio is float &&
+          (request.resource.data.childRatio is float || request.resource.data.childRatio is int) &&
           request.resource.data.childRatio > 0 &&
           request.resource.data.childRatio <= 1 &&
           (isOwnerOrAdmin(groupId) || resource.data.createdByUserId == request.auth.uid) &&

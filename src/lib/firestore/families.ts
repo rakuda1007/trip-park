@@ -40,30 +40,20 @@ export type FamilyInput = {
 
 function validateFamilyInput(input: FamilyInput, memberIds: Set<string>): void {
   const name = input.name.trim();
-  if (!name) throw new Error("家族名を入力してください。");
+  if (!name) throw new Error("世帯名を入力してください。");
   const a = Math.floor(input.adultCount);
   const c = Math.floor(input.childCount);
   if (!Number.isFinite(a) || a < 0) throw new Error("大人の人数が不正です。");
   if (!Number.isFinite(c) || c < 0) throw new Error("子供の人数が不正です。");
+  if (a + c < 1) throw new Error("大人または子供の人数を 1 以上にしてください。");
   const ids = [...new Set(input.memberUserIds)].filter((id) => memberIds.has(id));
-  if (ids.length === 0) {
-    throw new Error("世帯に含めるメンバーを 1 人以上選んでください。");
-  }
+  // メンバー紐付けは任意。2人以上のとき childRatio を検証
   if (ids.length >= 2) {
     const cr = Number(input.childRatio);
-    if (a + c < 1) {
-      throw new Error(
-        "世帯に複数のメンバーがいる場合は、大人・子供の人数の合計を 1 以上にしてください。",
-      );
-    }
     if (!Number.isFinite(cr) || cr <= 0 || cr > 1) {
       throw new Error(
         "子供比率は 0 より大きく 1 以下で入力してください（大人1人を1としたときの子供の重み）。",
       );
-    }
-  } else {
-    if (a + c < 1) {
-      throw new Error("大人または子供の人数を 1 以上にしてください。");
     }
   }
 }
@@ -97,7 +87,7 @@ export async function addFamily(
   const existing = await listFamilies(groupId);
   const ids = [...new Set(input.memberUserIds)].filter((id) => memberIds.has(id));
   assertNoMemberOverlap(existing, ids);
-  const ratioStored = ids.length >= 2 ? Number(input.childRatio) : 1;
+  const ratioStored = ids.length >= 2 ? Number(input.childRatio) : 1.0;
   const db = getFirebaseFirestore();
   const col = collection(db, COLLECTIONS.groups, groupId, SUB.families);
   const ref = await addDoc(col, {
@@ -124,7 +114,7 @@ export async function updateFamily(
   const existing = await listFamilies(groupId);
   const ids = [...new Set(input.memberUserIds)].filter((id) => memberIds.has(id));
   assertNoMemberOverlap(existing, ids, familyId);
-  const ratioStored = ids.length >= 2 ? Number(input.childRatio) : 1;
+  const ratioStored = ids.length >= 2 ? Number(input.childRatio) : 1.0;
   const db = getFirebaseFirestore();
   const ref = doc(db, COLLECTIONS.groups, groupId, SUB.families, familyId);
   await updateDoc(ref, {
