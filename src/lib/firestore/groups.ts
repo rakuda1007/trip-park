@@ -328,8 +328,11 @@ export async function deleteGroup(ownerUid: string, groupId: string): Promise<vo
   // ② 招待コードを削除（メンバー削除より前に実行 — groupOwnerId() が group doc を参照するため）
   await deleteDoc(doc(db, COLLECTIONS.inviteCodes, group.inviteCode));
 
-  // ③ メンバードキュメントを個別に削除
-  await Promise.all(membersSnap.docs.map((m) => deleteDoc(m.ref)));
+  // ③ メンバードキュメントを順次削除（並行するとオーナーの member doc が消えて
+  //    memberRole() が null になる競合が起きるため for...of で直列実行）
+  for (const m of membersSnap.docs) {
+    await deleteDoc(m.ref);
+  }
 
   // ④ グループ文書を削除
   await deleteDoc(doc(db, COLLECTIONS.groups, groupId));
