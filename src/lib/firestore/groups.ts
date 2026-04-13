@@ -325,12 +325,15 @@ export async function deleteGroup(ownerUid: string, groupId: string): Promise<vo
     .then((snap) => (snap.exists() ? deleteDoc(scheduleCfgRef) : undefined))
     .catch(() => {});
 
-  // ② 招待コードを削除（メンバー削除より前に実行）
-  await deleteDoc(doc(db, COLLECTIONS.inviteCodes, group.inviteCode));
+  // ② 招待コードを削除（失敗しても続行 — グループ削除後は招待コードは無効になる）
+  await deleteDoc(doc(db, COLLECTIONS.inviteCodes, group.inviteCode)).catch(() => {});
 
-  // ③ メンバードキュメントを順次削除（並行するとオーナーの member doc が消えて
-  //    memberRole() が null になる競合が起きるため for...of で直列実行）
-  for (const m of membersSnap.docs) {
+  // ③ メンバードキュメントを順次削除
+  //    オーナーの doc を最後に削除 — ルール評価中に groupOwnerId() が参照する
+  //    groups doc はまだ残っているため削除順は問題ないが、念のため非オーナーを先に削除
+  const nonOwnerDocs = membersSnap.docs.filter((m) => m.id !== ownerUid);
+  const ownerDocs = membersSnap.docs.filter((m) => m.id === ownerUid);
+  for (const m of [...nonOwnerDocs, ...ownerDocs]) {
     await deleteDoc(m.ref);
   }
 
