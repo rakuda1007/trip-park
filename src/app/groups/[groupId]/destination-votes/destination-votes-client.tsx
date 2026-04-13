@@ -393,11 +393,13 @@ export function DestinationVotesClient() {
                         <p className="mt-0.5 text-[10px] text-zinc-400">
                           提案: {c.data.proposedByDisplayName ?? "—"}
                         </p>
-                        {/* 投票バー */}
+                        {/* 投票バー（右端のアイコンをクリックして投票） */}
                         <div className="mt-2 space-y-1">
                           {(["first", "want", "reserve"] as DestinationAnswer[]).map((a) => {
                             const count = a === "first" ? s.first : a === "want" ? s.want : s.reserve;
                             const pct = s.total > 0 ? Math.round((count / s.total) * 100) : 0;
+                            const isSelected = myVote?.data.answer === a;
+                            const ICONS: Record<DestinationAnswer, string> = { first: "🙋", want: "👍", reserve: "🤏" };
                             return (
                               <div key={a} className="flex items-center gap-1.5 text-xs">
                                 <span className="w-20 shrink-0 truncate text-zinc-500">{ANSWER_LABELS[a]}</span>
@@ -405,24 +407,16 @@ export function DestinationVotesClient() {
                                   <div className={`h-full ${ANSWER_BAR_COLORS[a]} transition-all`} style={{ width: `${pct}%` }} />
                                 </div>
                                 <span className="w-3 shrink-0 text-right text-[10px] text-zinc-400">{count}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleVote(c.id, a)}
+                                  disabled={busy !== null}
+                                  title={ANSWER_LABELS[a]}
+                                  className={`shrink-0 rounded-full p-0.5 text-base leading-none transition hover:scale-110 disabled:opacity-40 ${isSelected ? "ring-2 ring-offset-1 ring-zinc-400" : "opacity-50 hover:opacity-100"}`}
+                                >
+                                  {ICONS[a]}
+                                </button>
                               </div>
-                            );
-                          })}
-                        </div>
-                        {/* 投票ボタン */}
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {(["first", "want", "reserve"] as DestinationAnswer[]).map((a) => {
-                            const isSelected = myVote?.data.answer === a;
-                            return (
-                              <button
-                                key={a}
-                                type="button"
-                                onClick={() => handleVote(c.id, a)}
-                                disabled={busy !== null}
-                                className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition ${isSelected ? ANSWER_COLORS[a] + " ring-2 ring-offset-1" : "border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"} disabled:opacity-50`}
-                              >
-                                {ANSWER_LABELS[a]}
-                              </button>
                             );
                           })}
                         </div>
