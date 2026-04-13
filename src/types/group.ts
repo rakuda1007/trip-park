@@ -24,6 +24,8 @@ export type MemberDoc = {
   role: GroupRole;
   joinedAt: unknown;
   displayName: string | null;
+  /** 最終アクセス日時。グループページを開くたびに更新 */
+  lastAccessAt?: unknown;
 };
 
 /** 参加時の検証用。保存後に deleteField で削除する */

@@ -1,4 +1,5 @@
 import { TripStepNavBarWrapper } from "@/components/trip/trip-step-nav-bar";
+import { AccessRecorder } from "@/components/trip/access-recorder";
 
 export default function GroupLayout({
   children,
@@ -7,6 +8,7 @@ export default function GroupLayout({
 }) {
   return (
     <>
+      <AccessRecorder />
       <TripStepNavBarWrapper />
       {children}
     </>

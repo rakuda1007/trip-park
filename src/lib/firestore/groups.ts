@@ -403,6 +403,19 @@ export async function updateGroupDescription(
   });
 }
 
+/**
+ * メンバーのアクセス日時を記録する。
+ * セッション単位の呼び出し制御はクライアント側で行う。
+ */
+export async function recordMemberAccess(
+  groupId: string,
+  uid: string,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  const ref = doc(db, COLLECTIONS.groups, groupId, SUB.members, uid);
+  await updateDoc(ref, { lastAccessAt: serverTimestamp() });
+}
+
 /** 目的地を更新する（オーナー / 管理者） */
 export async function updateDestination(
   groupId: string,
