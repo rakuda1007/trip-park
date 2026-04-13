@@ -445,55 +445,167 @@ export function GroupDetailClient() {
         </div>
       ) : null}
 
-      <p className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
-        {group.tripStartDate ? (
-          <span
-            className="text-sm text-zinc-400 dark:text-zinc-500 cursor-default"
-            title="旅行日程が設定済みのため日程調整は不要です"
-          >
-            既に日程は確定済み
-          </span>
-        ) : (
-          <Link
-            href={`/groups/${groupId}/schedule`}
-            className="text-sm font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300"
-          >
-            日程調整へ
-          </Link>
-        )}
-        {(group.status ?? "planning") === "planning" ? (
-          <Link
-            href={`/groups/${groupId}/destination-votes`}
-            className="text-sm font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300"
-          >
-            目的地を決める
-          </Link>
-        ) : null}
-        <Link
-          href={`/groups/${groupId}/bulletin`}
-          className="text-sm font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300"
-        >
-          掲示板へ
-        </Link>
-        <Link
-          href={`/groups/${groupId}/trip`}
-          className="text-sm font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300"
-        >
-          旅程へ
-        </Link>
-        <Link
-          href={`/groups/${groupId}/expenses`}
-          className="text-sm font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300"
-        >
-          支出・精算へ
-        </Link>
-        <Link
-          href={`/groups/${groupId}/families`}
-          className="text-sm font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300"
-        >
-          参加世帯へ
-        </Link>
-      </p>
+      {/* 旅のステップナビ */}
+      {(() => {
+        const status = group.status ?? "planning";
+        const datesDone = !!group.tripStartDate;
+        const destDone = !!group.destination;
+        const itinDone = status === "confirmed" || status === "completed";
+        const settleDone = status === "completed";
+
+        type Step = {
+          key: string;
+          label: string;
+          sublabel: string;
+          done: boolean;
+          href: string | null;
+          icon: React.ReactNode;
+        };
+
+        const steps: Step[] = [
+          {
+            key: "schedule",
+            label: "日程",
+            sublabel: datesDone ? "設定済み" : "未設定",
+            done: datesDone,
+            href: datesDone ? null : `/groups/${groupId}/schedule`,
+            icon: (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                <path fillRule="evenodd" d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z" clipRule="evenodd" />
+              </svg>
+            ),
+          },
+          {
+            key: "destination",
+            label: "目的地",
+            sublabel: destDone ? group.destination! : "未定",
+            done: destDone,
+            href: status === "planning" ? `/groups/${groupId}/destination-votes` : null,
+            icon: (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                <path fillRule="evenodd" d="m9.69 18.933.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 0 0 .281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 1 0 3 9c0 3.492 1.698 5.988 3.355 7.584a13.731 13.731 0 0 0 2.273 1.765 11.842 11.842 0 0 0 .953.524l.004.002.006.003ZM10 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" clipRule="evenodd" />
+              </svg>
+            ),
+          },
+          {
+            key: "trip",
+            label: "旅程",
+            sublabel: itinDone ? "確認する" : "計画中",
+            done: itinDone,
+            href: `/groups/${groupId}/trip`,
+            icon: (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                <path fillRule="evenodd" d="M8.157 2.176a1.5 1.5 0 0 0-1.147 0l-4.084 1.69A1.5 1.5 0 0 0 2 5.25v10.877a.75.75 0 0 0 1.29.523 2.25 2.25 0 0 1 3.162-.044l.093.09a2.25 2.25 0 0 0 2.81.197l.042-.028a2.25 2.25 0 0 1 2.51 0l.042.028a2.25 2.25 0 0 0 2.81-.197l.093-.09a2.25 2.25 0 0 1 3.162.044.75.75 0 0 0 1.29-.523V5.25a1.5 1.5 0 0 0-.926-1.384l-4.084-1.69a1.5 1.5 0 0 0-1.147 0l-1.023.423a.75.75 0 0 1-.573 0L8.157 2.176Z" clipRule="evenodd" />
+              </svg>
+            ),
+          },
+          {
+            key: "expenses",
+            label: "精算",
+            sublabel: settleDone ? "確認する" : "旅行後に",
+            done: settleDone,
+            href: `/groups/${groupId}/expenses`,
+            icon: (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                <path d="M10.75 10.818v2.614A3.13 3.13 0 0 0 11.888 13c.482-.315.612-.648.612-.875 0-.227-.13-.56-.612-.875a3.13 3.13 0 0 0-1.138-.432ZM8.33 8.62c.053.055.115.11.184.164.208.16.46.284.736.363V6.603a2.45 2.45 0 0 0-.35.13c-.14.065-.27.143-.386.233-.377.292-.514.627-.514.909 0 .184.058.39.33.615Z" />
+                <path fillRule="evenodd" d="M9.99 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16ZM4 10a6 6 0 0 1 10.607-3.87l-8.477 8.477A6 6 0 0 1 4 10Zm6 6a5.966 5.966 0 0 1-3.607-1.217l8.477-8.477A6 6 0 0 1 16 10a6 6 0 0 1-6 6Z" clipRule="evenodd" />
+              </svg>
+            ),
+          },
+        ];
+
+        return (
+          <div className="mt-6 rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60">
+            {/* ステップナビ */}
+            <div className="px-4 pt-4">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+                旅のステップ
+              </p>
+              <div className="flex items-start">
+                {steps.map((step, idx) => {
+                  const circle = (
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                        step.done
+                          ? "border-emerald-500 bg-emerald-500 text-white"
+                          : idx === steps.findIndex((s) => !s.done)
+                            ? "border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
+                            : "border-zinc-300 bg-zinc-100 text-zinc-400 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-500"
+                      }`}
+                    >
+                      {step.done ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                          <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                        </svg>
+                      ) : step.icon}
+                    </div>
+                  );
+
+                  return (
+                    <div key={step.key} className="flex flex-1 flex-col items-center">
+                      <div className="flex w-full items-center">
+                        <div className="flex flex-1 flex-col items-center">
+                          {step.href ? (
+                            <Link href={step.href} className="group flex flex-col items-center">
+                              <div className="transition-opacity group-hover:opacity-75">{circle}</div>
+                              <p className={`mt-1.5 text-xs font-semibold ${step.done ? "text-emerald-700 dark:text-emerald-400" : "text-zinc-700 dark:text-zinc-300"}`}>
+                                {step.label}
+                              </p>
+                              <p className="mt-0.5 max-w-[60px] truncate text-center text-[10px] text-zinc-400 dark:text-zinc-500">
+                                {step.sublabel}
+                              </p>
+                            </Link>
+                          ) : (
+                            <div className="flex flex-col items-center">
+                              {circle}
+                              <p className={`mt-1.5 text-xs font-semibold ${step.done ? "text-emerald-700 dark:text-emerald-400" : "text-zinc-700 dark:text-zinc-300"}`}>
+                                {step.label}
+                              </p>
+                              <p className="mt-0.5 max-w-[60px] truncate text-center text-[10px] text-zinc-400 dark:text-zinc-500">
+                                {step.sublabel}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        {idx < steps.length - 1 ? (
+                          <div className={`mb-6 h-0.5 flex-1 ${
+                            steps[idx + 1]?.done || step.done
+                              ? "bg-emerald-300 dark:bg-emerald-700"
+                              : "bg-zinc-200 dark:bg-zinc-700"
+                          }`} />
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* セカンダリメニュー */}
+            <div className="mt-4 flex gap-0 border-t border-zinc-100 dark:border-zinc-700/60">
+              <Link
+                href={`/groups/${groupId}/bulletin`}
+                className="flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/40 dark:hover:text-zinc-100"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path fillRule="evenodd" d="M2 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5Zm3.293 1.293a1 1 0 0 1 1.414 0l3 3a1 1 0 0 1 0 1.414l-3 3a1 1 0 0 1-1.414-1.414L7.586 10 5.293 7.707a1 1 0 0 1 0-1.414Zm4.961 1.455a1 1 0 1 0-1.508 1.308l1.418 1.632-1.418 1.632a1 1 0 1 0 1.508 1.308l1.5-1.727a1 1 0 0 0 0-1.308l-1.5-1.727Z" clipRule="evenodd" />
+                </svg>
+                掲示板
+              </Link>
+              <div className="w-px bg-zinc-100 dark:bg-zinc-700/60" />
+              <Link
+                href={`/groups/${groupId}/families`}
+                className="flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/40 dark:hover:text-zinc-100"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM14.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM1.615 16.428a1.224 1.224 0 0 1-.569-1.175 6.002 6.002 0 0 1 11.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 0 1 7 18a9.953 9.953 0 0 1-5.385-1.572ZM14.5 16h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 0 0-1.588-3.755 4.502 4.502 0 0 1 5.874 2.636.818.818 0 0 1-.36.98A7.465 7.465 0 0 1 14.5 16Z" />
+                </svg>
+                参加世帯
+              </Link>
+            </div>
+          </div>
+        );
+      })()}
 
       {error ? (
         <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
