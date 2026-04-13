@@ -33,7 +33,6 @@ type FormState = {
   adultCount: string;
   childCount: string;
   childRatio: string;
-  selectedMembers: Set<string>;
   householdMasterId: string | null;
 };
 
@@ -43,7 +42,6 @@ function emptyForm(): FormState {
     adultCount: "1",
     childCount: "0",
     childRatio: "0.5",
-    selectedMembers: new Set(),
     householdMasterId: null,
   };
 }
@@ -124,17 +122,7 @@ export function FamiliesClient() {
       childRatio: String(
         typeof row.data.childRatio === "number" ? row.data.childRatio : 0.5,
       ),
-      selectedMembers: new Set(row.data.memberUserIds),
       householdMasterId: row.data.householdMasterId ?? null,
-    });
-  }
-
-  function toggleMember(uid: string) {
-    setForm((prev) => {
-      const next = new Set(prev.selectedMembers);
-      if (next.has(uid)) next.delete(uid);
-      else next.add(uid);
-      return { ...prev, selectedMembers: next };
     });
   }
 
@@ -146,8 +134,8 @@ export function FamiliesClient() {
       name: form.name.trim(),
       adultCount: Number(form.adultCount),
       childCount: Number(form.childCount),
-      childRatio: form.selectedMembers.size >= 2 ? cr : 1,
-      memberUserIds: [...form.selectedMembers],
+      childRatio: cr,
+      memberUserIds: [],
       householdMasterId: form.householdMasterId,
     };
     setBusy(editingId ? "save" : "add");
@@ -202,7 +190,7 @@ export function FamiliesClient() {
     );
   }
 
-  const showChildRatio = form.selectedMembers.size >= 2;
+  const showChildRatio = Number(form.childCount) > 0;
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
@@ -337,37 +325,6 @@ export function FamiliesClient() {
                 <p className="mt-0.5 text-[10px] text-zinc-400">大人=1.0</p>
               </div>
             ) : null}
-          </div>
-
-          {/* メンバー選択 */}
-          <div>
-            <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              Trip Park アカウントを紐付ける（任意）
-            </p>
-            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-              支出を登録したメンバーが自動的にこの世帯として扱われます
-            </p>
-            {members.length === 0 ? (
-              <p className="mt-2 text-xs text-zinc-400">メンバーがいません</p>
-            ) : (
-              <ul className="mt-2 space-y-1.5">
-                {members.map(({ userId, data }) => (
-                  <li key={userId}>
-                    <label className="flex cursor-pointer items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={form.selectedMembers.has(userId)}
-                        onChange={() => toggleMember(userId)}
-                        className="rounded"
-                      />
-                      <span className="text-zinc-800 dark:text-zinc-200">
-                        {data.displayName || `${userId.slice(0, 8)}…`}
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
           <div className="flex flex-wrap gap-2 pt-1">
