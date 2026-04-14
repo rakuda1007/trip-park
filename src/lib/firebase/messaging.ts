@@ -140,26 +140,19 @@ export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean; onS
 
   // Service Worker 登録
   // /api/firebase-sw は設定を注入済みの安定したURL（クエリパラメータなし）
+  // /api/firebase-sw を独立したスコープ "/fcm/" で登録する。
+  // 既存の "/" スコープSW（旧クエリパラメータ付きURL）に一切触れないため
+  // iOS でのハングを回避できる。
   const swUrl = "/api/firebase-sw";
+  const swScope = "/fcm/";
 
   report("SW確認中...");
-  let registration = await navigator.serviceWorker.getRegistration("/");
+  // まず /fcm/ スコープの新SWを確認（既存なら再利用）
+  let registration = await navigator.serviceWorker.getRegistration(swScope);
 
-  const isNewSw = registration?.active?.scriptURL?.includes("/api/firebase-sw") ||
-                  registration?.installing?.scriptURL?.includes("/api/firebase-sw") ||
-                  registration?.waiting?.scriptURL?.includes("/api/firebase-sw");
-
-  if (registration && !isNewSw) {
-    // 旧SW（クエリパラメータ付きURL）を一度アンレジストしてから新SWを登録する。
-    // register() で URL を変更すると iOS でハングするため、先に unregister() が必要。
-    report("旧SWをアンレジスト中...");
-    await registration.unregister().catch(() => {});
-    registration = undefined as unknown as ServiceWorkerRegistration;
-  }
-
-  if (!registration || !isNewSw) {
+  if (!registration) {
     report("SW新規登録中...");
-    const registerPromise = navigator.serviceWorker.register(swUrl, { scope: "/" });
+    const registerPromise = navigator.serviceWorker.register(swUrl, { scope: swScope });
     const regTimeout = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("Service Worker の登録がタイムアウトしました（10秒）")), 10_000)
     );

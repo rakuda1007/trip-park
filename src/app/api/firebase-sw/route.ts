@@ -72,7 +72,7 @@ self.addEventListener('notificationclick', function (event) {
     status: 200,
     headers: {
       "Content-Type": "application/javascript; charset=utf-8",
-      "Service-Worker-Allowed": "/",
+      "Service-Worker-Allowed": "/fcm/",
       "Cache-Control": "no-cache, no-store, must-revalidate",
     },
   });
