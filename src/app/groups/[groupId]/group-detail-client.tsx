@@ -303,11 +303,29 @@ export function GroupDetailClient() {
         ← 旅行一覧
       </Link>
 
-      <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        {group.name}
-      </h1>
+      {/* 旅行名 + 日程バッジ */}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+          {group.name}
+        </h1>
+        {group.tripStartDate ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+            <span>📅</span>
+            {formatDateRange(group.tripStartDate, group.tripEndDate)}
+          </span>
+        ) : null}
+        {isOwner && !editingDates ? (
+          <button
+            type="button"
+            onClick={startEditDates}
+            className="text-xs text-zinc-500 underline hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            {group.tripStartDate ? "日程を変更" : "日程を設定"}
+          </button>
+        ) : null}
+      </div>
 
-      {/* フェーズバッジ */}
+      {/* フェーズバッジ（表示のみ） */}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {(() => {
           const s = group.status ?? "planning";
@@ -329,27 +347,6 @@ export function GroupDetailClient() {
             </span>
           );
         })()}
-        {/* オーナーがフェーズを変更できるボタン */}
-        {isOwner && (group.status ?? "planning") === "planning" ? (
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => handleUpdateStatus("confirmed")}
-            className="rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
-          >
-            {busy === "status-confirmed" ? "更新中…" : "旅行を確定する →"}
-          </button>
-        ) : null}
-        {isOwner && (group.status ?? "planning") === "confirmed" ? (
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => handleUpdateStatus("completed")}
-            className="rounded-full border border-zinc-300 px-2.5 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300"
-          >
-            {busy === "status-completed" ? "更新中…" : "旅行終了にする →"}
-          </button>
-        ) : null}
       </div>
 
       {/* 説明 */}
@@ -414,80 +411,6 @@ export function GroupDetailClient() {
           ) : null}
         </div>
       )}
-
-      {/* 目的地 */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {group.destination ? (
-          <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-            📍 {group.destination}
-          </span>
-        ) : (
-          <span className="text-sm text-zinc-400 dark:text-zinc-500">目的地未定</span>
-        )}
-        {isOwner && !editingDest ? (
-          <button
-            type="button"
-            onClick={() => {
-              setDraftDest(group.destination ?? "");
-              setEditingDest(true);
-            }}
-            className="text-xs text-zinc-500 underline hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            {group.destination ? "目的地を変更" : "目的地を設定"}
-          </button>
-        ) : null}
-      </div>
-
-      {/* 目的地編集フォーム */}
-      {editingDest && isOwner ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <input
-            type="text"
-            value={draftDest}
-            onChange={(e) => setDraftDest(e.target.value)}
-            placeholder="例: 箱根"
-            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-50"
-          />
-          <button
-            type="button"
-            onClick={handleSaveDest}
-            disabled={busy !== null}
-            className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            {busy === "save-dest" ? "保存中…" : "保存"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditingDest(false)}
-            className="text-xs text-zinc-500 underline hover:text-zinc-800"
-          >
-            キャンセル
-          </button>
-        </div>
-      ) : null}
-
-      {/* 旅行日程 */}
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        {group.tripStartDate ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-            <span>📅</span>
-            {formatDateRange(group.tripStartDate, group.tripEndDate)}
-          </span>
-        ) : (
-          <span className="text-sm text-zinc-400 dark:text-zinc-500">
-            日程未定
-          </span>
-        )}
-        {isOwner && !editingDates ? (
-          <button
-            type="button"
-            onClick={startEditDates}
-            className="text-xs text-zinc-500 underline hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            {group.tripStartDate ? "日程を変更" : "旅行日程を設定"}
-          </button>
-        ) : null}
-      </div>
 
       {/* 日程編集フォーム（オーナーのみ） */}
       {editingDates && isOwner ? (
