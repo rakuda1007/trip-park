@@ -1,7 +1,6 @@
 import "client-only";
 
 import { getFirebaseApp } from "@/lib/firebase/client";
-import { getFirebasePublicConfig } from "@/lib/firebase/env";
 import { getFirebaseFirestore } from "@/lib/firebase/client";
 import { doc, setDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { getMessaging, getToken, onMessage, type Messaging } from "firebase/messaging";
@@ -140,11 +139,23 @@ export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean; onS
   const messaging = getFirebaseMessaging(); // throws if fails
 
   // Service Worker 登録
-  report("SW登録中...");
-  const firebaseConfig = getFirebasePublicConfig();
-  const configParam = encodeURIComponent(JSON.stringify(firebaseConfig));
-  const swUrl = `/firebase-messaging-sw.js?firebaseConfig=${configParam}`;
-  const registration = await navigator.serviceWorker.register(swUrl, { scope: "/" });
+  // /api/firebase-sw は設定を注入済みの安定したURLで、毎回再登録しない
+  const swUrl = "/api/firebase-sw";
+
+  // 既存の登録があれば再利用（register() の呼び出しを省略してハングを防ぐ）
+  report("SW確認中...");
+  let registration = await navigator.serviceWorker.getRegistration("/");
+  if (!registration) {
+    report("SW新規登録中...");
+    const registerPromise = navigator.serviceWorker.register(swUrl, { scope: "/" });
+    const regTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Service Worker の登録がタイムアウトしました（10秒）")), 10_000)
+    );
+    registration = await Promise.race([registerPromise, regTimeout]);
+    report("SW登録完了");
+  } else {
+    report("既存SW再利用");
+  }
 
   // SW がアクティブになるまで待つ（最大 5 秒）
   report("SW有効化待ち...");
