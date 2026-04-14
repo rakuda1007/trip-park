@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import {
+  clearCachedFcmToken,
   removeFcmToken,
   requestAndGetFcmToken,
   saveFcmToken,
@@ -81,6 +82,7 @@ export function PushNotificationToggle() {
       // トークン削除に失敗しても OFF にする
     } finally {
       localStorage.setItem(PREF_KEY, "denied");
+      clearCachedFcmToken();
       setStatus("disabled");
       setMessage("プッシュ通知を無効にしました");
       setBusy(false);

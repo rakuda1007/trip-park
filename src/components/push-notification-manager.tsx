@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import {
+  clearCachedFcmToken,
   removeFcmToken,
   requestAndGetFcmToken,
   saveFcmToken,
@@ -25,17 +26,21 @@ export function PushNotificationManager() {
   const toastIdRef = useRef(0);
 
   // 初回マウント時に過去の許可状態を確認
+  // アプリ起動の速さを最優先にするため、通知処理は遅延実行する
   useEffect(() => {
     if (!user) return;
     if (typeof window === "undefined") return;
     const pref = localStorage.getItem(PREF_KEY);
     if (pref === "denied") return;
+
     if (Notification.permission === "granted") {
-      // 既に許可済み → トークンを取得して保存
-      initToken(user.uid);
+      // 既に許可済み → 5秒後にトークン更新（起動速度を妨げない）
+      const timer = setTimeout(() => initToken(user.uid), 5000);
+      return () => clearTimeout(timer);
     } else if (Notification.permission === "default" && !pref) {
-      // 初めてアクセス → バナーを表示
-      setShowBanner(true);
+      // 初めてアクセス → 8秒後にバナーを表示（コンテンツ表示を最優先）
+      const timer = setTimeout(() => setShowBanner(true), 8000);
+      return () => clearTimeout(timer);
     }
   }, [user]); // initToken は user が変わった時だけ実行すれば十分
 
@@ -74,6 +79,7 @@ export function PushNotificationManager() {
   async function handleDeny() {
     setShowBanner(false);
     localStorage.setItem(PREF_KEY, "denied");
+    clearCachedFcmToken();
     if (user && tokenRef.current) {
       await removeFcmToken(user.uid, tokenRef.current).catch(() => {});
     }

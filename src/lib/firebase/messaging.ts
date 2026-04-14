@@ -6,6 +6,40 @@ import { getFirebaseFirestore } from "@/lib/firebase/client";
 import { doc, setDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { getMessaging, getToken, onMessage, type Messaging } from "firebase/messaging";
 
+// FCMトークンを localStorage にキャッシュする（24時間有効）
+// FCMトークン自体は60日有効なので24時間キャッシュで十分
+const TOKEN_CACHE_KEY = "fcm_token_cache";
+const TOKEN_CACHE_TTL = 24 * 60 * 60 * 1000; // 24時間
+
+function getCachedFcmToken(): string | null {
+  try {
+    const raw = localStorage.getItem(TOKEN_CACHE_KEY);
+    if (!raw) return null;
+    const { token, ts } = JSON.parse(raw) as { token: string; ts: number };
+    if (Date.now() - ts > TOKEN_CACHE_TTL) return null;
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedFcmToken(token: string): void {
+  try {
+    localStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify({ token, ts: Date.now() }));
+  } catch {
+    // localStorage が使えない環境では無視
+  }
+}
+
+/** キャッシュを無効化する（通知 OFF 時に呼ぶ） */
+export function clearCachedFcmToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_CACHE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * ServiceWorkerRegistration が active 状態になるまで待つ。
  * 既に active なら即座に返す。タイムアウト（ms）を超えたら諦めて返す。
@@ -48,9 +82,10 @@ function getFirebaseMessaging(): Messaging | null {
 
 /**
  * サービスワーカーを登録して FCM トークンを取得する。
+ * キャッシュがある場合はSW登録・ネットワーク通信をスキップして即座に返す。
  * NEXT_PUBLIC_FIREBASE_VAPID_KEY が設定されている必要がある。
  */
-export async function requestAndGetFcmToken(): Promise<string | null> {
+export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean }): Promise<string | null> {
   if (typeof window === "undefined") return null;
   if (!("Notification" in window)) return null;
   if (!("serviceWorker" in navigator)) return null;
@@ -66,6 +101,12 @@ export async function requestAndGetFcmToken(): Promise<string | null> {
   if (Notification.permission === "default") {
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return null;
+  }
+
+  // キャッシュヒットなら SW 登録・getToken のネットワーク通信をスキップ
+  if (!opts?.forceRefresh) {
+    const cached = getCachedFcmToken();
+    if (cached) return cached;
   }
 
   const messaging = getFirebaseMessaging();
@@ -87,6 +128,10 @@ export async function requestAndGetFcmToken(): Promise<string | null> {
     vapidKey,
     serviceWorkerRegistration: registration,
   });
+
+  if (token) {
+    setCachedFcmToken(token);
+  }
 
   return token ?? null;
 }
