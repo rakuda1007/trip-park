@@ -138,28 +138,32 @@ export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean; onS
   report("Messaging初期化中...");
   const messaging = getFirebaseMessaging(); // throws if fails
 
-  // Service Worker 登録
-  // /api/firebase-sw は設定を注入済みの安定したURL（クエリパラメータなし）
-  // /api/firebase-sw を独立したスコープ "/fcm/" で登録する。
-  // 既存の "/" スコープSW（旧クエリパラメータ付きURL）に一切触れないため
-  // iOS でのハングを回避できる。
-  const swUrl = "/api/firebase-sw";
-  const swScope = "/fcm/";
-
+  // Service Worker 取得
+  // iOS はルートスコープ（"/"）の SW のみプッシュイベントを確実に起動する。
+  // 既存のルートスコープ SW（登録URL変更なし）を優先再利用し、
+  // ない場合だけ /fcm/ スコープにフォールバックする。
   report("SW確認中...");
-  // まず /fcm/ スコープの新SWを確認（既存なら再利用）
-  let registration = await navigator.serviceWorker.getRegistration(swScope);
+  let registration: ServiceWorkerRegistration | undefined;
 
-  if (!registration) {
-    report("SW新規登録中...");
-    const registerPromise = navigator.serviceWorker.register(swUrl, { scope: swScope });
-    const regTimeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Service Worker の登録がタイムアウトしました（10秒）")), 10_000)
-    );
-    registration = await Promise.race([registerPromise, regTimeout]);
-    report("SW登録完了");
+  // 1) 既存のルートスコープ SW を探す（URL変更なし = iOS ハングなし）
+  registration = await navigator.serviceWorker.getRegistration("/");
+  if (registration) {
+    const swName = registration.active?.scriptURL?.split("?")[0]?.split("/").pop() ?? "unknown";
+    report(`ルートSW再利用: ${swName}`);
   } else {
-    report("新SW再利用");
+    // 2) /fcm/ スコープ SW を探す、なければ新規登録
+    registration = await navigator.serviceWorker.getRegistration("/fcm/");
+    if (!registration) {
+      report("SW新規登録中...");
+      const registerPromise = navigator.serviceWorker.register("/api/firebase-sw", { scope: "/fcm/" });
+      const regTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Service Worker の登録がタイムアウトしました（10秒）")), 10_000)
+      );
+      registration = await Promise.race([registerPromise, regTimeout]);
+      report("SW登録完了");
+    } else {
+      report("/fcm/ SW再利用");
+    }
   }
 
   // SW がアクティブになるまで待つ（最大 5 秒）
