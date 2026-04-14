@@ -142,6 +142,17 @@ export function AppHeader() {
                     ) : null}
                     {currentGroupId ? (
                       <Link
+                        href={`/groups/${currentGroupId}/bulletin`}
+                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
+                          <path fillRule="evenodd" d="M2 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5.414l-2.707 2.707A1 1 0 0 1 1 17V5Zm3 1a1 1 0 0 0 0 2h10a1 1 0 1 0 0-2H5Zm0 4a1 1 0 0 0 0 2h6a1 1 0 1 0 0-2H5Z" clipRule="evenodd" />
+                        </svg>
+                        掲示板
+                      </Link>
+                    ) : null}
+                    {currentGroupId ? (
+                      <Link
                         href={`/groups/${currentGroupId}/admin`}
                         className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
                       >

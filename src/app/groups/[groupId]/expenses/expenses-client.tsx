@@ -107,7 +107,7 @@ export function ExpensesClient() {
   const [expenseDate, setExpenseDate] = useState(todayISODate());
   const [category, setCategory] = useState<ExpenseCategory>("food");
   const [memo, setMemo] = useState("");
-  const [splitMode, setSplitMode] = useState<ExpenseSplitMode>("equal");
+  const [splitMode, setSplitMode] = useState<ExpenseSplitMode>("weighted");
   const [selectedFamilyIds, setSelectedFamilyIds] = useState<Set<string>>(new Set());
 
   const userToFamilyId = useMemo(() => {
@@ -510,19 +510,19 @@ export function ExpensesClient() {
                 <input
                   type="radio"
                   name="splitMode"
-                  checked={splitMode === "equal"}
-                  onChange={() => setSplitMode("equal")}
+                  checked={splitMode === "weighted"}
+                  onChange={() => setSplitMode("weighted")}
                 />
-                均等割（世帯ごとに同額）
+                人数割（大人・子供比率考慮）
               </label>
               <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="radio"
                   name="splitMode"
-                  checked={splitMode === "weighted"}
-                  onChange={() => setSplitMode("weighted")}
+                  checked={splitMode === "equal"}
+                  onChange={() => setSplitMode("equal")}
                 />
-                人数割（大人・子供比率考慮）
+                均等割（世帯ごとに同額）
               </label>
             </div>
             {splitMode === "weighted" && selectedFamilyIds.size > 0 ? (
