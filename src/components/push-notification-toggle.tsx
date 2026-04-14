@@ -3,6 +3,7 @@
 import { useAuth } from "@/contexts/auth-context";
 import {
   clearCachedFcmToken,
+  getCachedFcmToken,
   removeFcmToken,
   requestAndGetFcmToken,
   saveFcmToken,
@@ -12,11 +13,11 @@ import { useEffect, useState } from "react";
 const PREF_KEY = "push_notification_pref";
 
 type PushStatus =
-  | "loading"    // 初期化中
-  | "unsupported" // ブラウザ非対応
-  | "blocked"    // ブラウザで拒否済み（設定変更が必要）
-  | "enabled"    // 有効
-  | "disabled";  // 無効（許可はされているが OFF にしている、または未設定）
+  | "loading"      // 初期化中
+  | "unsupported"  // ブラウザ非対応
+  | "blocked"      // ブラウザで拒否済み（設定変更が必要）
+  | "enabled"      // 有効
+  | "disabled";    // 無効（許可はされているが OFF にしている、または未設定）
 
 /** プッシュ通知の ON/OFF を切り替えられる設定行コンポーネント */
 export function PushNotificationToggle() {
@@ -46,23 +47,24 @@ export function PushNotificationToggle() {
     setBusy(true);
     setMessage(null);
     try {
-      const token = await requestAndGetFcmToken();
+      const token = await requestAndGetFcmToken({ forceRefresh: true });
       if (token) {
         await saveFcmToken(user.uid, token);
         localStorage.setItem(PREF_KEY, "granted");
         setStatus("enabled");
         setMessage("プッシュ通知を有効にしました");
       } else {
-        // 許可ダイアログで拒否された場合
+        // requestPermission で拒否された場合
         if (typeof Notification !== "undefined" && Notification.permission === "denied") {
           setStatus("blocked");
           setMessage("ブラウザで通知がブロックされています。ブラウザの設定から許可してください。");
         } else {
-          setMessage("通知の有効化に失敗しました。しばらくしてから再試行してください。");
+          setMessage("有効化できませんでした。もう一度お試しください。");
         }
       }
-    } catch {
-      setMessage("エラーが発生しました。再試行してください。");
+    } catch (err) {
+      console.error("[Push] handleEnable error:", err);
+      setMessage("エラーが発生しました。もう一度お試しください。");
     } finally {
       setBusy(false);
     }
@@ -73,13 +75,13 @@ export function PushNotificationToggle() {
     setBusy(true);
     setMessage(null);
     try {
-      // 現在のトークンを取得して Firestore から削除
-      const token = await requestAndGetFcmToken().catch(() => null);
+      // キャッシュからトークンを取得（SW登録・通知許可は不要）
+      const token = getCachedFcmToken();
       if (token) {
-        await removeFcmToken(user.uid, token).catch(() => {});
+        await removeFcmToken(user.uid, token).catch((err) => {
+          console.warn("[Push] removeFcmToken failed:", err);
+        });
       }
-    } catch {
-      // トークン削除に失敗しても OFF にする
     } finally {
       localStorage.setItem(PREF_KEY, "denied");
       clearCachedFcmToken();
@@ -127,11 +129,13 @@ export function PushNotificationToggle() {
             <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">プッシュ通知</p>
           </div>
           <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-            {status === "blocked"
-              ? "ブラウザで通知がブロックされています"
-              : isEnabled
-                ? "掲示板の投稿・返信などをお知らせします"
-                : "タップして有効にする"}
+            {busy
+              ? "処理中…しばらくお待ちください"
+              : status === "blocked"
+                ? "ブラウザで通知がブロックされています"
+                : isEnabled
+                  ? "掲示板の投稿・返信などをお知らせします"
+                  : "タップして有効にする"}
           </p>
         </div>
 
@@ -145,9 +149,10 @@ export function PushNotificationToggle() {
             type="button"
             role="switch"
             aria-checked={isEnabled}
+            aria-label={isEnabled ? "プッシュ通知を無効にする" : "プッシュ通知を有効にする"}
             disabled={busy}
             onClick={isEnabled ? handleDisable : handleEnable}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60 ${
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-60 ${
               isEnabled ? "bg-blue-600" : "bg-zinc-200 dark:bg-zinc-600"
             }`}
           >
@@ -168,18 +173,14 @@ export function PushNotificationToggle() {
       )}
 
       {/* 操作結果メッセージ */}
-      {message && (
-        <p className={`mt-2 text-xs ${message.includes("失敗") || message.includes("エラー") || message.includes("ブロック")
-          ? "text-red-500 dark:text-red-400"
-          : "text-emerald-600 dark:text-emerald-400"
+      {message && !busy && (
+        <p className={`mt-2 text-xs ${
+          message.includes("失敗") || message.includes("エラー") || message.includes("ブロック") || message.includes("できませんでした")
+            ? "text-red-500 dark:text-red-400"
+            : "text-emerald-600 dark:text-emerald-400"
         }`}>
           {message}
         </p>
-      )}
-
-      {/* 処理中インジケーター */}
-      {busy && (
-        <p className="mt-1 text-xs text-zinc-400">処理中…</p>
       )}
     </div>
   );

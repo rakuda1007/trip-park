@@ -11,7 +11,7 @@ import { getMessaging, getToken, onMessage, type Messaging } from "firebase/mess
 const TOKEN_CACHE_KEY = "fcm_token_cache";
 const TOKEN_CACHE_TTL = 24 * 60 * 60 * 1000; // 24時間
 
-function getCachedFcmToken(): string | null {
+function getCachedFcmToken_private(): string | null {
   try {
     const raw = localStorage.getItem(TOKEN_CACHE_KEY);
     if (!raw) return null;
@@ -29,6 +29,11 @@ function setCachedFcmToken(token: string): void {
   } catch {
     // localStorage が使えない環境では無視
   }
+}
+
+/** キャッシュ済みトークンを返す（ない場合は null） */
+export function getCachedFcmToken(): string | null {
+  return getCachedFcmToken_private();
 }
 
 /** キャッシュを無効化する（通知 OFF 時に呼ぶ） */
@@ -105,7 +110,7 @@ export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean }): 
 
   // キャッシュヒットなら SW 登録・getToken のネットワーク通信をスキップ
   if (!opts?.forceRefresh) {
-    const cached = getCachedFcmToken();
+    const cached = getCachedFcmToken_private();
     if (cached) return cached;
   }
 
