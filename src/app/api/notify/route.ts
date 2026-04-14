@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
       if (callerUid !== authorUid) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      const tokens = await collectTokens(groupId, [authorUid]);
+      const tokens = await collectTokens(groupId, []);
       await sendMulticast(
         tokens,
         `📣 ${groupName}`,
@@ -176,8 +176,8 @@ export async function POST(req: NextRequest) {
       if (callerUid !== authorUid) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      // 話題の作者（自分でなければ）に通知
-      const notifyUids = [topicAuthorUid].filter((uid) => uid !== authorUid);
+      // 話題の作者と返信者本人に通知（重複は Set で除去）
+      const notifyUids = [...new Set([topicAuthorUid, authorUid])];
       if (notifyUids.length === 0) {
         return NextResponse.json({ ok: true });
       }
@@ -199,7 +199,7 @@ export async function POST(req: NextRequest) {
       if (callerUid !== confirmedByUid) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      const tokens = await collectTokens(groupId, [confirmedByUid]);
+      const tokens = await collectTokens(groupId, []);
       const dateText = endDate ? `${startDate} 〜 ${endDate}` : startDate;
       await sendMulticast(
         tokens,
