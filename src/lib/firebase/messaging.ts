@@ -3,7 +3,7 @@ import "client-only";
 import { getFirebaseApp } from "@/lib/firebase/client";
 import { getFirebasePublicConfig } from "@/lib/firebase/env";
 import { getFirebaseFirestore } from "@/lib/firebase/client";
-import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
+import { doc, setDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { getMessaging, getToken, onMessage, type Messaging } from "firebase/messaging";
 
 /**
@@ -95,25 +95,20 @@ export async function requestAndGetFcmToken(): Promise<string | null> {
 export async function saveFcmToken(uid: string, token: string): Promise<void> {
   const db = getFirebaseFirestore();
   const userRef = doc(db, "users", uid);
-  // 既存のドキュメントがなければ作成は skip（ユーザー本人のドキュメントは別途作成済み前提）
-  const snap = await getDoc(userRef);
-  if (snap.exists()) {
-    await updateDoc(userRef, {
-      fcmTokens: arrayUnion(token),
-    });
-  }
+  // setDoc + merge:true を使うことでドキュメントが存在しない場合も対応する
+  await setDoc(userRef, { fcmTokens: arrayUnion(token) }, { merge: true });
+  console.log("[FCM] Token saved for uid:", uid, "token prefix:", token.slice(0, 20));
 }
 
 /** FCM トークンを Firestore から削除する（通知オフ時・ログアウト時） */
 export async function removeFcmToken(uid: string, token: string): Promise<void> {
   const db = getFirebaseFirestore();
   const userRef = doc(db, "users", uid);
-  const snap = await getDoc(userRef);
-  if (snap.exists()) {
-    await updateDoc(userRef, {
-      fcmTokens: arrayRemove(token),
-    });
-  }
+  await updateDoc(userRef, {
+    fcmTokens: arrayRemove(token),
+  }).catch(() => {
+    // ドキュメントが存在しない場合は無視
+  });
 }
 
 /** フォアグラウンドのメッセージハンドラーを登録する */

@@ -50,10 +50,14 @@ export function PushNotificationManager() {
 
   async function initToken(uid: string) {
     try {
+      console.log("[Push] Requesting FCM token for uid:", uid);
       const token = await requestAndGetFcmToken();
       if (token) {
         tokenRef.current = token;
         await saveFcmToken(uid, token);
+        console.log("[Push] Token saved successfully.");
+      } else {
+        console.warn("[Push] requestAndGetFcmToken returned null. Permission:", Notification.permission);
       }
     } catch (e) {
       console.warn("[Push] Token init error:", e);
