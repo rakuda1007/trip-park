@@ -11,6 +11,7 @@ import {
 import { useEffect, useState } from "react";
 
 const PREF_KEY = "push_notification_pref";
+const FLAG_KEY = "push_perm_requesting";
 
 type PushStatus =
   | "loading"      // 初期化中
@@ -25,7 +26,6 @@ function isIosNonPwa(): boolean {
   if (typeof window === "undefined") return false;
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
   if (!isIos) return false;
-  // ホーム画面から起動している場合は standalone になる
   const isStandalone =
     ("standalone" in window.navigator && (window.navigator as { standalone?: boolean }).standalone === true) ||
     window.matchMedia("(display-mode: standalone)").matches;
@@ -37,58 +37,65 @@ export function PushNotificationToggle() {
   const { user } = useAuth();
   const [status, setStatus] = useState<PushStatus>("loading");
   const [busy, setBusy] = useState(false);
-  const [step, setStep] = useState<string | null>(null);   // 処理ステップ
-  const [error, setError] = useState<string | null>(null); // エラー詳細
+  const [step, setStep] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [debugLines, setDebugLines] = useState<string[]>([]);
+
+  function addDebug(msg: string) {
+    setDebugLines((prev) => [...prev.slice(-9), `${new Date().toLocaleTimeString("ja-JP")} ${msg}`]);
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // iOS非PWA：通知自体サポート外
-    if (isIosNonPwa()) {
-      setStatus("not-pwa");
-      return;
-    }
-
+    if (isIosNonPwa()) { setStatus("not-pwa"); return; }
     if (!("Notification" in window) || !("serviceWorker" in navigator)) {
-      setStatus("unsupported");
-      return;
+      setStatus("unsupported"); return;
     }
 
     const pref = localStorage.getItem(PREF_KEY);
+    const notifPerm = Notification.permission;
+    const flagRaw = localStorage.getItem(FLAG_KEY);
 
-    // iOS Safari では requestPermission() 後に PWA がリロードされる。
-    // sessionStorage はリロードで消えるため localStorage のタイムスタンプ付きフラグを確認する。
-    // 30秒以内にフラグが立てられており、かつ許可済みなら自動でトークン取得を再開する。
-    const permRequested = (() => {
+    addDebug(`起動: perm=${notifPerm} pref=${pref ?? "null"} flag=${flagRaw ? "あり" : "なし"}`);
+
+    // iOS リロード後フラグを確認
+    let permRequested = false;
+    if (flagRaw) {
       try {
-        const raw = localStorage.getItem("push_perm_requesting");
-        if (!raw) return false;
-        const { ts } = JSON.parse(raw) as { ts: number };
-        const isRecent = Date.now() - ts < 30_000; // 30秒以内
-        localStorage.removeItem("push_perm_requesting");
-        return isRecent;
-      } catch { return false; }
-    })();
-
-    if (permRequested && Notification.permission === "granted") {
-      // pref が "denied" でも今回ユーザーが許可したので上書きする
-      localStorage.removeItem(PREF_KEY);
-      // ステータスを loading のまま保ち、トークン取得を自動実行
-      setStep("リロード後の設定を完了中…");
-      return; // user が揃ったら下の useEffect でトークン取得する
+        const { ts } = JSON.parse(flagRaw) as { ts: number };
+        permRequested = Date.now() - ts < 30_000;
+      } catch { /* ignore */ }
+      localStorage.removeItem(FLAG_KEY);
+      addDebug(`フラグ検出: permRequested=${permRequested}`);
     }
 
-    if (Notification.permission === "denied") {
+    if (permRequested) {
+      if (notifPerm === "granted") {
+        // iOSリロード後、許可済み → pref解除して自動取得
+        localStorage.removeItem(PREF_KEY);
+        addDebug("自動完了パスに進みます");
+        setStep("リロード後の設定を完了中…");
+        return; // auto-complete useEffect へ
+      } else {
+        // フラグはあったが許可されなかった（拒否 or タイムアウト）
+        addDebug(`フラグあり・許可なし: perm=${notifPerm}`);
+        setError(`通知が許可されませんでした（permission: ${notifPerm}）。iOSでは「許可」をタップしてください。`);
+        setStatus("disabled");
+        return;
+      }
+    }
+
+    if (notifPerm === "denied") {
       setStatus("blocked");
-    } else if (Notification.permission === "granted" && pref !== "denied") {
+    } else if (notifPerm === "granted" && pref !== "denied") {
       setStatus("enabled");
     } else {
       setStatus("disabled");
     }
   }, []);
 
-  // iOS リロード後の自動トークン取得
-  // step が "リロード後の設定を完了中…" かつ user が確定したときに実行
+  // iOS リロード後の自動トークン取得（user が確定してから実行）
   useEffect(() => {
     if (!user) return;
     if (step !== "リロード後の設定を完了中…") return;
@@ -96,24 +103,29 @@ export function PushNotificationToggle() {
     let cancelled = false;
     (async () => {
       setBusy(true);
+      addDebug(`自動取得開始 uid=${user.uid.slice(0, 8)}...`);
       try {
         setStep("FCMトークンを取得中…");
         const token = await requestAndGetFcmToken({ forceRefresh: true });
         if (cancelled) return;
+        addDebug(`token=${token ? token.slice(0, 15) + "..." : "null"}`);
         if (token) {
+          setStep("Firestoreに保存中…");
           await saveFcmToken(user.uid, token);
           localStorage.setItem(PREF_KEY, "granted");
           setStatus("enabled");
           setStep(null);
+          addDebug("✓ 有効化完了");
         } else {
-          setError("トークン取得に失敗しました。もう一度トグルをタップしてください。");
+          const perm = typeof Notification !== "undefined" ? Notification.permission : "N/A";
+          setError(`トークン取得失敗（permission: ${perm}）。APNs設定またはVAPIDキーを確認してください。`);
           setStatus("disabled");
           setStep(null);
         }
       } catch (err) {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : String(err);
-        console.error("[Push] auto-complete after iOS reload failed:", err);
+        addDebug(`エラー: ${msg}`);
         setError(`エラー: ${msg}`);
         setStatus("disabled");
         setStep(null);
@@ -127,12 +139,13 @@ export function PushNotificationToggle() {
   async function handleEnable() {
     if (!user || busy) return;
     setBusy(true);
-    setStep("開始中…");
     setError(null);
+    setStep("通知許可を確認中…");
+    addDebug(`手動ON開始 perm=${typeof Notification !== "undefined" ? Notification.permission : "N/A"}`);
 
     try {
-      setStep("通知許可を確認中…");
       const token = await requestAndGetFcmToken({ forceRefresh: true });
+      addDebug(`token=${token ? token.slice(0, 15) + "..." : "null"}`);
 
       if (token) {
         setStep("Firestoreに保存中…");
@@ -140,20 +153,20 @@ export function PushNotificationToggle() {
         localStorage.setItem(PREF_KEY, "granted");
         setStatus("enabled");
         setStep(null);
+        addDebug("✓ 有効化完了");
       } else {
-        // null = ユーザーが許可ダイアログで拒否 or iOSでブラウザ側に拒否された
         const perm = typeof Notification !== "undefined" ? Notification.permission : "unknown";
         if (perm === "denied") {
           setStatus("blocked");
-          setError("ブラウザで通知がブロックされています。ブラウザの設定から「許可」に変更してください。");
+          setError("ブラウザで通知がブロックされています。設定から「許可」に変更してください。");
         } else {
-          setError(`FCMトークンが取得できませんでした（permission: ${perm}）。iOSの場合はホーム画面に追加してから再試行してください。`);
+          setError(`FCMトークンが取得できませんでした（permission: ${perm}）`);
         }
         setStep(null);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("[Push] handleEnable failed:", err);
+      addDebug(`エラー: ${msg}`);
       setError(`エラー: ${msg}`);
       setStep(null);
     } finally {
@@ -167,13 +180,8 @@ export function PushNotificationToggle() {
     setStep("無効化中…");
     setError(null);
     try {
-      // キャッシュからトークンを取得（SW登録・通知許可は不要）
       const token = getCachedFcmToken();
-      if (token) {
-        await removeFcmToken(user.uid, token).catch((err) => {
-          console.warn("[Push] removeFcmToken:", err);
-        });
-      }
+      if (token) await removeFcmToken(user.uid, token).catch(() => {});
     } finally {
       localStorage.setItem(PREF_KEY, "denied");
       clearCachedFcmToken();
@@ -183,23 +191,29 @@ export function PushNotificationToggle() {
     }
   }
 
-  // ── ローディング中 ──
+  // ── ローディング中（自動完了処理中もここ） ──
   if (status === "loading") {
-    return <NotifyRow label="プッシュ通知" sub="読み込み中…" />;
+    return (
+      <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
+        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">プッシュ通知</p>
+        <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+          {step ?? "読み込み中…"}
+        </p>
+        <DebugPanel lines={debugLines} />
+      </div>
+    );
   }
 
-  // ── ブラウザ非対応 ──
   if (status === "unsupported") {
     return <NotifyRow label="プッシュ通知" sub="このブラウザは対応していません" />;
   }
 
-  // ── iOS Safari（非 PWA）──
   if (status === "not-pwa") {
     return (
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/40 dark:bg-amber-950/20">
         <p className="text-sm font-medium text-amber-800 dark:text-amber-200">プッシュ通知</p>
         <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-          iOSでプッシュ通知を使うには、Safari の「共有」→「ホーム画面に追加」でアプリをインストールし、ホーム画面から起動してください。
+          iOSでプッシュ通知を使うには、Safariの「共有」→「ホーム画面に追加」でインストールし、ホーム画面から起動してください。
         </p>
       </div>
     );
@@ -210,7 +224,6 @@ export function PushNotificationToggle() {
   return (
     <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
       <div className="flex items-center justify-between gap-4">
-        {/* ラベル */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
@@ -230,7 +243,6 @@ export function PushNotificationToggle() {
           </p>
         </div>
 
-        {/* トグル / ブロックバッジ */}
         {status === "blocked" ? (
           <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">
             ブロック中
@@ -243,7 +255,7 @@ export function PushNotificationToggle() {
             aria-label={isEnabled ? "プッシュ通知を無効にする" : "プッシュ通知を有効にする"}
             disabled={busy}
             onClick={isEnabled ? handleDisable : handleEnable}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-60 ${
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 disabled:cursor-wait disabled:opacity-60 ${
               isEnabled ? "bg-blue-600" : "bg-zinc-200 dark:bg-zinc-600"
             }`}
           >
@@ -252,20 +264,37 @@ export function PushNotificationToggle() {
         )}
       </div>
 
-      {/* ブロック時の案内 */}
       {status === "blocked" && (
         <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
           ブラウザの設定 → このサイトの通知を「許可」に変更してからページを再読み込みしてください。
         </p>
       )}
 
-      {/* エラー詳細（赤字・目立つ） */}
       {error && !busy && (
         <div className="mt-2 rounded-md bg-red-50 px-3 py-2 dark:bg-red-950/30">
           <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
         </div>
       )}
+
+      <DebugPanel lines={debugLines} />
     </div>
+  );
+}
+
+/** 診断用ログパネル（常時表示・後で削除予定） */
+function DebugPanel({ lines }: { lines: string[] }) {
+  if (lines.length === 0) return null;
+  return (
+    <details className="mt-3">
+      <summary className="cursor-pointer text-[10px] text-zinc-400 hover:text-zinc-500">
+        診断ログ（{lines.length}件）
+      </summary>
+      <div className="mt-1 rounded bg-zinc-50 p-2 dark:bg-zinc-800">
+        {lines.map((l, i) => (
+          <p key={i} className="font-mono text-[9px] leading-tight text-zinc-500 dark:text-zinc-400">{l}</p>
+        ))}
+      </div>
+    </details>
   );
 }
 
