@@ -59,7 +59,9 @@ async function collectTokens(groupId: string, excludeUids: string[]): Promise<st
     }),
   );
 
-  return [...new Set(tokens)]; // 重複除去
+  const unique = [...new Set(tokens)];
+  console.log(`[notify] collectTokens groupId=${groupId} targetUids=${targetUids.length} tokens=${unique.length}`);
+  return unique;
 }
 
 /** 無効なトークンを Firestore から削除する */
@@ -113,15 +115,21 @@ async function sendMulticast(
       },
     });
 
+    console.log(`[notify] successCount=${response.successCount} failureCount=${response.failureCount}`);
+
     response.responses.forEach((resp, idx) => {
       if (!resp.success) {
         const errCode = resp.error?.code ?? "";
+        const errMsg = resp.error?.message ?? "";
+        console.warn(`[notify] token[${idx}] failed: code=${errCode} msg=${errMsg} token=${chunk[idx]?.slice(0, 20)}...`);
         if (
           errCode === "messaging/invalid-registration-token" ||
           errCode === "messaging/registration-token-not-registered"
         ) {
           invalidTokens.push(chunk[idx]!);
         }
+      } else {
+        console.log(`[notify] token[${idx}] sent OK (msgId=${resp.messageId?.slice(0, 30)}...)`);
       }
     });
   }
