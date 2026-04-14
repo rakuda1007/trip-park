@@ -37,8 +37,7 @@ export function PushNotificationManager() {
       // 初めてアクセス → バナーを表示
       setShowBanner(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user]); // initToken は user が変わった時だけ実行すれば十分
 
   // フォアグラウンドメッセージハンドラー登録
   useEffect(() => {

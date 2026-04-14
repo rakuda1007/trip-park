@@ -38,7 +38,7 @@ export type FamilyInput = {
   householdMasterId: string | null;
 };
 
-function validateFamilyInput(input: FamilyInput, memberIds: Set<string>): void {
+function validateFamilyInput(input: FamilyInput): void {
   const name = input.name.trim();
   if (!name) throw new Error("世帯名を入力してください。");
   const a = Math.floor(input.adultCount);
@@ -82,7 +82,7 @@ export async function addFamily(
   memberIds: Set<string>,
   input: FamilyInput,
 ): Promise<string> {
-  validateFamilyInput(input, memberIds);
+  validateFamilyInput(input);
   const existing = await listFamilies(groupId);
   const ids = [...new Set(input.memberUserIds)].filter((id) => memberIds.has(id));
   assertNoMemberOverlap(existing, ids);
@@ -109,7 +109,7 @@ export async function updateFamily(
   memberIds: Set<string>,
   input: FamilyInput,
 ): Promise<void> {
-  validateFamilyInput(input, memberIds);
+  validateFamilyInput(input);
   const existing = await listFamilies(groupId);
   const ids = [...new Set(input.memberUserIds)].filter((id) => memberIds.has(id));
   assertNoMemberOverlap(existing, ids, familyId);
