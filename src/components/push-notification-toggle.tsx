@@ -130,10 +130,14 @@ export function PushNotificationToggle() {
           localStorage.setItem(PREF_KEY, "granted");
           setStatus("enabled");
           setStep(null);
-          addDebug("✓ 有効化完了（保存中）");
-          saveFcmToken(user.uid, token)
-            .then(() => addDebug("✓ Firestore保存完了"))
-            .catch((err: unknown) => addDebug(`保存エラー: ${err instanceof Error ? err.message : String(err)}`));
+          addDebug("✓ トークン取得完了・Firestore保存中...");
+          try {
+            await saveFcmToken(user.uid, token);
+            if (!cancelled) addDebug("✓ Firestore保存完了");
+          } catch (saveErr: unknown) {
+            const msg = saveErr instanceof Error ? saveErr.message : String(saveErr);
+            if (!cancelled) addDebug(`⚠ Firestore保存エラー: ${msg}`);
+          }
         } else {
           const perm = typeof Notification !== "undefined" ? Notification.permission : "N/A";
           setError(`トークン取得失敗（permission: ${perm}）。APNs設定またはVAPIDキーを確認してください。`);
@@ -172,11 +176,17 @@ export function PushNotificationToggle() {
         // UIを先に更新してからFirestoreへ保存（保存のハングでUIが止まらないよう）
         localStorage.setItem(PREF_KEY, "granted");
         setStatus("enabled");
+        setStep("Firestoreに保存中…");
+        addDebug("✓ トークン取得完了・Firestore保存中...");
+        try {
+          await saveFcmToken(user.uid, token);
+          addDebug("✓ Firestore保存完了");
+        } catch (saveErr: unknown) {
+          const msg = saveErr instanceof Error ? saveErr.message : String(saveErr);
+          addDebug(`⚠ Firestore保存エラー: ${msg}`);
+          setError(`トークンの保存に失敗しました（通知が届かない可能性があります）: ${msg}`);
+        }
         setStep(null);
-        addDebug("✓ 有効化完了（保存中）");
-        saveFcmToken(user.uid, token)
-          .then(() => addDebug("✓ Firestore保存完了"))
-          .catch((err: unknown) => addDebug(`保存エラー: ${err instanceof Error ? err.message : String(err)}`));
       } else {
         const perm = typeof Notification !== "undefined" ? Notification.permission : "unknown";
         if (perm === "denied") {
