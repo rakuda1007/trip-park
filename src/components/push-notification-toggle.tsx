@@ -8,7 +8,7 @@ import {
   requestAndGetFcmToken,
   saveFcmToken,
 } from "@/lib/firebase/messaging";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const PREF_KEY = "push_notification_pref";
 const FLAG_KEY = "push_perm_requesting";
@@ -40,6 +40,8 @@ export function PushNotificationToggle() {
   const [step, setStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [debugLines, setDebugLines] = useState<string[]>([]);
+  // auto-complete のトリガーを ref で管理（state だと step 変化で effect が再実行される）
+  const shouldAutoComplete = useRef(false);
 
   function addDebug(msg: string) {
     setDebugLines((prev) => [...prev.slice(-9), `${new Date().toLocaleTimeString("ja-JP")} ${msg}`]);
@@ -75,10 +77,10 @@ export function PushNotificationToggle() {
         // iOSリロード後、許可済み → pref解除して自動取得
         localStorage.removeItem(PREF_KEY);
         addDebug("自動完了パスに進みます（リロード後）");
-        setStep("リロード後の設定を完了中…");
+        shouldAutoComplete.current = true;
+        setStep("設定を完了中…");
         return; // auto-complete useEffect へ
       } else {
-        // フラグはあったが許可されなかった（拒否 or タイムアウト）
         addDebug(`フラグあり・許可なし: perm=${notifPerm}`);
         setError(`通知が許可されませんでした（permission: ${notifPerm}）。iOSでは「許可」をタップしてください。`);
         setStatus("disabled");
@@ -87,11 +89,11 @@ export function PushNotificationToggle() {
     }
 
     // perm=granted だが pref が未設定/denied の場合：
-    // 以前に許可済みだがトークン未保存（前回の取得が中断された可能性）
-    // → 自動でトークン取得を再試行する
+    // 以前に許可済みだがトークン未保存 → 自動で再試行
     if (notifPerm === "granted" && pref !== "granted") {
       addDebug(`perm=granted pref=${pref} → 自動取得開始`);
-      setStep("リロード後の設定を完了中…");
+      shouldAutoComplete.current = true;
+      setStep("設定を完了中…");
       return; // auto-complete useEffect へ
     }
 
@@ -104,10 +106,13 @@ export function PushNotificationToggle() {
     }
   }, []);
 
-  // iOS リロード後の自動トークン取得（user が確定してから実行）
+  // 自動トークン取得（user が確定してから実行）
+  // shouldAutoComplete.current を ref で管理することで、onStep による step 変化で
+  // effect が再実行されて cancelled=true になるバグを防ぐ
   useEffect(() => {
     if (!user) return;
-    if (step !== "リロード後の設定を完了中…") return;
+    if (!shouldAutoComplete.current) return;
+    shouldAutoComplete.current = false; // 一度だけ実行
 
     let cancelled = false;
     (async () => {
@@ -122,7 +127,6 @@ export function PushNotificationToggle() {
         if (cancelled) return;
         addDebug(`token=${token ? token.slice(0, 15) + "..." : "null"}`);
         if (token) {
-          // UIを先に更新してからFirestoreへ保存（保存のハングでUIが止まらないよう）
           localStorage.setItem(PREF_KEY, "granted");
           setStatus("enabled");
           setStep(null);
@@ -148,7 +152,7 @@ export function PushNotificationToggle() {
       }
     })();
     return () => { cancelled = true; };
-  }, [user, step]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user]); // step を依存配列に入れない（onStep で step が変化しても再実行しない）
 
   async function handleEnable() {
     if (!user || busy) return;
