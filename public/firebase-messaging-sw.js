@@ -24,13 +24,22 @@ self.addEventListener('push', function (event) {
     || '';
   var url   = data.url || payload.url || '/';
 
+  // push イベント発火をサーバー側ログに記録（デバッグ用・確認後削除）
+  var debugFetch = fetch('/api/sw-debug', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ts: Date.now(), title: title, body: body, raw: payload }),
+  }).catch(function () {});
+
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body: body,
-      icon: '/icons/icon.png',
-      badge: '/icons/icon.png',
-      data: { url: url },
-      vibrate: [200, 100, 200],
+    debugFetch.then(function () {
+      return self.registration.showNotification(title, {
+        body: body,
+        icon: '/icons/icon.png',
+        badge: '/icons/icon.png',
+        data: { url: url },
+        vibrate: [200, 100, 200],
+      });
     })
   );
 });

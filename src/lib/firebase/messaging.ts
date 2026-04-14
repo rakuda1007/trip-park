@@ -3,7 +3,7 @@ import "client-only";
 import { getFirebaseApp } from "@/lib/firebase/client";
 import { getFirebaseFirestore } from "@/lib/firebase/client";
 import { doc, setDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
-import { getMessaging, getToken, onMessage, type Messaging } from "firebase/messaging";
+import { getMessaging, getToken, deleteToken, onMessage, type Messaging } from "firebase/messaging";
 
 // FCMトークンを localStorage にキャッシュする（24時間有効）
 // FCMトークン自体は60日有効なので24時間キャッシュで十分
@@ -137,6 +137,20 @@ export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean; onS
   // Firebase Messaging インスタンス取得
   report("Messaging初期化中...");
   const messaging = getFirebaseMessaging(); // throws if fails
+
+  // forceRefresh 時は Firebase 内部の push subscription も強制リセット。
+  // これにより古い/無効な subscription が残り続けるのを防ぎ、
+  // ルートスコープSWと紐付いた新鮮なトークンを確実に取得する。
+  if (opts?.forceRefresh) {
+    try {
+      report("push subscriptionをリセット中...");
+      await deleteToken(messaging);
+      report("リセット完了");
+    } catch {
+      // 既存トークンがない場合などは無視
+      report("リセットスキップ（既存トークンなし）");
+    }
+  }
 
   // Service Worker 取得
   // iOS はルートスコープ（"/"）の SW のみプッシュイベントを確実に起動する。
