@@ -150,6 +150,15 @@ export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean; onS
   if (registration) {
     const swName = registration.active?.scriptURL?.split("?")[0]?.split("/").pop() ?? "unknown";
     report(`ルートSW再利用: ${swName}`);
+    // SW スクリプトのコンテンツが変わった場合は即座に更新させる
+    // （同じURLのまま内容だけ変わった場合に有効）
+    try {
+      await registration.update();
+      await waitForActiveRegistration(registration, 3000);
+      report(`SW更新確認完了: ${registration.active?.state ?? "unknown"}`);
+    } catch {
+      // update() 失敗は無視（既存SWをそのまま使う）
+    }
   } else {
     // 2) /fcm/ スコープ SW を探す、なければ新規登録
     registration = await navigator.serviceWorker.getRegistration("/fcm/");
