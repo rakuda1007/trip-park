@@ -6,6 +6,33 @@ import { getFirebaseFirestore } from "@/lib/firebase/client";
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { getMessaging, getToken, onMessage, type Messaging } from "firebase/messaging";
 
+/**
+ * ServiceWorkerRegistration が active 状態になるまで待つ。
+ * 既に active なら即座に返す。タイムアウト（ms）を超えたら諦めて返す。
+ */
+function waitForActiveRegistration(
+  registration: ServiceWorkerRegistration,
+  timeoutMs: number,
+): Promise<void> {
+  if (registration.active) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs);
+
+    const sw = registration.installing ?? registration.waiting;
+    if (!sw) { clearTimeout(timer); resolve(); return; }
+
+    const onStateChange = () => {
+      if (sw.state === "activated") {
+        clearTimeout(timer);
+        sw.removeEventListener("statechange", onStateChange);
+        resolve();
+      }
+    };
+    sw.addEventListener("statechange", onStateChange);
+  });
+}
+
 let _messaging: Messaging | null = null;
 
 function getFirebaseMessaging(): Messaging | null {
@@ -50,7 +77,11 @@ export async function requestAndGetFcmToken(): Promise<string | null> {
   const swUrl = `/firebase-messaging-sw.js?firebaseConfig=${configParam}`;
 
   const registration = await navigator.serviceWorker.register(swUrl, { scope: "/" });
-  await navigator.serviceWorker.ready;
+
+  // registration を直接使用する。navigator.serviceWorker.ready は他の SW が
+  // waiting 状態の場合にハングするため使用しない。
+  // 登録した SW が active になるまで最大 5 秒待つ。
+  await waitForActiveRegistration(registration, 5000);
 
   const token = await getToken(messaging, {
     vapidKey,

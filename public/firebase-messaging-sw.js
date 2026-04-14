@@ -3,6 +3,16 @@
 importScripts('https://www.gstatic.com/firebasejs/12.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/12.12.0/firebase-messaging-compat.js');
 
+// インストール時に即座にアクティブ化して待機状態のハングを防ぐ
+self.addEventListener('install', function () {
+  self.skipWaiting();
+});
+
+// アクティブ化時に既存のクライアントを即座に制御下に置く
+self.addEventListener('activate', function (event) {
+  event.waitUntil(clients.claim());
+});
+
 let messaging = null;
 
 // Service Worker の URL から Firebase 設定を受け取る
