@@ -1,5 +1,6 @@
 import { AuthGuard } from "@/components/auth-guard";
 import { ProfileForm } from "@/components/profile/profile-form";
+import { PushNotificationToggle } from "@/components/push-notification-toggle";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -24,6 +25,7 @@ export default function ProfilePage() {
             設定
           </h2>
           <div className="mt-4 space-y-2">
+            <PushNotificationToggle />
             <Link
               href="/profile/households"
               className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/40 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
