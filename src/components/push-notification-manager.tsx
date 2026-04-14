@@ -32,6 +32,7 @@ export function PushNotificationManager() {
     if (typeof window === "undefined") return;
     const pref = localStorage.getItem(PREF_KEY);
     if (pref === "denied") return;
+    if (!("Notification" in window)) return;
 
     if (Notification.permission === "granted") {
       // 既に許可済み → 5秒後にトークン更新（起動速度を妨げない）
