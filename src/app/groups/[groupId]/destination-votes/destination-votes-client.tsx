@@ -16,7 +16,7 @@ import type { DestinationAnswer } from "@/types/destination";
 import type { GroupDoc } from "@/types/group";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 const ANSWER_LABELS: Record<DestinationAnswer, string> = {
   first: "ここに行きたい 🙋",
@@ -358,95 +358,100 @@ export function DestinationVotesClient() {
                     );
                   }
 
+                  const rowBg = isDecided ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-white dark:bg-zinc-900/40";
                   return (
-                    <tr
-                      key={c.id}
-                      className={`border-b border-zinc-100 last:border-0 dark:border-zinc-800 ${isDecided ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-white dark:bg-zinc-900/40"}`}
-                    >
-                      {/* 目的地名 + 投票バー + 投票ボタン */}
-                      <td className="px-4 py-3 align-top">
-                        <div className="flex flex-wrap items-start gap-1.5">
-                          {isDecided ? (
-                            <span className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                              確定
-                            </span>
-                          ) : null}
-                          {c.data.url ? (
-                            <a
-                              href={c.data.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="break-words font-medium text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                            >
-                              {c.data.name}
-                            </a>
-                          ) : (
-                            <span className="break-words font-medium text-zinc-900 dark:text-zinc-50">
-                              {c.data.name}
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-0.5 text-[10px] text-zinc-400">
-                          提案: {c.data.proposedByDisplayName ?? "—"}
-                        </p>
-                        {/* 投票バー（右端のアイコンをクリックして投票） */}
-                        <div className="mt-2 space-y-1">
-                          {(["first", "want", "reserve"] as DestinationAnswer[]).map((a) => {
-                            const count = a === "first" ? s.first : a === "want" ? s.want : s.reserve;
-                            const pct = s.total > 0 ? Math.round((count / s.total) * 100) : 0;
-                            const isSelected = myVote?.data.answer === a;
-                            const ICONS: Record<DestinationAnswer, string> = { first: "🙋", want: "👍", reserve: "🤏" };
-                            return (
-                              <div key={a} className="flex items-center gap-1.5 text-xs">
-                                <span className="w-20 shrink-0 truncate text-zinc-500">{ANSWER_LABELS[a]}</span>
-                                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-700">
-                                  <div className={`h-full ${ANSWER_BAR_COLORS[a]} transition-all`} style={{ width: `${pct}%` }} />
-                                </div>
-                                <span className="w-3 shrink-0 text-right text-[10px] text-zinc-400">{count}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleVote(c.id, a)}
-                                  disabled={busy !== null}
-                                  title={ANSWER_LABELS[a]}
-                                  className={`shrink-0 rounded-full p-0.5 text-base leading-none transition hover:scale-110 disabled:opacity-40 ${isSelected ? "ring-2 ring-offset-1 ring-zinc-400" : "opacity-50 hover:opacity-100"}`}
-                                >
-                                  {ICONS[a]}
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {/* 操作ボタン */}
-                        {(isOwner || (user && c.data.proposedByUserId === user.uid)) ? (
-                          <div className="mt-2 flex flex-wrap gap-1 border-t border-zinc-100 pt-2 text-xs dark:border-zinc-700">
-                            {isOwner && !isDecided ? (
-                              <button type="button" onClick={() => handleDecide(c.id)} disabled={busy !== null}
-                                className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">
-                                {busy === `decide-${c.id}` ? "…" : "確定"}
-                              </button>
+                    <Fragment key={c.id}>
+                      {/* 行1: 目的地名・費用・補足 */}
+                      <tr className={rowBg}>
+                        {/* 目的地名 */}
+                        <td className="px-4 pt-3 pb-1 align-top">
+                          <div className="flex flex-wrap items-start gap-1.5">
+                            {isDecided ? (
+                              <span className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                確定
+                              </span>
                             ) : null}
-                            <button type="button" onClick={() => setEditingId(c.id)} disabled={busy !== null}
-                              className="rounded border border-zinc-300 px-2 py-0.5 text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-400">
-                              編集
-                            </button>
-                            <button type="button" onClick={() => handleDeleteCandidate(c.id)} disabled={busy !== null}
-                              className="rounded px-2 py-0.5 text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400">
-                              削除
-                            </button>
+                            {c.data.url ? (
+                              <a
+                                href={c.data.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="break-words font-medium text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                              >
+                                {c.data.name}
+                              </a>
+                            ) : (
+                              <span className="break-words font-medium text-zinc-900 dark:text-zinc-50">
+                                {c.data.name}
+                              </span>
+                            )}
                           </div>
-                        ) : null}
-                      </td>
-                      {/* 費用 */}
-                      <td className="whitespace-nowrap px-2 py-3 text-right align-top font-mono font-semibold text-zinc-800 dark:text-zinc-200">
-                        {c.data.costPerNight ? formatCost(c.data.costPerNight) : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
-                      </td>
-                      {/* 補足 */}
-                      <td className="break-words px-2 py-3 align-top text-xs text-zinc-500 dark:text-zinc-400">
-                        {c.data.description ?? (
-                          <span className="text-zinc-300 dark:text-zinc-600">—</span>
-                        )}
-                      </td>
-                    </tr>
+                          <p className="mt-0.5 text-[10px] text-zinc-400">
+                            提案: {c.data.proposedByDisplayName ?? "—"}
+                          </p>
+                        </td>
+                        {/* 費用 */}
+                        <td className="whitespace-nowrap px-2 pt-3 pb-1 text-right align-top font-mono font-semibold text-zinc-800 dark:text-zinc-200">
+                          {c.data.costPerNight ? formatCost(c.data.costPerNight) : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
+                        </td>
+                        {/* 補足 */}
+                        <td className="break-words px-2 pt-3 pb-1 align-top text-xs text-zinc-500 dark:text-zinc-400">
+                          {c.data.description ?? (
+                            <span className="text-zinc-300 dark:text-zinc-600">—</span>
+                          )}
+                        </td>
+                      </tr>
+
+                      {/* 行2: 投票バー（全列結合）+ 操作ボタン */}
+                      <tr className={`border-b border-zinc-100 last:border-0 dark:border-zinc-800 ${rowBg}`}>
+                        <td colSpan={3} className="px-4 pb-3 pt-1">
+                          <div className="space-y-1">
+                            {(["first", "want", "reserve"] as DestinationAnswer[]).map((a) => {
+                              const count = a === "first" ? s.first : a === "want" ? s.want : s.reserve;
+                              const pct = s.total > 0 ? Math.round((count / s.total) * 100) : 0;
+                              const isSelected = myVote?.data.answer === a;
+                              const ICONS: Record<DestinationAnswer, string> = { first: "🙋", want: "👍", reserve: "🤏" };
+                              return (
+                                <div key={a} className="flex items-center gap-1.5 text-xs">
+                                  <span className="w-20 shrink-0 truncate text-zinc-500">{ANSWER_LABELS[a]}</span>
+                                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-700">
+                                    <div className={`h-full ${ANSWER_BAR_COLORS[a]} transition-all`} style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <span className="w-3 shrink-0 text-right text-[10px] text-zinc-400">{count}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleVote(c.id, a)}
+                                    disabled={busy !== null}
+                                    title={ANSWER_LABELS[a]}
+                                    className={`shrink-0 rounded-full p-0.5 text-base leading-none transition hover:scale-110 disabled:opacity-40 ${isSelected ? "ring-2 ring-offset-1 ring-zinc-400" : "opacity-50 hover:opacity-100"}`}
+                                  >
+                                    {ICONS[a]}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {(isOwner || (user && c.data.proposedByUserId === user.uid)) ? (
+                            <div className="mt-2 flex flex-wrap gap-1 border-t border-zinc-100 pt-2 text-xs dark:border-zinc-700">
+                              {isOwner && !isDecided ? (
+                                <button type="button" onClick={() => handleDecide(c.id)} disabled={busy !== null}
+                                  className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">
+                                  {busy === `decide-${c.id}` ? "…" : "確定"}
+                                </button>
+                              ) : null}
+                              <button type="button" onClick={() => setEditingId(c.id)} disabled={busy !== null}
+                                className="rounded border border-zinc-300 px-2 py-0.5 text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-400">
+                                編集
+                              </button>
+                              <button type="button" onClick={() => handleDeleteCandidate(c.id)} disabled={busy !== null}
+                                className="rounded px-2 py-0.5 text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400">
+                                削除
+                              </button>
+                            </div>
+                          ) : null}
+                        </td>
+                      </tr>
+                    </Fragment>
                   );
                 })}
               </tbody>
