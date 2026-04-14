@@ -319,8 +319,8 @@ export function DestinationVotesClient() {
           <div className="mt-6 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
             <table className="w-full table-fixed text-sm">
               <colgroup>
-                <col className="w-[55%]" />
-                <col className="w-[15%]" />
+                <col className="w-[48%]" />
+                <col className="w-[22%]" />
                 <col className="w-[30%]" />
               </colgroup>
               <thead>
@@ -437,7 +437,7 @@ export function DestinationVotesClient() {
                         ) : null}
                       </td>
                       {/* 費用 */}
-                      <td className="px-2 py-3 text-right align-top font-mono font-semibold text-zinc-800 dark:text-zinc-200">
+                      <td className="whitespace-nowrap px-2 py-3 text-right align-top font-mono font-semibold text-zinc-800 dark:text-zinc-200">
                         {c.data.costPerNight ? formatCost(c.data.costPerNight) : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
                       </td>
                       {/* 補足 */}
