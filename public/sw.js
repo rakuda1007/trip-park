@@ -44,23 +44,14 @@ self.addEventListener("push", (event) => {
     || "";
   const url   = data.url || payload.url || "/";
 
-  // デバッグ用ログ（確認後削除予定）
-  const debugFetch = fetch("/api/sw-debug", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sw: "sw.js", ts: Date.now(), title, body, raw: payload }),
-  }).catch(() => {});
-
   event.waitUntil(
-    debugFetch.then(() =>
-      self.registration.showNotification(title, {
-        body,
-        icon: "/icons/icon.png",
-        badge: "/icons/icon.png",
-        data: { url },
-        vibrate: [200, 100, 200],
-      })
-    )
+    self.registration.showNotification(title, {
+      body,
+      icon: "/icons/icon.png",
+      badge: "/icons/icon.png",
+      data: { url },
+      vibrate: [200, 100, 200],
+    })
   );
 });
 
