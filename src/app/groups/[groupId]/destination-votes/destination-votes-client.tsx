@@ -319,15 +319,15 @@ export function DestinationVotesClient() {
           <div className="mt-6 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
             <table className="w-full table-fixed text-sm">
               <colgroup>
-                <col className="w-[45%]" />
-                <col className="w-[18%]" />
-                <col className="w-[37%]" />
+                <col className="w-[55%]" />
+                <col className="w-[15%]" />
+                <col className="w-[30%]" />
               </colgroup>
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-xs font-semibold text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400">
                   <th className="px-4 py-3">目的地</th>
-                  <th className="px-4 py-3 text-right">費用</th>
-                  <th className="px-4 py-3">補足</th>
+                  <th className="px-2 py-3 text-right">費用</th>
+                  <th className="px-2 py-3">補足</th>
                 </tr>
               </thead>
               <tbody>
@@ -437,11 +437,11 @@ export function DestinationVotesClient() {
                         ) : null}
                       </td>
                       {/* 費用 */}
-                      <td className="px-4 py-3 text-right align-top font-mono font-semibold text-zinc-800 dark:text-zinc-200">
+                      <td className="px-2 py-3 text-right align-top font-mono font-semibold text-zinc-800 dark:text-zinc-200">
                         {c.data.costPerNight ? formatCost(c.data.costPerNight) : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
                       </td>
                       {/* 補足 */}
-                      <td className="break-words px-4 py-3 align-top text-xs text-zinc-500 dark:text-zinc-400">
+                      <td className="break-words px-2 py-3 align-top text-xs text-zinc-500 dark:text-zinc-400">
                         {c.data.description ?? (
                           <span className="text-zinc-300 dark:text-zinc-600">—</span>
                         )}

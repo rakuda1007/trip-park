@@ -96,20 +96,20 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
   return (
     <div className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <div className="mx-auto max-w-3xl px-4">
-        <div className="flex items-center gap-2 overflow-x-auto py-2">
+        <div className="flex items-center gap-0.5 overflow-x-auto py-2">
           {/* ステップ */}
           {steps.map((step, idx) => {
             const isActive = step.key === activeStep;
             return (
               <div key={step.key} className="flex shrink-0 items-center">
                 {idx > 0 && (
-                  <div className={`mx-1.5 h-px w-5 shrink-0 ${
+                  <div className={`mx-1 h-px w-3 shrink-0 ${
                     step.done ? "bg-emerald-300 dark:bg-emerald-700" : "bg-zinc-200 dark:bg-zinc-700"
                   }`} />
                 )}
                 <Link
                   href={step.href}
-                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                  className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${
                     isActive
                       ? "bg-blue-600 text-white shadow-sm"
                       : step.done
