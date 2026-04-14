@@ -99,18 +99,17 @@ async function sendMulticast(
 
   const invalidTokens: string[] = [];
 
+  // データのみ (data-only) 形式で送信する。
+  // notification フィールドを含む形式は iOS PWA で表示されないケースがあるため、
+  // SW の onBackgroundMessage でコントロールする。
+  const payload = { ...data, _title: title, _body: body };
+
   for (const chunk of chunks) {
     const response = await messaging.sendEachForMulticast({
       tokens: chunk,
-      notification: { title, body },
-      data,
+      data: payload,
       webpush: {
-        notification: {
-          title,
-          body,
-          icon: "/icons/icon.png",
-          badge: "/icons/icon.png",
-        },
+        headers: { Urgency: "high" },
         fcmOptions: { link: data.url ?? "/" },
       },
     });

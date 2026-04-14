@@ -33,11 +33,12 @@ var firebaseConfig = ${JSON.stringify(config)};
 firebase.initializeApp(firebaseConfig);
 var messaging = firebase.messaging();
 
+// data-only 形式で受信し、onBackgroundMessage で通知を表示する
 messaging.onBackgroundMessage(function (payload) {
-  var title = (payload.notification && payload.notification.title) || 'Trip Park';
-  var body = (payload.notification && payload.notification.body) || '';
-  var icon = (payload.notification && payload.notification.icon) || '/icons/icon.png';
   var data = payload.data || {};
+  var title = data._title || (payload.notification && payload.notification.title) || 'Trip Park';
+  var body = data._body || (payload.notification && payload.notification.body) || '';
+  var icon = '/icons/icon.png';
   self.registration.showNotification(title, {
     body: body,
     icon: icon,

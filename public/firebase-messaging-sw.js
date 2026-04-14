@@ -25,12 +25,12 @@ if (configStr) {
     firebase.initializeApp(firebaseConfig);
     messaging = firebase.messaging();
 
-    // バックグラウンドメッセージのハンドリング
+    // バックグラウンドメッセージのハンドリング（data-only 形式対応）
     messaging.onBackgroundMessage(function (payload) {
-      const title = payload.notification?.title ?? 'Trip Park';
-      const body = payload.notification?.body ?? '';
-      const icon = payload.notification?.icon ?? '/icons/icon.png';
       const data = payload.data ?? {};
+      const title = data._title ?? payload.notification?.title ?? 'Trip Park';
+      const body = data._body ?? payload.notification?.body ?? '';
+      const icon = '/icons/icon.png';
 
       self.registration.showNotification(title, {
         body,

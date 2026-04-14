@@ -139,22 +139,30 @@ export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean; onS
   const messaging = getFirebaseMessaging(); // throws if fails
 
   // Service Worker 登録
-  // /api/firebase-sw は設定を注入済みの安定したURLで、毎回再登録しない
+  // /api/firebase-sw は設定を注入済みの安定したURL（クエリパラメータなし）
   const swUrl = "/api/firebase-sw";
 
-  // 既存の登録があれば再利用（register() の呼び出しを省略してハングを防ぐ）
-  report("SW確認中...");
+  const registerPromise = navigator.serviceWorker.register(swUrl, { scope: "/" });
+  const regTimeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("Service Worker の登録がタイムアウトしました（10秒）")), 10_000)
+  );
+
+  report("SW登録中...");
+  // 既存登録があっても register() を呼ぶことで古いSW（クエリパラメータ付きURL）から
+  // 新しいSW（/api/firebase-sw）へ移行する。
+  // ただし iOS で register() がハングする可能性があるため getRegistration() で先確認し、
+  // 既に新しいSWなら再登録をスキップする。
   let registration = await navigator.serviceWorker.getRegistration("/");
-  if (!registration) {
-    report("SW新規登録中...");
-    const registerPromise = navigator.serviceWorker.register(swUrl, { scope: "/" });
-    const regTimeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Service Worker の登録がタイムアウトしました（10秒）")), 10_000)
-    );
+  const isNewSw = registration?.active?.scriptURL?.includes("/api/firebase-sw") ||
+                  registration?.installing?.scriptURL?.includes("/api/firebase-sw") ||
+                  registration?.waiting?.scriptURL?.includes("/api/firebase-sw");
+
+  if (!registration || !isNewSw) {
+    report(registration ? "旧SW→新SWへ移行中..." : "SW新規登録中...");
     registration = await Promise.race([registerPromise, regTimeout]);
     report("SW登録完了");
   } else {
-    report("既存SW再利用");
+    report("新SW再利用");
   }
 
   // SW がアクティブになるまで待つ（最大 5 秒）
