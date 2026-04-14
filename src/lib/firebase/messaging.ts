@@ -74,80 +74,94 @@ function waitForActiveRegistration(
 
 let _messaging: Messaging | null = null;
 
-function getFirebaseMessaging(): Messaging | null {
-  if (typeof window === "undefined") return null;
+function getFirebaseMessaging(): Messaging {
   if (_messaging) return _messaging;
-  try {
-    _messaging = getMessaging(getFirebaseApp());
-    return _messaging;
-  } catch {
-    return null;
-  }
+  _messaging = getMessaging(getFirebaseApp());
+  return _messaging;
 }
 
 /**
  * サービスワーカーを登録して FCM トークンを取得する。
  * キャッシュがある場合はSW登録・ネットワーク通信をスキップして即座に返す。
  * NEXT_PUBLIC_FIREBASE_VAPID_KEY が設定されている必要がある。
+ *
+ * エラー時は例外を投げる（呼び出し元で catch してメッセージを表示すること）。
  */
 export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean }): Promise<string | null> {
   if (typeof window === "undefined") return null;
-  if (!("Notification" in window)) return null;
-  if (!("serviceWorker" in navigator)) return null;
+
+  // 基本的なブラウザ対応チェック
+  if (!("Notification" in window)) {
+    throw new Error("このブラウザは通知API（Notification）に対応していません");
+  }
+  if (!("serviceWorker" in navigator)) {
+    throw new Error("このブラウザはService Workerに対応していません");
+  }
 
   const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
   if (!vapidKey) {
-    console.warn("[FCM] NEXT_PUBLIC_FIREBASE_VAPID_KEY が設定されていません。");
-    return null;
+    throw new Error("VAPID キーが設定されていません（環境変数 NEXT_PUBLIC_FIREBASE_VAPID_KEY）");
   }
 
   // 通知許可の確認
-  if (Notification.permission === "denied") return null;
+  if (Notification.permission === "denied") {
+    return null; // ブロック済み（エラーではない）
+  }
   if (Notification.permission === "default") {
+    console.log("[FCM] 通知許可ダイアログを表示します...");
     const permission = await Notification.requestPermission();
+    console.log("[FCM] 許可結果:", permission);
     if (permission !== "granted") return null;
   }
 
   // キャッシュヒットなら SW 登録・getToken のネットワーク通信をスキップ
   if (!opts?.forceRefresh) {
     const cached = getCachedFcmToken_private();
-    if (cached) return cached;
+    if (cached) {
+      console.log("[FCM] キャッシュからトークンを返します");
+      return cached;
+    }
   }
 
-  const messaging = getFirebaseMessaging();
-  if (!messaging) return null;
+  // Firebase Messaging インスタンス取得
+  console.log("[FCM] Firebase Messaging を初期化します...");
+  const messaging = getFirebaseMessaging(); // throws if fails
 
-  // Firebase Config をクエリパラメータとしてサービスワーカーに渡す
+  // Service Worker 登録
+  console.log("[FCM] Service Worker を登録します...");
   const firebaseConfig = getFirebasePublicConfig();
   const configParam = encodeURIComponent(JSON.stringify(firebaseConfig));
   const swUrl = `/firebase-messaging-sw.js?firebaseConfig=${configParam}`;
-
   const registration = await navigator.serviceWorker.register(swUrl, { scope: "/" });
 
-  // registration を直接使用する。navigator.serviceWorker.ready は他の SW が
-  // waiting 状態の場合にハングするため使用しない。
-  // 登録した SW が active になるまで最大 5 秒待つ。
+  // SW がアクティブになるまで待つ（最大 5 秒）
+  console.log("[FCM] Service Worker のアクティブ化を待ちます...");
   await waitForActiveRegistration(registration, 5000);
+  console.log("[FCM] SW状態:", registration.active?.state ?? "unknown");
 
+  // FCM トークン取得
+  console.log("[FCM] getToken を呼び出します...");
   const token = await getToken(messaging, {
     vapidKey,
     serviceWorkerRegistration: registration,
   });
 
   if (token) {
+    console.log("[FCM] トークン取得成功:", token.slice(0, 20) + "...");
     setCachedFcmToken(token);
+  } else {
+    console.warn("[FCM] getToken が空のトークンを返しました");
   }
 
-  return token ?? null;
+  return token || null;
 }
 
 /** FCM トークンを Firestore の users/{uid} に保存する */
 export async function saveFcmToken(uid: string, token: string): Promise<void> {
   const db = getFirebaseFirestore();
   const userRef = doc(db, "users", uid);
-  // setDoc + merge:true を使うことでドキュメントが存在しない場合も対応する
   await setDoc(userRef, { fcmTokens: arrayUnion(token) }, { merge: true });
-  console.log("[FCM] Token saved for uid:", uid, "token prefix:", token.slice(0, 20));
+  console.log("[FCM] Token saved for uid:", uid);
 }
 
 /** FCM トークンを Firestore から削除する（通知オフ時・ログアウト時） */
@@ -165,8 +179,13 @@ export async function removeFcmToken(uid: string, token: string): Promise<void> 
 export function setupForegroundMessageHandler(
   onReceived: (title: string, body: string, url?: string) => void,
 ): (() => void) | null {
-  const messaging = getFirebaseMessaging();
-  if (!messaging) return null;
+  let messaging: Messaging;
+  try {
+    if (typeof window === "undefined") return null;
+    messaging = getFirebaseMessaging();
+  } catch {
+    return null;
+  }
 
   const unsubscribe = onMessage(messaging, (payload) => {
     const title = payload.notification?.title ?? "Trip Park";

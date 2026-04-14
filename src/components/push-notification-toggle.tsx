@@ -15,23 +15,45 @@ const PREF_KEY = "push_notification_pref";
 type PushStatus =
   | "loading"      // 初期化中
   | "unsupported"  // ブラウザ非対応
-  | "blocked"      // ブラウザで拒否済み（設定変更が必要）
+  | "not-pwa"      // iOSでホーム画面追加が必要
+  | "blocked"      // ブラウザで拒否済み
   | "enabled"      // 有効
-  | "disabled";    // 無効（許可はされているが OFF にしている、または未設定）
+  | "disabled";    // 無効
+
+/** iOS Safari でホーム画面に追加されていない（非 PWA）かどうか */
+function isIosNonPwa(): boolean {
+  if (typeof window === "undefined") return false;
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (!isIos) return false;
+  // ホーム画面から起動している場合は standalone になる
+  const isStandalone =
+    ("standalone" in window.navigator && (window.navigator as { standalone?: boolean }).standalone === true) ||
+    window.matchMedia("(display-mode: standalone)").matches;
+  return !isStandalone;
+}
 
 /** プッシュ通知の ON/OFF を切り替えられる設定行コンポーネント */
 export function PushNotificationToggle() {
   const { user } = useAuth();
   const [status, setStatus] = useState<PushStatus>("loading");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [step, setStep] = useState<string | null>(null);   // 処理ステップ
+  const [error, setError] = useState<string | null>(null); // エラー詳細
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    // iOS非PWA：通知自体サポート外
+    if (isIosNonPwa()) {
+      setStatus("not-pwa");
+      return;
+    }
+
     if (!("Notification" in window) || !("serviceWorker" in navigator)) {
       setStatus("unsupported");
       return;
     }
+
     const pref = localStorage.getItem(PREF_KEY);
     if (Notification.permission === "denied") {
       setStatus("blocked");
@@ -45,26 +67,35 @@ export function PushNotificationToggle() {
   async function handleEnable() {
     if (!user || busy) return;
     setBusy(true);
-    setMessage(null);
+    setStep("開始中…");
+    setError(null);
+
     try {
+      setStep("通知許可を確認中…");
       const token = await requestAndGetFcmToken({ forceRefresh: true });
+
       if (token) {
+        setStep("Firestoreに保存中…");
         await saveFcmToken(user.uid, token);
         localStorage.setItem(PREF_KEY, "granted");
         setStatus("enabled");
-        setMessage("プッシュ通知を有効にしました");
+        setStep(null);
       } else {
-        // requestPermission で拒否された場合
-        if (typeof Notification !== "undefined" && Notification.permission === "denied") {
+        // null = ユーザーが許可ダイアログで拒否 or iOSでブラウザ側に拒否された
+        const perm = typeof Notification !== "undefined" ? Notification.permission : "unknown";
+        if (perm === "denied") {
           setStatus("blocked");
-          setMessage("ブラウザで通知がブロックされています。ブラウザの設定から許可してください。");
+          setError("ブラウザで通知がブロックされています。ブラウザの設定から「許可」に変更してください。");
         } else {
-          setMessage("有効化できませんでした。もう一度お試しください。");
+          setError(`FCMトークンが取得できませんでした（permission: ${perm}）。iOSの場合はホーム画面に追加してから再試行してください。`);
         }
+        setStep(null);
       }
     } catch (err) {
-      console.error("[Push] handleEnable error:", err);
-      setMessage("エラーが発生しました。もう一度お試しください。");
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[Push] handleEnable failed:", err);
+      setError(`エラー: ${msg}`);
+      setStep(null);
     } finally {
       setBusy(false);
     }
@@ -73,44 +104,43 @@ export function PushNotificationToggle() {
   async function handleDisable() {
     if (!user || busy) return;
     setBusy(true);
-    setMessage(null);
+    setStep("無効化中…");
+    setError(null);
     try {
       // キャッシュからトークンを取得（SW登録・通知許可は不要）
       const token = getCachedFcmToken();
       if (token) {
         await removeFcmToken(user.uid, token).catch((err) => {
-          console.warn("[Push] removeFcmToken failed:", err);
+          console.warn("[Push] removeFcmToken:", err);
         });
       }
     } finally {
       localStorage.setItem(PREF_KEY, "denied");
       clearCachedFcmToken();
       setStatus("disabled");
-      setMessage("プッシュ通知を無効にしました");
+      setStep(null);
       setBusy(false);
     }
   }
 
+  // ── ローディング中 ──
   if (status === "loading") {
-    return (
-      <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
-        <div>
-          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">プッシュ通知</p>
-          <p className="mt-0.5 text-xs text-zinc-400">読み込み中…</p>
-        </div>
-      </div>
-    );
+    return <NotifyRow label="プッシュ通知" sub="読み込み中…" />;
   }
 
+  // ── ブラウザ非対応 ──
   if (status === "unsupported") {
+    return <NotifyRow label="プッシュ通知" sub="このブラウザは対応していません" />;
+  }
+
+  // ── iOS Safari（非 PWA）──
+  if (status === "not-pwa") {
     return (
-      <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
-        <div>
-          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">プッシュ通知</p>
-          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-            このブラウザはプッシュ通知に対応していません
-          </p>
-        </div>
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/40 dark:bg-amber-950/20">
+        <p className="text-sm font-medium text-amber-800 dark:text-amber-200">プッシュ通知</p>
+        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+          iOSでプッシュ通知を使うには、Safari の「共有」→「ホーム画面に追加」でアプリをインストールし、ホーム画面から起動してください。
+        </p>
       </div>
     );
   }
@@ -120,6 +150,7 @@ export function PushNotificationToggle() {
   return (
     <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
       <div className="flex items-center justify-between gap-4">
+        {/* ラベル */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
@@ -129,8 +160,8 @@ export function PushNotificationToggle() {
             <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">プッシュ通知</p>
           </div>
           <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-            {busy
-              ? "処理中…しばらくお待ちください"
+            {busy && step
+              ? step
               : status === "blocked"
                 ? "ブラウザで通知がブロックされています"
                 : isEnabled
@@ -139,7 +170,7 @@ export function PushNotificationToggle() {
           </p>
         </div>
 
-        {/* トグルスイッチ / ブロック表示 */}
+        {/* トグル / ブロックバッジ */}
         {status === "blocked" ? (
           <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">
             ブロック中
@@ -156,11 +187,7 @@ export function PushNotificationToggle() {
               isEnabled ? "bg-blue-600" : "bg-zinc-200 dark:bg-zinc-600"
             }`}
           >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ${
-                isEnabled ? "translate-x-5" : "translate-x-0"
-              }`}
-            />
+            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ${isEnabled ? "translate-x-5" : "translate-x-0"}`} />
           </button>
         )}
       </div>
@@ -172,16 +199,23 @@ export function PushNotificationToggle() {
         </p>
       )}
 
-      {/* 操作結果メッセージ */}
-      {message && !busy && (
-        <p className={`mt-2 text-xs ${
-          message.includes("失敗") || message.includes("エラー") || message.includes("ブロック") || message.includes("できませんでした")
-            ? "text-red-500 dark:text-red-400"
-            : "text-emerald-600 dark:text-emerald-400"
-        }`}>
-          {message}
-        </p>
+      {/* エラー詳細（赤字・目立つ） */}
+      {error && !busy && (
+        <div className="mt-2 rounded-md bg-red-50 px-3 py-2 dark:bg-red-950/30">
+          <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+        </div>
       )}
+    </div>
+  );
+}
+
+function NotifyRow({ label, sub }: { label: string; sub: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
+      <div>
+        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{label}</p>
+        <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{sub}</p>
+      </div>
     </div>
   );
 }
