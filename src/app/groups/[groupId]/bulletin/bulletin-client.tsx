@@ -67,6 +67,7 @@ export function BulletinClient() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
+  const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
   const [newCategory, setNewCategory] = useState<BulletinCategory>("general");
@@ -122,6 +123,7 @@ export function BulletinClient() {
       setNewBody("");
       setNewCategory("general");
       setNewImportance("normal");
+      setShowForm(false);
       await load();
       // 通知送信（失敗しても続行）
       sendNotification({
@@ -187,9 +189,20 @@ export function BulletinClient() {
         ← {group.name}
       </Link>
 
-      <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        掲示板
-      </h1>
+      <div className="mt-4 flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+          掲示板
+        </h1>
+        {user && isMember ? (
+          <button
+            type="button"
+            onClick={() => setShowForm((v) => !v)}
+            className="shrink-0 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+          >
+            {showForm ? "× キャンセル" : "+ 新しい話題"}
+          </button>
+        ) : null}
+      </div>
       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
         話題ごとにスレッドが分かれます。一覧から話題を選ぶと、本文と返信を見たり書き込みできます。
       </p>
@@ -200,8 +213,9 @@ export function BulletinClient() {
         </p>
       ) : null}
 
-      {user && isMember ? (
-        <section className="mt-8 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+      {/* 新しい話題フォーム（ボタンを押したときだけ表示） */}
+      {showForm && user && isMember ? (
+        <section className="mt-6 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
           <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
             新しい話題を立てる
           </h2>
@@ -261,9 +275,7 @@ export function BulletinClient() {
             <button
               type="button"
               onClick={handleCreateTopic}
-              disabled={
-                busy !== null || !newTitle.trim() || !newBody.trim()
-              }
+              disabled={busy !== null || !newTitle.trim() || !newBody.trim()}
               className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
             >
               {busy === "create" ? "作成中…" : "話題を作成"}
@@ -272,13 +284,13 @@ export function BulletinClient() {
         </section>
       ) : null}
 
-      <section className="mt-10">
+      <section className="mt-8">
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
           話題一覧
         </h2>
         {topics.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-500">
-            まだ話題がありません。上のフォームから最初の話題を作成してください。
+            まだ話題がありません。「＋ 新しい話題」ボタンから最初の話題を作成してください。
           </p>
         ) : (
           <ul className="mt-4 space-y-3">

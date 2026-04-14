@@ -413,7 +413,7 @@ export function DestinationVotesClient() {
                               const ICONS: Record<DestinationAnswer, string> = { first: "🙋", want: "👍", reserve: "🤏" };
                               return (
                                 <div key={a} className="flex items-center gap-1.5 text-xs">
-                                  <span className="w-20 shrink-0 truncate text-zinc-500">{ANSWER_LABELS[a]}</span>
+                                  <span className="w-28 shrink-0 truncate text-zinc-500">{ANSWER_LABELS[a]}</span>
                                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-700">
                                     <div className={`h-full ${ANSWER_BAR_COLORS[a]} transition-all`} style={{ width: `${pct}%` }} />
                                   </div>
