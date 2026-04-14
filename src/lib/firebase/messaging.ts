@@ -87,7 +87,7 @@ function getFirebaseMessaging(): Messaging {
  *
  * エラー時は例外を投げる（呼び出し元で catch してメッセージを表示すること）。
  */
-export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean }): Promise<string | null> {
+export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean; onStep?: (step: string) => void }): Promise<string | null> {
   if (typeof window === "undefined") return null;
 
   // 基本的なブラウザ対応チェック
@@ -130,31 +130,42 @@ export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean }): 
     }
   }
 
+  const report = (msg: string) => {
+    console.log(`[FCM] ${msg}`);
+    opts?.onStep?.(msg);
+  };
+
   // Firebase Messaging インスタンス取得
-  console.log("[FCM] Firebase Messaging を初期化します...");
+  report("Messaging初期化中...");
   const messaging = getFirebaseMessaging(); // throws if fails
 
   // Service Worker 登録
-  console.log("[FCM] Service Worker を登録します...");
+  report("SW登録中...");
   const firebaseConfig = getFirebasePublicConfig();
   const configParam = encodeURIComponent(JSON.stringify(firebaseConfig));
   const swUrl = `/firebase-messaging-sw.js?firebaseConfig=${configParam}`;
   const registration = await navigator.serviceWorker.register(swUrl, { scope: "/" });
 
   // SW がアクティブになるまで待つ（最大 5 秒）
-  console.log("[FCM] Service Worker のアクティブ化を待ちます...");
+  report("SW有効化待ち...");
   await waitForActiveRegistration(registration, 5000);
-  console.log("[FCM] SW状態:", registration.active?.state ?? "unknown");
+  report(`SW状態: ${registration.active?.state ?? "unknown"}`);
 
-  // FCM トークン取得
-  console.log("[FCM] getToken を呼び出します...");
-  const token = await getToken(messaging, {
+  // FCM トークン取得（最大 15 秒でタイムアウト）
+  report("getToken呼び出し中...");
+  const tokenPromise = getToken(messaging, {
     vapidKey,
     serviceWorkerRegistration: registration,
   });
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(
+      "FCMトークン取得がタイムアウトしました（15秒）。Firebase ConsoleでWeb Push証明書（VAPIDキー）が設定されているか確認してください。"
+    )), 15_000)
+  );
+  const token = await Promise.race([tokenPromise, timeoutPromise]);
 
   if (token) {
-    console.log("[FCM] トークン取得成功:", token.slice(0, 20) + "...");
+    report(`トークン取得成功: ${token.slice(0, 20)}...`);
     setCachedFcmToken(token);
   } else {
     console.warn("[FCM] getToken が空のトークンを返しました");

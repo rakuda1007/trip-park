@@ -115,7 +115,10 @@ export function PushNotificationToggle() {
       addDebug(`自動取得開始 uid=${user.uid.slice(0, 8)}...`);
       try {
         setStep("FCMトークンを取得中…");
-        const token = await requestAndGetFcmToken({ forceRefresh: true });
+        const token = await requestAndGetFcmToken({
+          forceRefresh: true,
+          onStep: (s) => { addDebug(s); setStep(s); },
+        });
         if (cancelled) return;
         addDebug(`token=${token ? token.slice(0, 15) + "..." : "null"}`);
         if (token) {
@@ -153,7 +156,10 @@ export function PushNotificationToggle() {
     addDebug(`手動ON開始 perm=${typeof Notification !== "undefined" ? Notification.permission : "N/A"}`);
 
     try {
-      const token = await requestAndGetFcmToken({ forceRefresh: true });
+      const token = await requestAndGetFcmToken({
+        forceRefresh: true,
+        onStep: (s) => { addDebug(s); setStep(s); },
+      });
       addDebug(`token=${token ? token.slice(0, 15) + "..." : "null"}`);
 
       if (token) {
