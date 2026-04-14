@@ -109,12 +109,15 @@ export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean }): 
   }
   if (Notification.permission === "default") {
     console.log("[FCM] 通知許可ダイアログを表示します...");
-    // iOS Safari は requestPermission() 後にページをリロードする。
-    // リロード後にトークン取得を自動再開できるようフラグを立てておく。
-    try { sessionStorage.setItem("push_permission_requested", "1"); } catch { /* ignore */ }
+    // iOS Safari は requestPermission() 後に PWA をリロードする。
+    // sessionStorage はリロードで消えるため localStorage にタイムスタンプ付きフラグを立てる。
+    try {
+      localStorage.setItem("push_perm_requesting", JSON.stringify({ ts: Date.now() }));
+    } catch { /* ignore */ }
     const permission = await Notification.requestPermission();
     console.log("[FCM] 許可結果:", permission);
-    try { sessionStorage.removeItem("push_permission_requested"); } catch { /* ignore */ }
+    // リロードされなかった場合（Android等）はここで自分でフラグを消す
+    try { localStorage.removeItem("push_perm_requesting"); } catch { /* ignore */ }
     if (permission !== "granted") return null;
   }
 

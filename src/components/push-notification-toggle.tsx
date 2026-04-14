@@ -56,16 +56,21 @@ export function PushNotificationToggle() {
 
     const pref = localStorage.getItem(PREF_KEY);
 
-    // iOS Safari では requestPermission() 後にページがリロードされる。
-    // リロード前に立てた sessionStorage フラグが残っている場合は
-    // 許可が完了した直後なので、自動的にトークン取得を再開する。
+    // iOS Safari では requestPermission() 後に PWA がリロードされる。
+    // sessionStorage はリロードで消えるため localStorage のタイムスタンプ付きフラグを確認する。
+    // 30秒以内にフラグが立てられており、かつ許可済みなら自動でトークン取得を再開する。
     const permRequested = (() => {
-      try { return sessionStorage.getItem("push_permission_requested") === "1"; }
-      catch { return false; }
+      try {
+        const raw = localStorage.getItem("push_perm_requesting");
+        if (!raw) return false;
+        const { ts } = JSON.parse(raw) as { ts: number };
+        const isRecent = Date.now() - ts < 30_000; // 30秒以内
+        localStorage.removeItem("push_perm_requesting");
+        return isRecent;
+      } catch { return false; }
     })();
 
     if (permRequested && Notification.permission === "granted") {
-      try { sessionStorage.removeItem("push_permission_requested"); } catch { /* ignore */ }
       // pref が "denied" でも今回ユーザーが許可したので上書きする
       localStorage.removeItem(PREF_KEY);
       // ステータスを loading のまま保ち、トークン取得を自動実行
