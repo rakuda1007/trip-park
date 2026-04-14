@@ -8,9 +8,9 @@ self.addEventListener('install', function () {
   self.skipWaiting();
 });
 
-// アクティブ化時に既存のクライアントを即座に制御下に置く
+// clients.claim() は既存ページを強制再制御して React state を破壊するため削除
 self.addEventListener('activate', function (event) {
-  event.waitUntil(clients.claim());
+  event.waitUntil(Promise.resolve());
 });
 
 let messaging = null;

@@ -74,7 +74,7 @@ export function PushNotificationToggle() {
       if (notifPerm === "granted") {
         // iOSリロード後、許可済み → pref解除して自動取得
         localStorage.removeItem(PREF_KEY);
-        addDebug("自動完了パスに進みます");
+        addDebug("自動完了パスに進みます（リロード後）");
         setStep("リロード後の設定を完了中…");
         return; // auto-complete useEffect へ
       } else {
@@ -86,9 +86,18 @@ export function PushNotificationToggle() {
       }
     }
 
+    // perm=granted だが pref が未設定/denied の場合：
+    // 以前に許可済みだがトークン未保存（前回の取得が中断された可能性）
+    // → 自動でトークン取得を再試行する
+    if (notifPerm === "granted" && pref !== "granted") {
+      addDebug(`perm=granted pref=${pref} → 自動取得開始`);
+      setStep("リロード後の設定を完了中…");
+      return; // auto-complete useEffect へ
+    }
+
     if (notifPerm === "denied") {
       setStatus("blocked");
-    } else if (notifPerm === "granted" && pref !== "denied") {
+    } else if (notifPerm === "granted") {
       setStatus("enabled");
     } else {
       setStatus("disabled");
