@@ -11,7 +11,7 @@ import {
   type CandidateItem,
   type VoteItem,
 } from "@/lib/firestore/destination-votes";
-import { getGroup, updateDestination } from "@/lib/firestore/groups";
+import { getGroup, listMembers, updateDestination } from "@/lib/firestore/groups";
 import type { DestinationAnswer } from "@/types/destination";
 import type { GroupDoc } from "@/types/group";
 import Link from "next/link";
@@ -147,6 +147,8 @@ export function DestinationVotesClient() {
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
   const [candidates, setCandidates] = useState<CandidateItem[]>([]);
   const [votes, setVotes] = useState<VoteItem[]>([]);
+  const [memberMap, setMemberMap] = useState<Map<string, string>>(new Map());
+  const [openVoters, setOpenVoters] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -156,14 +158,16 @@ export function DestinationVotesClient() {
     if (!groupId) return;
     setError(null);
     try {
-      const [g, c, v] = await Promise.all([
+      const [g, c, v, m] = await Promise.all([
         getGroup(groupId),
         listDestinationCandidates(groupId),
         listDestinationVotes(groupId),
+        listMembers(groupId),
       ]);
       setGroup(g);
       setCandidates(c);
       setVotes(v);
+      setMemberMap(new Map(m.map((x) => [x.userId, x.data.displayName ?? x.userId.slice(0, 6) + "…"])));
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
       setGroup(null);
@@ -275,6 +279,23 @@ export function DestinationVotesClient() {
       return { id: c.id, first, want, reserve, total: cvotes.length };
     });
   }, [candidates, votes]);
+
+  // candidateId + answer ごとの投票者名リスト
+  const voterNames = useCallback(
+    (candidateId: string, answer: DestinationAnswer): string[] =>
+      votes
+        .filter((v) => v.data.candidateId === candidateId && v.data.answer === answer)
+        .map((v) => memberMap.get(v.data.userId) ?? v.data.userId.slice(0, 6) + "…"),
+    [votes, memberMap],
+  );
+
+  function toggleVoters(key: string) {
+    setOpenVoters((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
 
   if (group === undefined) {
     return <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10"><p className="text-sm text-zinc-500">読み込み中…</p></div>;
@@ -411,22 +432,49 @@ export function DestinationVotesClient() {
                               const pct = s.total > 0 ? Math.round((count / s.total) * 100) : 0;
                               const isSelected = myVote?.data.answer === a;
                               const ICONS: Record<DestinationAnswer, string> = { first: "🙋", want: "👍", reserve: "🤏" };
+                              const voterKey = `${c.id}_${a}`;
+                              const names = voterNames(c.id, a);
+                              const isOpen = openVoters.has(voterKey);
                               return (
-                                <div key={a} className="flex items-center gap-1.5 text-xs">
-                                  <span className="w-28 shrink-0 truncate text-zinc-500">{ANSWER_LABELS[a]}</span>
-                                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-700">
-                                    <div className={`h-full ${ANSWER_BAR_COLORS[a]} transition-all`} style={{ width: `${pct}%` }} />
+                                <div key={a} className="flex flex-col gap-0.5">
+                                  <div className="flex items-center gap-1.5 text-xs">
+                                    <span className="w-28 shrink-0 truncate text-zinc-500">{ANSWER_LABELS[a]}</span>
+                                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-700">
+                                      <div className={`h-full ${ANSWER_BAR_COLORS[a]} transition-all`} style={{ width: `${pct}%` }} />
+                                    </div>
+                                    {/* 件数：PC はホバーで tooltip、スマホはタップで展開 */}
+                                    <button
+                                      type="button"
+                                      title={names.length > 0 ? names.join("・") : undefined}
+                                      onClick={() => count > 0 && toggleVoters(voterKey)}
+                                      disabled={count === 0}
+                                      className={`w-4 shrink-0 text-right text-[10px] transition-colors disabled:cursor-default ${isOpen ? "font-semibold text-zinc-700 dark:text-zinc-200" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"}`}
+                                    >
+                                      {count}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVote(c.id, a)}
+                                      disabled={busy !== null}
+                                      title={ANSWER_LABELS[a]}
+                                      className={`shrink-0 rounded-full p-0.5 text-base leading-none transition hover:scale-110 disabled:opacity-40 ${isSelected ? "ring-2 ring-offset-1 ring-zinc-400" : "opacity-50 hover:opacity-100"}`}
+                                    >
+                                      {ICONS[a]}
+                                    </button>
                                   </div>
-                                  <span className="w-3 shrink-0 text-right text-[10px] text-zinc-400">{count}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleVote(c.id, a)}
-                                    disabled={busy !== null}
-                                    title={ANSWER_LABELS[a]}
-                                    className={`shrink-0 rounded-full p-0.5 text-base leading-none transition hover:scale-110 disabled:opacity-40 ${isSelected ? "ring-2 ring-offset-1 ring-zinc-400" : "opacity-50 hover:opacity-100"}`}
-                                  >
-                                    {ICONS[a]}
-                                  </button>
+                                  {/* 投票者名リスト（展開時のみ表示） */}
+                                  {isOpen && names.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 pl-[calc(7rem+6px)]">
+                                      {names.map((n) => (
+                                        <span
+                                          key={n}
+                                          className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                                        >
+                                          {n}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
