@@ -109,8 +109,12 @@ export async function requestAndGetFcmToken(opts?: { forceRefresh?: boolean }): 
   }
   if (Notification.permission === "default") {
     console.log("[FCM] 通知許可ダイアログを表示します...");
+    // iOS Safari は requestPermission() 後にページをリロードする。
+    // リロード後にトークン取得を自動再開できるようフラグを立てておく。
+    try { sessionStorage.setItem("push_permission_requested", "1"); } catch { /* ignore */ }
     const permission = await Notification.requestPermission();
     console.log("[FCM] 許可結果:", permission);
+    try { sessionStorage.removeItem("push_permission_requested"); } catch { /* ignore */ }
     if (permission !== "granted") return null;
   }
 

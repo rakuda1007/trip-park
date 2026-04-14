@@ -55,6 +55,24 @@ export function PushNotificationToggle() {
     }
 
     const pref = localStorage.getItem(PREF_KEY);
+
+    // iOS Safari では requestPermission() 後にページがリロードされる。
+    // リロード前に立てた sessionStorage フラグが残っている場合は
+    // 許可が完了した直後なので、自動的にトークン取得を再開する。
+    const permRequested = (() => {
+      try { return sessionStorage.getItem("push_permission_requested") === "1"; }
+      catch { return false; }
+    })();
+
+    if (permRequested && Notification.permission === "granted") {
+      try { sessionStorage.removeItem("push_permission_requested"); } catch { /* ignore */ }
+      // pref が "denied" でも今回ユーザーが許可したので上書きする
+      localStorage.removeItem(PREF_KEY);
+      // ステータスを loading のまま保ち、トークン取得を自動実行
+      setStep("リロード後の設定を完了中…");
+      return; // user が揃ったら下の useEffect でトークン取得する
+    }
+
     if (Notification.permission === "denied") {
       setStatus("blocked");
     } else if (Notification.permission === "granted" && pref !== "denied") {
@@ -63,6 +81,43 @@ export function PushNotificationToggle() {
       setStatus("disabled");
     }
   }, []);
+
+  // iOS リロード後の自動トークン取得
+  // step が "リロード後の設定を完了中…" かつ user が確定したときに実行
+  useEffect(() => {
+    if (!user) return;
+    if (step !== "リロード後の設定を完了中…") return;
+
+    let cancelled = false;
+    (async () => {
+      setBusy(true);
+      try {
+        setStep("FCMトークンを取得中…");
+        const token = await requestAndGetFcmToken({ forceRefresh: true });
+        if (cancelled) return;
+        if (token) {
+          await saveFcmToken(user.uid, token);
+          localStorage.setItem(PREF_KEY, "granted");
+          setStatus("enabled");
+          setStep(null);
+        } else {
+          setError("トークン取得に失敗しました。もう一度トグルをタップしてください。");
+          setStatus("disabled");
+          setStep(null);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[Push] auto-complete after iOS reload failed:", err);
+        setError(`エラー: ${msg}`);
+        setStatus("disabled");
+        setStep(null);
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleEnable() {
     if (!user || busy) return;
