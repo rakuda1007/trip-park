@@ -30,12 +30,19 @@ self.addEventListener('push', function (event) {
   var payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch (e) {}
 
-  // FCM data-only メッセージ: payload.data._title / payload.data._body
-  // FCM notification メッセージ (フォールバック): payload.notification.title 等
+  // Chrome/Android (FCM via GCM): payload.data._title  ← data オブジェクト内
+  // iOS (FCM via APNs):           payload._title        ← トップレベルに直接
+  // notification フィールドありの場合: payload.notification.title
   var data = payload.data || {};
-  var title = data._title || (payload.notification && payload.notification.title) || 'Trip Park';
-  var body  = data._body  || (payload.notification && payload.notification.body)  || '';
-  var url   = data.url   || '/';
+  var title = data._title
+    || payload._title
+    || (payload.notification && payload.notification.title)
+    || 'Trip Park';
+  var body = data._body
+    || payload._body
+    || (payload.notification && payload.notification.body)
+    || '';
+  var url = data.url || payload.url || '/';
 
   event.waitUntil(
     self.registration.showNotification(title, {

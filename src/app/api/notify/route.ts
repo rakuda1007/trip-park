@@ -99,14 +99,16 @@ async function sendMulticast(
 
   const invalidTokens: string[] = [];
 
-  // データのみ (data-only) 形式で送信する。
-  // notification フィールドを含む形式は iOS PWA で表示されないケースがあるため、
-  // SW の onBackgroundMessage でコントロールする。
+  // notification フィールドを含める。
+  // data-only だと iOS APNs が content-available=1 (background push) として扱い、
+  // iOS がプッシュイベントを確実に起動しない。alert push にするために必要。
+  // SW 側は Firebase SDK を使わない raw push ハンドラなので重複表示は起きない。
   const payload = { ...data, _title: title, _body: body };
 
   for (const chunk of chunks) {
     const response = await messaging.sendEachForMulticast({
       tokens: chunk,
+      notification: { title, body },
       data: payload,
       webpush: {
         headers: { Urgency: "high" },
