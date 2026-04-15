@@ -515,7 +515,12 @@ export function TripClient() {
 
       <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">旅程</h1>
       <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-        {group.name}
+        <Link
+          href={`/groups/${groupId}`}
+          className="font-medium text-zinc-700 underline-offset-2 hover:text-zinc-900 hover:underline dark:text-zinc-300 dark:hover:text-zinc-100"
+        >
+          {group.name}
+        </Link>
         {group.tripStartDate && (
           <span className="ml-2 text-zinc-400">
             {group.tripStartDate}{group.tripEndDate && group.tripEndDate !== group.tripStartDate ? ` 〜 ${group.tripEndDate}` : ""}

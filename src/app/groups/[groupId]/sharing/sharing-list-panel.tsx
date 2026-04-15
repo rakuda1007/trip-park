@@ -266,43 +266,22 @@ export function SharingListPanel({
                 </td>
                 <td className="min-w-0 px-1.5 py-2 align-top sm:px-3">
                   {user && isMember ? (
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
-                      <select
-                        value={data.assignedUserId ?? ""}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          handleAssign({ id, data }, v === "" ? null : v);
-                        }}
-                        disabled={busy !== null}
-                        className="w-full max-w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1 py-1 text-[11px] dark:border-zinc-600 dark:bg-zinc-900 sm:max-w-[12rem] sm:px-2 sm:text-xs"
-                      >
-                        <option value="">未割当</option>
-                        {members.map(({ userId, data: md }) => (
-                          <option key={userId} value={userId}>
-                            {md.displayName ?? userId.slice(0, 6) + "…"}
-                          </option>
-                        ))}
-                      </select>
-                      {user ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleAssign(
-                              { id, data },
-                              data.assignedUserId === user.uid
-                                ? null
-                                : user.uid,
-                            )
-                          }
-                          disabled={busy !== null}
-                          className="text-left text-xs text-blue-600 underline hover:text-blue-800 dark:text-blue-400"
-                        >
-                          {data.assignedUserId === user.uid
-                            ? "担当を外す"
-                            : "自分が担当"}
-                        </button>
-                      ) : null}
-                    </div>
+                    <select
+                      value={data.assignedUserId ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        handleAssign({ id, data }, v === "" ? null : v);
+                      }}
+                      disabled={busy !== null}
+                      className="w-full max-w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1 py-1 text-[11px] dark:border-zinc-600 dark:bg-zinc-900 sm:max-w-[12rem] sm:px-2 sm:text-xs"
+                    >
+                      <option value="">未割当</option>
+                      {members.map(({ userId, data: md }) => (
+                        <option key={userId} value={userId}>
+                          {md.displayName ?? userId.slice(0, 6) + "…"}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
                     <span>
                       {data.assignedDisplayName ?? (

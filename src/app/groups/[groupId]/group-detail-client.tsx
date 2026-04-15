@@ -39,7 +39,13 @@ const CATEGORY_OPTIONS: BulletinCategory[] = ["general", "gear", "dayof", "other
 function formatTs(v: unknown): string {
   if (!v) return "—";
   if (v instanceof Timestamp) {
-    return v.toDate().toLocaleString("ja-JP", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return v.toDate().toLocaleString("ja-JP", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
   return "—";
 }
@@ -55,6 +61,13 @@ function formatDateRange(start: string, end?: string | null): string {
   if (sy === ey && sm === em) return `${sy}年${sm}月${sd}日 〜 ${ed}日`;
   if (sy === ey) return `${sy}年${sm}月${sd}日 〜 ${em}月${ed}日`;
   return `${sy}年${sm}月${sd}日 〜 ${ey}年${em}月${ed}日`;
+}
+
+/** 掲示板一覧・ダッシュボード共通の本文プレビュー */
+function excerptBulletinBody(body: string, max = 120): string {
+  const t = body.trim().replace(/\s+/g, " ");
+  if (t.length <= max) return t;
+  return t.slice(0, max) + "…";
 }
 
 export function GroupDetailClient() {
@@ -327,10 +340,15 @@ export function GroupDetailClient() {
         ← 旅行一覧
       </Link>
 
-      {/* 旅行名 + 日程バッジ */}
+      {/* 旅行名 + 日程バッジ（旅行名はダッシュボードへ） */}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          {group.name}
+          <Link
+            href={`/groups/${groupId}`}
+            className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 hover:text-zinc-700 hover:underline dark:hover:text-zinc-200"
+          >
+            {group.name}
+          </Link>
         </h1>
         {group.tripStartDate ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
@@ -609,37 +627,56 @@ export function GroupDetailClient() {
             <p className="px-4 pb-4 text-sm text-zinc-400 dark:text-zinc-500">まだ話題がありません。</p>
           ) : (
             <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {topics.map(({ id, data, replyCount }) => (
-                <li key={id}>
-                  <Link
-                    href={`/groups/${groupId}/bulletin/${id}`}
-                    className={`flex items-start justify-between gap-3 px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
-                      data.importance === "important" || data.pinned
-                        ? "bg-amber-50/60 dark:bg-amber-950/15"
-                        : ""
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {data.pinned && <span className="text-xs text-amber-600">📌</span>}
-                        <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-800">
-                          {CATEGORY_LABELS[data.category]}
+              {topics.map(({ id, data, replyCount }) => {
+                const showImportant =
+                  data.importance === "important" || data.pinned;
+                return (
+                  <li key={id}>
+                    <Link
+                      href={`/groups/${groupId}/bulletin/${id}`}
+                      className={`block px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
+                        showImportant
+                          ? "bg-amber-50/60 dark:bg-amber-950/15"
+                          : ""
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          {data.pinned ? (
+                            <p className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                              📌 ピン留め
+                            </p>
+                          ) : null}
+                          <p className="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                            {data.title}
+                          </p>
+                          <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
+                            {excerptBulletinBody(data.body)}
+                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+                            <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                              {CATEGORY_LABELS[data.category]}
+                            </span>
+                            {data.importance === "important" ? (
+                              <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                                重要
+                              </span>
+                            ) : null}
+                            <span>
+                              {data.authorDisplayName ||
+                                data.authorUserId.slice(0, 8) + "…"}{" "}
+                              · {formatTs(data.createdAt)}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-xs text-zinc-400">
+                          返信 {replyCount} 件
                         </span>
-                        {data.importance === "important" && (
-                          <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">重要</span>
-                        )}
                       </div>
-                      <p className="mt-0.5 truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                        {data.title}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-zinc-400">
-                        {data.authorDisplayName || data.authorUserId.slice(0, 8) + "…"} · {formatTs(data.createdAt)}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-xs text-zinc-400">返信 {replyCount}</span>
-                  </Link>
-                </li>
-              ))}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
