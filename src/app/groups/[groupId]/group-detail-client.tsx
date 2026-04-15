@@ -325,7 +325,7 @@ export function GroupDetailClient() {
         ) : null}
       </div>
 
-      {/* フェーズバッジ（表示のみ） */}
+      {/* フェーズバッジ（表示のみ）＋オーナーは「旅行確定」を計画中に戻せる */}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {(() => {
           const s = group.status ?? "planning";
@@ -347,6 +347,25 @@ export function GroupDetailClient() {
             </span>
           );
         })()}
+        {isOwner && (group.status ?? "planning") === "confirmed" ? (
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => {
+              if (
+                !confirm(
+                  "旅行フェーズを「計画中」に戻しますか？\n（上部ナビの旅程チェックは、日別プランの登録有無で表示されます）",
+                )
+              ) {
+                return;
+              }
+              handleUpdateStatus("planning");
+            }}
+            className="text-xs text-zinc-500 underline hover:text-zinc-800 disabled:opacity-50 dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            {busy === "status-planning" ? "更新中…" : "フェーズを計画中に戻す"}
+          </button>
+        ) : null}
       </div>
 
       {/* 説明 */}

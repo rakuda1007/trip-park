@@ -49,6 +49,8 @@ export async function listTripRoutes(groupId: string): Promise<
         dayNumber: typeof raw.dayNumber === "number" ? raw.dayNumber : (raw.sortOrder as number ?? 0) + 1,
         memo: typeof raw.memo === "string" ? raw.memo : (raw.destinationMemo as string | null ?? null),
         departurePoint: typeof raw.departurePoint === "string" ? raw.departurePoint : null,
+        departureMeetTime:
+          typeof raw.departureMeetTime === "string" ? raw.departureMeetTime : null,
         departureMapUrl: typeof raw.departureMapUrl === "string" ? raw.departureMapUrl : null,
       },
     });
@@ -59,6 +61,7 @@ export async function listTripRoutes(groupId: string): Promise<
 export type TripRouteInput = {
   dayNumber: number;
   departurePoint: string | null;
+  departureMeetTime: string | null;
   departureMapUrl: string | null;
   destinationName: string;
   destinationMapUrl: string | null;
@@ -79,6 +82,7 @@ export async function addTripRoute(
   const ref = await addDoc(col, {
     dayNumber: input.dayNumber,
     departurePoint: input.departurePoint?.trim() || null,
+    departureMeetTime: input.departureMeetTime?.trim() || null,
     departureMapUrl: input.departureMapUrl?.trim() || null,
     destinationName: input.destinationName.trim(),
     destinationMapUrl: input.destinationMapUrl?.trim() || null,
@@ -110,6 +114,7 @@ export async function updateTripRoute(
   await updateDoc(ref, {
     dayNumber: input.dayNumber,
     departurePoint: input.departurePoint?.trim() || null,
+    departureMeetTime: input.departureMeetTime?.trim() || null,
     departureMapUrl: input.departureMapUrl?.trim() || null,
     destinationName: input.destinationName.trim(),
     destinationMapUrl: input.destinationMapUrl?.trim() || null,

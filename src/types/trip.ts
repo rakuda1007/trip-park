@@ -13,6 +13,8 @@ export type TripRouteDoc = {
   dayNumber: number;
   /** 出発地（任意） */
   departurePoint: string | null;
+  /** 待ち合わせ・出発の目安時間（任意、例: 8:30） */
+  departureMeetTime: string | null;
   /** 出発地の地図リンク（任意） */
   departureMapUrl: string | null;
   /** 目的地名 */

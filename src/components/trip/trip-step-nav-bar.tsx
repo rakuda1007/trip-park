@@ -1,6 +1,7 @@
 "use client";
 
 import { getGroup } from "@/lib/firestore/groups";
+import { listTripRoutes } from "@/lib/firestore/trip";
 import type { GroupDoc } from "@/types/group";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
@@ -30,10 +31,17 @@ function isGroupPage(pathname: string, groupId: string): boolean {
 export function TripStepNavBar({ groupId }: { groupId: string }) {
   const pathname = usePathname();
   const [group, setGroup] = useState<GroupDoc | null>(null);
+  const [hasTripRoutes, setHasTripRoutes] = useState(false);
 
   useEffect(() => {
     getGroup(groupId).then(setGroup).catch(() => {});
   }, [groupId]);
+
+  useEffect(() => {
+    listTripRoutes(groupId)
+      .then((r) => setHasTripRoutes(r.length > 0))
+      .catch(() => setHasTripRoutes(false));
+  }, [groupId, pathname]);
 
   // グループ配下のページ以外では非表示
   if (!isGroupPage(pathname, groupId)) return null;
@@ -43,7 +51,8 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
   const datesDone = !!group?.tripStartDate;
   const destDone = !!group?.destination;
   const status = group?.status ?? "planning";
-  const itinDone = status === "confirmed" || status === "completed";
+  /** 旅程ステップの完了は「旅程ページに1件以上の日プランがある」で判定（旅行フェーズとは独立） */
+  const itinDone = hasTripRoutes;
   const settleDone = status === "completed";
 
   const steps = [
