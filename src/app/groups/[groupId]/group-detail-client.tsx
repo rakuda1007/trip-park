@@ -11,7 +11,6 @@ import {
   updateDestination,
   updateGroupDescription,
   updateGroupTripDates,
-  updateTripStatus,
 } from "@/lib/firestore/groups";
 import {
   createBulletinTopic,
@@ -19,7 +18,7 @@ import {
 } from "@/lib/firestore/bulletin";
 import { sendNotification } from "@/lib/notify";
 import { saveLastTripId } from "@/lib/last-trip";
-import type { GroupDoc, MemberDoc, TripStatus } from "@/types/group";
+import type { GroupDoc, MemberDoc } from "@/types/group";
 import type { BulletinCategory, BulletinImportance, BulletinTopicDoc } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
@@ -196,20 +195,6 @@ export function GroupDetailClient() {
     }
   }
 
-  async function handleUpdateStatus(status: TripStatus) {
-    if (!groupId) return;
-    setBusy(`status-${status}`);
-    setError(null);
-    try {
-      await updateTripStatus(groupId, status);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "更新に失敗しました");
-    } finally {
-      setBusy(null);
-    }
-  }
-
   async function copyInvite() {
     if (!group || typeof navigator === "undefined" || !navigator.clipboard) return;
     const url = buildWelcomeUrl(group.inviteCode);
@@ -321,49 +306,6 @@ export function GroupDetailClient() {
             className="text-xs text-zinc-500 underline hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
           >
             {group.tripStartDate ? "日程を変更" : "日程を設定"}
-          </button>
-        ) : null}
-      </div>
-
-      {/* フェーズバッジ（表示のみ）＋オーナーは「旅行確定」を計画中に戻せる */}
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        {(() => {
-          const s = group.status ?? "planning";
-          if (s === "planning")
-            return (
-              <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-200">
-                計画中
-              </span>
-            );
-          if (s === "confirmed")
-            return (
-              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
-                旅行確定
-              </span>
-            );
-          return (
-            <span className="rounded-full bg-zinc-200 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
-              旅行終了
-            </span>
-          );
-        })()}
-        {isOwner && (group.status ?? "planning") === "confirmed" ? (
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => {
-              if (
-                !confirm(
-                  "旅行フェーズを「計画中」に戻しますか？\n（上部ナビの旅程チェックは、日別プランの登録有無で表示されます）",
-                )
-              ) {
-                return;
-              }
-              handleUpdateStatus("planning");
-            }}
-            className="text-xs text-zinc-500 underline hover:text-zinc-800 disabled:opacity-50 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            {busy === "status-planning" ? "更新中…" : "フェーズを計画中に戻す"}
           </button>
         ) : null}
       </div>
