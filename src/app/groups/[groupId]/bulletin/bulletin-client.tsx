@@ -20,6 +20,7 @@ import type {
   BulletinTopicDoc,
 } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
+import { SharingListPanel } from "@/app/groups/[groupId]/sharing/sharing-list-panel";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -73,6 +74,7 @@ export function BulletinClient() {
   const [busy, setBusy] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
+  const [shoppingOpen, setShoppingOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
   const [newCategory, setNewCategory] = useState<BulletinCategory>("general");
@@ -229,14 +231,34 @@ export function BulletinClient() {
         話題ごとにスレッドが分かれます。一覧から話題を選ぶと、本文と返信を見たり書き込みできます。
       </p>
 
-      <p className="mt-4 text-sm">
-        <Link
-          href={`/groups/${groupId}/sharing`}
-          className="text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+      <div className="mt-4">
+        <button
+          type="button"
+          onClick={() => setShoppingOpen((o) => !o)}
+          aria-expanded={shoppingOpen}
+          aria-controls="bulletin-sharing-panel"
+          className="text-left text-sm text-zinc-700 underline-offset-2 hover:text-zinc-900 hover:underline dark:text-zinc-300 dark:hover:text-zinc-100"
         >
-          ＜買出しリスト（全{shareStat.total}項目、未割当{shareStat.unassigned}項目）を開く＞
-        </Link>
-      </p>
+          <span className="select-none" aria-hidden>
+            {shoppingOpen ? "▼" : "▶"}
+          </span>
+          買出しリスト（全{shareStat.total}項目、未割当{shareStat.unassigned}項目）
+        </button>
+        {shoppingOpen ? (
+          <div
+            id="bulletin-sharing-panel"
+            role="region"
+            className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50"
+          >
+            <SharingListPanel
+              variant="inline"
+              onDataChanged={() => {
+                void load();
+              }}
+            />
+          </div>
+        ) : null}
+      </div>
 
       {error ? (
         <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">

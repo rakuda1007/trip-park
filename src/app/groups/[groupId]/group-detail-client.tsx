@@ -26,6 +26,7 @@ import { saveLastTripId } from "@/lib/last-trip";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import type { BulletinCategory, BulletinImportance, BulletinTopicDoc } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
+import { SharingListPanel } from "@/app/groups/[groupId]/sharing/sharing-list-panel";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -94,6 +95,7 @@ export function GroupDetailClient() {
     total: number;
     unassigned: number;
   }>({ total: 0, unassigned: 0 });
+  const [shoppingOpen, setShoppingOpen] = useState(false);
 
   // 旅行ページを開いたら直近アクセス旅行として記録
   useEffect(() => {
@@ -488,15 +490,35 @@ export function GroupDetailClient() {
         </div>
       ) : null}
 
-      {/* ── 買出しリスト（掲示板の上・一行リンク） ── */}
-      <p className="mt-4 text-sm">
-        <Link
-          href={`/groups/${groupId}/sharing`}
-          className="text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+      {/* ── 買出しリスト（掲示板の上・折りたたみ） ── */}
+      <div className="mt-4">
+        <button
+          type="button"
+          onClick={() => setShoppingOpen((o) => !o)}
+          aria-expanded={shoppingOpen}
+          aria-controls="group-sharing-panel"
+          className="text-left text-sm text-zinc-700 underline-offset-2 hover:text-zinc-900 hover:underline dark:text-zinc-300 dark:hover:text-zinc-100"
         >
-          ＜買出しリスト（全{sharingSummary.total}項目、未割当{sharingSummary.unassigned}項目）を開く＞
-        </Link>
-      </p>
+          <span className="select-none" aria-hidden>
+            {shoppingOpen ? "▼" : "▶"}
+          </span>
+          買出しリスト（全{sharingSummary.total}項目、未割当{sharingSummary.unassigned}項目）
+        </button>
+        {shoppingOpen ? (
+          <div
+            id="group-sharing-panel"
+            role="region"
+            className="mt-3 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/60"
+          >
+            <SharingListPanel
+              variant="inline"
+              onDataChanged={() => {
+                void load();
+              }}
+            />
+          </div>
+        ) : null}
+      </div>
 
       {/* ── 掲示板 ── */}
       <section className="mt-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60">
