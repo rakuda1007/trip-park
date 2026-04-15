@@ -3,9 +3,19 @@
 import { getGroup } from "@/lib/firestore/groups";
 import { listTripRoutes } from "@/lib/firestore/trip";
 import type { GroupDoc } from "@/types/group";
+import type { TripRouteDoc } from "@/types/trip";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+/** 旅程ページ（trip-client）と同じ日数計算 */
+function calcNumDays(start: string | null, end: string | null): number {
+  if (!start) return 0;
+  const s = new Date(start);
+  const e = end ? new Date(end) : s;
+  const diff = Math.round((e.getTime() - s.getTime()) / 86_400_000);
+  return Math.max(1, diff + 1);
+}
 
 /** layout.tsx から直接使えるラッパー（groupId を useParams で取得） */
 export function TripStepNavBarWrapper() {
@@ -31,7 +41,9 @@ function isGroupPage(pathname: string, groupId: string): boolean {
 export function TripStepNavBar({ groupId }: { groupId: string }) {
   const pathname = usePathname();
   const [group, setGroup] = useState<GroupDoc | null>(null);
-  const [hasTripRoutes, setHasTripRoutes] = useState(false);
+  const [tripRoutes, setTripRoutes] = useState<
+    { id: string; data: TripRouteDoc }[]
+  >([]);
 
   useEffect(() => {
     getGroup(groupId).then(setGroup).catch(() => {});
@@ -39,9 +51,31 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
 
   useEffect(() => {
     listTripRoutes(groupId)
-      .then((r) => setHasTripRoutes(r.length > 0))
-      .catch(() => setHasTripRoutes(false));
+      .then(setTripRoutes)
+      .catch(() => setTripRoutes([]));
   }, [groupId, pathname]);
+
+  /** 旅程ページと同様: 日程からの日数と登録済み最大Dayの大きい方 */
+  const numTripDays = useMemo(() => {
+    const fromDates = calcNumDays(
+      group?.tripStartDate ?? null,
+      group?.tripEndDate ?? null,
+    );
+    const maxRoute = tripRoutes.reduce(
+      (m, r) => Math.max(m, r.data.dayNumber),
+      0,
+    );
+    return Math.max(fromDates, maxRoute, 1);
+  }, [group, tripRoutes]);
+
+  /** Day1〜Day(numTripDays) それぞれに旅程が1件以上あるときのみ完了 */
+  const itinDone = useMemo(() => {
+    const covered = new Set(tripRoutes.map((r) => r.data.dayNumber));
+    for (let d = 1; d <= numTripDays; d++) {
+      if (!covered.has(d)) return false;
+    }
+    return true;
+  }, [tripRoutes, numTripDays]);
 
   // グループ配下のページ以外では非表示
   if (!isGroupPage(pathname, groupId)) return null;
@@ -51,8 +85,6 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
   const datesDone = !!group?.tripStartDate;
   const destDone = !!group?.destination;
   const status = group?.status ?? "planning";
-  /** 旅程ステップの完了は「旅程ページに1件以上の日プランがある」で判定（旅行フェーズとは独立） */
-  const itinDone = hasTripRoutes;
   const settleDone = status === "completed";
 
   const steps = [
