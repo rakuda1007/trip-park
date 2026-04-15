@@ -1,11 +1,12 @@
 "use client";
 
+import { useGroupRouteId } from "@/contexts/group-route-context";
 import { getGroup } from "@/lib/firestore/groups";
 import { listTripRoutes } from "@/lib/firestore/trip";
 import type { GroupDoc } from "@/types/group";
 import type { TripRouteDoc } from "@/types/trip";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 /** 旅程ページ（trip-client）と同じ日数計算 */
@@ -17,11 +18,9 @@ function calcNumDays(start: string | null, end: string | null): number {
   return Math.max(1, diff + 1);
 }
 
-/** layout.tsx から直接使えるラッパー（groupId を useParams で取得） */
+/** layout.tsx から直接使えるラッパー（groupId は GroupRouteProvider から） */
 export function TripStepNavBarWrapper() {
-  const params = useParams();
-  const groupId = params?.groupId as string | undefined;
-  if (!groupId) return null;
+  const groupId = useGroupRouteId();
   return <TripStepNavBar groupId={groupId} />;
 }
 

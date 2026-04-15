@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useGroupRouteId } from "@/contexts/group-route-context";
 import { getGroup } from "@/lib/firestore/groups";
 import {
   addTripRoute,
@@ -13,7 +14,6 @@ import {
 import type { GroupDoc } from "@/types/group";
 import type { TripRouteDoc, TripWaypoint } from "@/types/trip";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 // ────────────────────────────────
@@ -363,8 +363,7 @@ function DayCard({
 // ────────────────────────────────
 
 export function TripClient() {
-  const params = useParams();
-  const groupId = params.groupId as string;
+  const groupId = useGroupRouteId();
   const { user } = useAuth();
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);

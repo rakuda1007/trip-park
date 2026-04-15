@@ -274,6 +274,31 @@ service cloud.firestore {
         allow write: if request.auth != null && isGroupMember(groupId) &&
           request.resource.data.userId == request.auth.uid;
       }
+
+      match /sharingItems/{itemId} {
+        allow read: if request.auth != null && isGroupMember(groupId);
+        allow create: if request.auth != null && isGroupMember(groupId) &&
+          request.resource.data.createdByUserId == request.auth.uid &&
+          request.resource.data.label is string &&
+          request.resource.data.label.size() > 0 &&
+          request.resource.data.label.size() <= 200 &&
+          request.resource.data.sortOrder is int &&
+          request.resource.data.keys().hasAll([
+            'label', 'memo', 'assignedUserId', 'assignedDisplayName', 'sortOrder',
+            'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt'
+          ]);
+        allow update: if request.auth != null && isGroupMember(groupId) &&
+          request.resource.data.createdByUserId == resource.data.createdByUserId &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.keys().hasAll([
+            'label', 'memo', 'assignedUserId', 'assignedDisplayName', 'sortOrder',
+            'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt'
+          ]);
+        allow delete: if request.auth != null && isGroupMember(groupId) && (
+          resource.data.createdByUserId == request.auth.uid ||
+          isOwnerOrAdmin(groupId)
+        );
+      }
     }
 
     match /circles/{circleId} {

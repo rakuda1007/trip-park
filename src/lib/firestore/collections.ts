@@ -26,6 +26,8 @@ export const SUB = {
   destinationCandidates: "destinationCandidates",
   /** groups/{groupId}/destinationVotes/{docId} */
   destinationVotes: "destinationVotes",
+  /** groups/{groupId}/sharingItems/{itemId} 買い出し・分担 */
+  sharingItems: "sharingItems",
 } as const;
 
 /** groups/{groupId}/config/{docId} の確定情報 */

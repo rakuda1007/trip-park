@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useGroupRouteId } from "@/contexts/group-route-context";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
 import {
   addScheduleCandidate,
@@ -19,7 +20,6 @@ import type {
   ScheduleConfigDoc,
 } from "@/types/schedule";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function answerSymbol(a: ScheduleAnswer | undefined): string {
@@ -93,8 +93,7 @@ function sortMembers(
 }
 
 export function ScheduleClient() {
-  const params = useParams();
-  const groupId = params.groupId as string;
+  const groupId = useGroupRouteId();
   const { user } = useAuth();
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);

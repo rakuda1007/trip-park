@@ -169,6 +169,7 @@ export async function listMyGroups(uid: string): Promise<
   return items.flatMap((item, i) => {
     const gSnap = groupSnaps[i];
     if (!gSnap) return []; // アクセス不可 → スキップ
+    if (!gSnap.exists()) return []; // グループ本体が削除済み（ユーザーの参照だけ残っている）
     const gd = gSnap.data() as GroupDoc | undefined;
     return [
       {

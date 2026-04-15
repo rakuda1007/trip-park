@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useGroupRouteId } from "@/contexts/group-route-context";
 import {
   addFamily,
   deleteFamily,
@@ -13,7 +14,6 @@ import { listHouseholds, type HouseholdItem } from "@/lib/firestore/households";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import type { FamilyDoc } from "@/types/family";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 function canManageFamily(
@@ -47,8 +47,7 @@ function emptyForm(): FormState {
 }
 
 export function FamiliesClient() {
-  const params = useParams();
-  const groupId = params.groupId as string;
+  const groupId = useGroupRouteId();
   const { user } = useAuth();
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);

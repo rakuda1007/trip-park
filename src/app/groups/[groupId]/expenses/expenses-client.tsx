@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useGroupRouteId } from "@/contexts/group-route-context";
 import {
   addExpense,
   deleteExpense,
@@ -22,7 +23,6 @@ import type { GroupDoc, MemberDoc } from "@/types/group";
 import type { ExpenseCategory, ExpenseDoc, ExpenseSplitMode } from "@/types/expense";
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
@@ -89,8 +89,7 @@ function familyWeight(data: FamilyDoc): number {
 }
 
 export function ExpensesClient() {
-  const params = useParams();
-  const groupId = params.groupId as string;
+  const groupId = useGroupRouteId();
   const { user } = useAuth();
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useGroupRouteId } from "@/contexts/group-route-context";
 import {
   addDestinationCandidate,
   castDestinationVote,
@@ -15,7 +16,6 @@ import { getGroup, listMembers, updateDestination } from "@/lib/firestore/groups
 import type { DestinationAnswer } from "@/types/destination";
 import type { GroupDoc } from "@/types/group";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 const ANSWER_LABELS: Record<DestinationAnswer, string> = {
@@ -140,8 +140,7 @@ function CandidateForm({
 }
 
 export function DestinationVotesClient() {
-  const params = useParams();
-  const groupId = params.groupId as string;
+  const groupId = useGroupRouteId();
   const { user } = useAuth();
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);

@@ -1,13 +1,14 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useGroupRouteId } from "@/contexts/group-route-context";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
 import type { GroupDoc, GroupRole, MemberDoc } from "@/types/group";
 import type { NotifyStatusResponse } from "@/app/api/admin/notify-status/route";
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const ROLE_LABELS: Record<GroupRole, string> = {
@@ -55,8 +56,7 @@ function NotifyBadge({ count }: { count: number | undefined }) {
 }
 
 export function AdminClient() {
-  const params = useParams();
-  const groupId = params.groupId as string;
+  const groupId = useGroupRouteId();
   const { user } = useAuth();
   const router = useRouter();
 

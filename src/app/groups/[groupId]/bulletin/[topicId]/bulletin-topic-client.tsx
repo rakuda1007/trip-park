@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useGroupRouteId } from "@/contexts/group-route-context";
 import {
   createBulletinReply,
   deleteBulletinReply,
@@ -85,7 +86,7 @@ function canManageBulletin(
 
 export function BulletinTopicClient() {
   const params = useParams();
-  const groupId = params.groupId as string;
+  const groupId = useGroupRouteId();
   const topicId = params.topicId as string;
   const { user } = useAuth();
   const router = useRouter();

@@ -1,8 +1,8 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useGroupRouteId } from "@/contexts/group-route-context";
 import { recordMemberAccess } from "@/lib/firestore/groups";
-import { useParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 /**
@@ -10,8 +10,7 @@ import { useEffect, useRef } from "react";
  * sessionStorage を使ってセッション単位で1回のみ Firestore に書き込む。
  */
 export function AccessRecorder() {
-  const params = useParams();
-  const groupId = params?.groupId as string | undefined;
+  const groupId = useGroupRouteId();
   const { user } = useAuth();
   const recorded = useRef(false);
 

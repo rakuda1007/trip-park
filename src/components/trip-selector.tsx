@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import { listMyGroups } from "@/lib/firestore/groups";
-import { loadLastTripId, saveLastTripId } from "@/lib/last-trip";
+import { clearLastTripId, loadLastTripId, saveLastTripId } from "@/lib/last-trip";
 import type { UserGroupRefDoc } from "@/types/group";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -62,7 +62,15 @@ export function TripSelector() {
         const lastId = loadLastTripId(user.uid);
         if (lastId) {
           const found = list.find((t) => t.groupId === lastId);
-          setCurrentTrip(found ?? null);
+          if (found) {
+            setCurrentTrip(found);
+          } else {
+            // 一覧に無い（削除済み等）の ID が残っているとヘッダーと画面が食い違うため消す
+            clearLastTripId(user.uid);
+            setCurrentTrip(null);
+          }
+        } else {
+          setCurrentTrip(null);
         }
       }
     } catch {

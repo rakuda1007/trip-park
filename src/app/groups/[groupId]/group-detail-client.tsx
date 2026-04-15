@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useGroupRouteId } from "@/contexts/group-route-context";
 import {
   buildWelcomeUrl,
   deleteGroup,
@@ -16,13 +17,17 @@ import {
   createBulletinTopic,
   listBulletinTopicsWithReplyCounts,
 } from "@/lib/firestore/bulletin";
+import {
+  listSharingItems,
+  sharingSummaryStats,
+} from "@/lib/firestore/sharing";
 import { sendNotification } from "@/lib/notify";
 import { saveLastTripId } from "@/lib/last-trip";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import type { BulletinCategory, BulletinImportance, BulletinTopicDoc } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 const CATEGORY_LABELS: Record<BulletinCategory, string> = {
@@ -52,8 +57,7 @@ function formatDateRange(start: string, end?: string | null): string {
 }
 
 export function GroupDetailClient() {
-  const params = useParams();
-  const groupId = params.groupId as string;
+  const groupId = useGroupRouteId();
   const { user } = useAuth();
   const router = useRouter();
 
@@ -85,6 +89,12 @@ export function GroupDetailClient() {
   const [newCategory, setNewCategory] = useState<BulletinCategory>("general");
   const [newImportance, setNewImportance] = useState<BulletinImportance>("normal");
 
+  /** 買い出し・分担（掲示板上の要約用） */
+  const [sharingSummary, setSharingSummary] = useState<{
+    total: number;
+    unassigned: number;
+  }>({ total: 0, unassigned: 0 });
+
   // 旅行ページを開いたら直近アクセス旅行として記録
   useEffect(() => {
     if (user && groupId) {
@@ -97,17 +107,39 @@ export function GroupDetailClient() {
     setError(null);
     try {
       const g = await getGroup(groupId);
-      setGroup(g);
-      if (g) {
-        const [m, t] = await Promise.all([
-          listMembers(groupId),
-          listBulletinTopicsWithReplyCounts(groupId),
-        ]);
-        setMembers(m);
-        setTopics(t);
-      } else {
+      if (!g) {
+        setGroup(null);
         setMembers([]);
         setTopics([]);
+        setSharingSummary({ total: 0, unassigned: 0 });
+        return;
+      }
+      setGroup(g);
+      // メンバーは必須。掲示板・分担は個別に失敗しても旅行トップは表示する（権限未デプロイ等）
+      try {
+        setMembers(await listMembers(groupId));
+      } catch {
+        setMembers([]);
+        setError("メンバー一覧を読み込めませんでした。ネットワークまたは権限を確認してください。");
+        setTopics([]);
+        setSharingSummary({ total: 0, unassigned: 0 });
+        return;
+      }
+      try {
+        const t = await listBulletinTopicsWithReplyCounts(groupId);
+        setTopics(t);
+      } catch {
+        setTopics([]);
+      }
+      try {
+        const s = await listSharingItems(groupId);
+        const st = sharingSummaryStats(s);
+        setSharingSummary({
+          total: st.total,
+          unassigned: st.unassigned,
+        });
+      } catch {
+        setSharingSummary({ total: 0, unassigned: 0 });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -272,6 +304,11 @@ export function GroupDetailClient() {
     return (
       <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
         <p className="text-sm text-zinc-600">旅行が見つかりません。</p>
+        {error ? (
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
+            {error}
+          </p>
+        ) : null}
         <Link href="/groups" className="mt-4 inline-block text-sm text-zinc-900 underline">
           旅行一覧へ
         </Link>
@@ -450,6 +487,16 @@ export function GroupDetailClient() {
           </div>
         </div>
       ) : null}
+
+      {/* ── 買出しリスト（掲示板の上・一行リンク） ── */}
+      <p className="mt-4 text-sm">
+        <Link
+          href={`/groups/${groupId}/sharing`}
+          className="text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+        >
+          ＜買出しリスト（全{sharingSummary.total}項目、未割当{sharingSummary.unassigned}項目）を開く＞
+        </Link>
+      </p>
 
       {/* ── 掲示板 ── */}
       <section className="mt-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60">

@@ -1,12 +1,18 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useGroupRouteId } from "@/contexts/group-route-context";
 import {
   createBulletinTopic,
   listBulletinTopicsWithReplyCounts,
 } from "@/lib/firestore/bulletin";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
 import { sendNotification } from "@/lib/notify";
+import {
+  listSharingItems,
+  sharingSummaryStats,
+  type SharingItemRow,
+} from "@/lib/firestore/sharing";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import type {
   BulletinCategory,
@@ -15,7 +21,6 @@ import type {
 } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 const CATEGORY_LABELS: Record<BulletinCategory, string> = {
@@ -53,8 +58,7 @@ function excerpt(body: string, max = 120): string {
 }
 
 export function BulletinClient() {
-  const params = useParams();
-  const groupId = params.groupId as string;
+  const groupId = useGroupRouteId();
   const { user } = useAuth();
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
@@ -64,6 +68,7 @@ export function BulletinClient() {
   const [topics, setTopics] = useState<
     { id: string; data: BulletinTopicDoc; replyCount: number }[]
   >([]);
+  const [sharingItems, setSharingItems] = useState<SharingItemRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -79,18 +84,33 @@ export function BulletinClient() {
     setError(null);
     try {
       const g = await getGroup(groupId);
-      setGroup(g);
       if (!g) {
+        setGroup(null);
         setMembers([]);
         setTopics([]);
+        setSharingItems([]);
         return;
       }
-      const [m, t] = await Promise.all([
-        listMembers(groupId),
-        listBulletinTopicsWithReplyCounts(groupId),
-      ]);
-      setMembers(m);
-      setTopics(t);
+      setGroup(g);
+      try {
+        setMembers(await listMembers(groupId));
+      } catch {
+        setError("メンバー一覧を読み込めませんでした。");
+        setMembers([]);
+        setTopics([]);
+        setSharingItems([]);
+        return;
+      }
+      try {
+        setTopics(await listBulletinTopicsWithReplyCounts(groupId));
+      } catch {
+        setTopics([]);
+      }
+      try {
+        setSharingItems(await listSharingItems(groupId));
+      } catch {
+        setSharingItems([]);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
       setGroup(null);
@@ -180,6 +200,8 @@ export function BulletinClient() {
     );
   }
 
+  const shareStat = sharingSummaryStats(sharingItems);
+
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
       <Link
@@ -205,6 +227,15 @@ export function BulletinClient() {
       </div>
       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
         話題ごとにスレッドが分かれます。一覧から話題を選ぶと、本文と返信を見たり書き込みできます。
+      </p>
+
+      <p className="mt-4 text-sm">
+        <Link
+          href={`/groups/${groupId}/sharing`}
+          className="text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+        >
+          ＜買出しリスト（全{shareStat.total}項目、未割当{shareStat.unassigned}項目）を開く＞
+        </Link>
       </p>
 
       {error ? (
