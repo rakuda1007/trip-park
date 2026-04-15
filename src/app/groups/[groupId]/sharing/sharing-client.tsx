@@ -244,20 +244,28 @@ export function SharingClient() {
         </div>
       ) : null}
 
-      <div className="mt-8 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
-        <table className="w-full min-w-[520px] text-sm">
+      <div className="mt-8 rounded-xl border border-zinc-200 dark:border-zinc-700">
+        <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
           <thead>
-            <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-xs font-semibold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60">
-              <th className="px-3 py-3">項目</th>
-              <th className="px-3 py-3">補足</th>
-              <th className="px-3 py-3">担当</th>
-              <th className="px-3 py-3 w-28">操作</th>
+            <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-[11px] font-semibold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 sm:text-xs">
+              <th className="w-[22%] min-w-0 px-1.5 py-2 sm:w-[24%] sm:px-3 sm:py-3">
+                項目
+              </th>
+              <th className="w-[20%] min-w-0 px-1.5 py-2 sm:w-[22%] sm:px-3 sm:py-3">
+                補足
+              </th>
+              <th className="w-[35%] min-w-0 px-1.5 py-2 sm:w-[30%] sm:px-3 sm:py-3">
+                担当
+              </th>
+              <th className="w-[23%] min-w-0 px-1.5 py-2 sm:w-[24%] sm:px-3 sm:py-3">
+                操作
+              </th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-3 py-8 text-center text-zinc-500">
+                <td colSpan={4} className="px-2 py-8 text-center text-zinc-500 sm:px-3">
                   まだ項目がありません。上のフォームから追加してください。
                 </td>
               </tr>
@@ -267,31 +275,31 @@ export function SharingClient() {
                   key={id}
                   className="border-b border-zinc-100 last:border-0 dark:border-zinc-800"
                 >
-                  <td className="px-3 py-2 align-top font-medium text-zinc-900 dark:text-zinc-100">
+                  <td className="min-w-0 px-1.5 py-2 align-top font-medium break-words text-zinc-900 sm:px-3 dark:text-zinc-100">
                     {editingId === id ? (
                       <input
                         type="text"
                         value={editLabel}
                         onChange={(e) => setEditLabel(e.target.value)}
-                        className="w-full rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                        className="w-full min-w-0 rounded border border-zinc-300 px-1 py-1 text-xs sm:px-2 sm:text-sm dark:border-zinc-600 dark:bg-zinc-900"
                       />
                     ) : (
-                      data.label
+                      <span className="block break-words">{data.label}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 align-top text-zinc-600 dark:text-zinc-400">
+                  <td className="min-w-0 px-1.5 py-2 align-top break-words text-zinc-600 sm:px-3 dark:text-zinc-400">
                     {editingId === id ? (
                       <input
                         type="text"
                         value={editMemo}
                         onChange={(e) => setEditMemo(e.target.value)}
-                        className="w-full rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                        className="w-full min-w-0 rounded border border-zinc-300 px-1 py-1 text-xs sm:px-2 sm:text-sm dark:border-zinc-600 dark:bg-zinc-900"
                       />
                     ) : (
-                      data.memo ?? "—"
+                      <span className="block break-words">{data.memo ?? "—"}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 align-top">
+                  <td className="min-w-0 px-1.5 py-2 align-top sm:px-3">
                     {user && isMember ? (
                       <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
                         <select
@@ -304,7 +312,7 @@ export function SharingClient() {
                             );
                           }}
                           disabled={busy !== null}
-                          className="max-w-[12rem] rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900"
+                          className="w-full max-w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1 py-1 text-[11px] dark:border-zinc-600 dark:bg-zinc-900 sm:max-w-[12rem] sm:px-2 sm:text-xs"
                         >
                           <option value="">未割当</option>
                           {members.map(({ userId, data: md }) => (
@@ -341,7 +349,7 @@ export function SharingClient() {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 align-top">
+                  <td className="min-w-0 px-1.5 py-2 align-top sm:px-3">
                     {user && isMember ? (
                       <div className="flex flex-wrap gap-1">
                         {editingId === id ? (
