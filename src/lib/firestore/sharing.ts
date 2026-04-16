@@ -217,16 +217,34 @@ export async function updateSharingItemFamilyAssignment(
   assignedFamilyName: string | null,
 ): Promise<void> {
   const db = getFirebaseFirestore();
-  await updateDoc(
-    doc(db, COLLECTIONS.groups, groupId, SUB.sharingItems, itemId),
-    {
-      assignedFamilyId,
-      assignedFamilyName,
-      assignedUserId: deleteField(),
-      assignedDisplayName: deleteField(),
-      updatedAt: serverTimestamp(),
-    },
-  );
+  const ref = doc(db, COLLECTIONS.groups, groupId, SUB.sharingItems, itemId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("項目が見つかりません。");
+  const raw = snap.data() as Record<string, unknown>;
+  const label = typeof raw.label === "string" ? raw.label : "";
+  const memo =
+    typeof raw.memo === "string" ? raw.memo : null;
+  const sortOrder =
+    typeof raw.sortOrder === "number" ? raw.sortOrder : 0;
+  const createdByUserId =
+    typeof raw.createdByUserId === "string" ? raw.createdByUserId : "";
+  const createdByDisplayName =
+    typeof raw.createdByDisplayName === "string"
+      ? raw.createdByDisplayName
+      : null;
+
+  await updateDoc(ref, {
+    label,
+    memo,
+    sortOrder,
+    createdByUserId,
+    createdByDisplayName,
+    assignedFamilyId,
+    assignedFamilyName,
+    assignedUserId: deleteField(),
+    assignedDisplayName: deleteField(),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function updateSharingItemFields(

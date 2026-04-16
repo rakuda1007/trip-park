@@ -27,28 +27,43 @@ service cloud.firestore {
       return data.label is string &&
         data.label.size() > 0 &&
         data.label.size() <= 200 &&
-        data.sortOrder is int &&
+        (data.sortOrder is int || data.sortOrder is float) &&
         (data.memo is string || data.memo == null);
     }
 
+    // memo はキー欠けがあり得る（アクセスは null 相当）。createdByDisplayName も同様。
     function sharingItemCoreKeys(data) {
       return data.keys().hasAll([
-        'label', 'memo', 'sortOrder',
-        'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt'
-      ]);
+        'label', 'sortOrder',
+        'createdByUserId', 'createdAt', 'updatedAt'
+      ]) &&
+        (data.memo is string || data.memo == null) &&
+        (!data.keys().hasAny(['createdByDisplayName']) ||
+          data.createdByDisplayName is string ||
+          data.createdByDisplayName == null);
     }
 
-    function sharingAssignmentNew(data) {
-      return data.keys().hasAll(['assignedFamilyId', 'assignedFamilyName']);
+    /** 更新時: createdAt の厳密比較や keys().hasAll は欠損キーで誤拒否しやすいので緩い検証に留める */
+    function sharingItemUpdateShape(data) {
+      return data.label is string &&
+        data.label.size() > 0 &&
+        data.label.size() <= 200 &&
+        (data.sortOrder is int || data.sortOrder is float) &&
+        (data.memo is string || data.memo == null) &&
+        data.createdByUserId is string &&
+        (data.createdByDisplayName is string || data.createdByDisplayName == null);
     }
 
     function sharingAssignmentLegacy(data) {
       return data.keys().hasAll(['assignedUserId', 'assignedDisplayName']);
     }
 
+    // 世帯フィールドと旧メンバーフィールドは同時に存在させない
     function sharingAssignmentOk(data) {
-      return (sharingAssignmentNew(data) && !sharingAssignmentLegacy(data)) ||
-        (sharingAssignmentLegacy(data) && !sharingAssignmentNew(data));
+      let hasFam = data.keys().hasAll(['assignedFamilyId', 'assignedFamilyName']);
+      let hasLegacy = data.keys().hasAny(['assignedUserId', 'assignedDisplayName']);
+      return (hasFam && !hasLegacy) ||
+        (sharingAssignmentLegacy(data) && !hasFam);
     }
 
     match /users/{userId} {
@@ -325,7 +340,6 @@ service cloud.firestore {
           request.resource.data.createdByUserId == request.auth.uid &&
           sharingItemCoreKeys(request.resource.data) &&
           sharingAssignmentOk(request.resource.data) &&
-          sharingAssignmentNew(request.resource.data) &&
           sharingLabelValid(request.resource.data) &&
           (request.resource.data.assignedFamilyId == null ||
             request.resource.data.assignedFamilyId is string) &&
@@ -333,10 +347,8 @@ service cloud.firestore {
             request.resource.data.assignedFamilyName is string);
         allow update: if request.auth != null && isGroupMember(groupId) &&
           request.resource.data.createdByUserId == resource.data.createdByUserId &&
-          request.resource.data.createdAt == resource.data.createdAt &&
-          sharingItemCoreKeys(request.resource.data) &&
+          sharingItemUpdateShape(request.resource.data) &&
           sharingAssignmentOk(request.resource.data) &&
-          sharingLabelValid(request.resource.data) &&
           (request.resource.data.assignedFamilyId == null ||
             request.resource.data.assignedFamilyId is string) &&
           (request.resource.data.assignedFamilyName == null ||
