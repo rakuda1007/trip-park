@@ -279,6 +279,29 @@ export function DestinationVotesClient() {
     });
   }, [candidates, votes]);
 
+  /** 「ここに行きたい」が多い順（同数は「行きたい」「抑え」、さらに追加が早い順） */
+  const orderedCandidates = useMemo(() => {
+    const statById = new Map(stats.map((s) => [s.id, s]));
+    return [...candidates].sort((a, b) => {
+      const sa = statById.get(a.id);
+      const sb = statById.get(b.id);
+      const fa = sa?.first ?? 0;
+      const fb = sb?.first ?? 0;
+      if (fb !== fa) return fb - fa;
+      const wa = sa?.want ?? 0;
+      const wb = sb?.want ?? 0;
+      if (wb !== wa) return wb - wa;
+      const ra = sa?.reserve ?? 0;
+      const rb = sb?.reserve ?? 0;
+      if (rb !== ra) return rb - ra;
+      const ta = a.data.createdAt;
+      const tb = b.data.createdAt;
+      const sec = (x: unknown) =>
+        x && typeof x === "object" && "seconds" in x ? (x as { seconds: number }).seconds : 0;
+      return sec(ta) - sec(tb);
+    });
+  }, [candidates, stats]);
+
   // candidateId + answer ごとの投票者名リスト
   const voterNames = useCallback(
     (candidateId: string, answer: DestinationAnswer): string[] =>
@@ -351,7 +374,7 @@ export function DestinationVotesClient() {
                 </tr>
               </thead>
               <tbody>
-                {candidates.map((c) => {
+                {orderedCandidates.map((c) => {
                   const s = stats.find((x) => x.id === c.id)!;
                   const myVote = votes.find((v) => v.data.candidateId === c.id && v.data.userId === user?.uid);
                   const isDecided = group.destination === c.data.name;
