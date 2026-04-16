@@ -374,7 +374,8 @@ export function BulletinTopicClient() {
     });
   }
 
-  async function handleConfirmResolution() {
+  /** 任意のカードから確定。画面上の全候補の設定をまとめて保存する（未保存の編集が消えないようにする）。 */
+  async function handleConfirmResolution(fromCandidateIndex?: number) {
     if (!user || !groupId || !topicId || !topic?.recipePoll?.candidates.length) {
       return;
     }
@@ -400,7 +401,9 @@ export function BulletinTopicClient() {
       setError("少なくとも1件のレシピで Day と食事を指定してください");
       return;
     }
-    setBusy("resolution");
+    setBusy(
+      fromCandidateIndex !== undefined ? `res-${fromCandidateIndex}` : "resolution",
+    );
     setError(null);
     try {
       await updateRecipePollResolution(groupId, topicId, {
@@ -852,8 +855,10 @@ export function BulletinTopicClient() {
                       投票結果を確定して旅程に反映
                     </h3>
                     <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-200/90">
-                      レシピ候補ごとに Day と食事を指定します。旅程の Day
-                      タブに表示されます。
+                      レシピ候補ごとに Day と食事を指定し、
+                      <strong className="font-semibold">各カードの茶色のボタン</strong>
+                      で旅程に保存します。ドロップダウンを変えただけでは保存されません。
+                      保存時は画面上の候補の設定がすべてまとめて反映されます。
                     </p>
                     <div className="mt-4 space-y-4">
                       {topic.recipePoll!.candidates.map((cand, ci) => {
@@ -973,20 +978,29 @@ export function BulletinTopicClient() {
                                 </button>
                               </div>
                             )}
+                            <div className="mt-4 border-t border-zinc-100 pt-4 dark:border-zinc-700">
+                              <button
+                                type="button"
+                                onClick={() => void handleConfirmResolution(ci)}
+                                disabled={busy !== null}
+                                className="w-full rounded-lg bg-amber-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
+                              >
+                                {busy === `res-${ci}`
+                                  ? "保存中…"
+                                  : slot
+                                    ? "このレシピを旅程に反映"
+                                    : "この設定を旅程に保存"}
+                              </button>
+                              <p className="mt-1.5 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                                ほかのレシピの設定もまとめて保存されます
+                              </p>
+                            </div>
                           </div>
                         );
                       })}
                     </div>
-                    <div className="mt-5 flex flex-wrap gap-2 border-t border-amber-200/60 pt-4 dark:border-amber-900/40">
-                      <button
-                        type="button"
-                        onClick={handleConfirmResolution}
-                        disabled={busy !== null}
-                        className="rounded-lg bg-amber-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
-                      >
-                        {busy === "resolution" ? "保存中…" : "この内容で確定"}
-                      </button>
-                      {topic.recipePollResolution ? (
+                    {topic.recipePollResolution ? (
+                      <div className="mt-5 border-t border-amber-200/60 pt-4 dark:border-amber-900/40">
                         <button
                           type="button"
                           onClick={handleClearResolution}
@@ -995,8 +1009,8 @@ export function BulletinTopicClient() {
                         >
                           旅程への表示を取り消す
                         </button>
-                      ) : null}
-                    </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 
