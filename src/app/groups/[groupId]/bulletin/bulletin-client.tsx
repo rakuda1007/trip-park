@@ -14,29 +14,19 @@ import {
   type SharingItemRow,
 } from "@/lib/firestore/sharing";
 import type { GroupDoc, MemberDoc } from "@/types/group";
-import type {
-  BulletinCategory,
-  BulletinImportance,
-  BulletinTopicDoc,
+import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
+import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
+import {
+  BULLETIN_CATEGORY_LABELS,
+  BULLETIN_CATEGORY_OPTIONS,
+  type BulletinCategory,
+  type BulletinImportance,
+  type BulletinTopicDoc,
 } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
 import { SharingListPanel } from "@/app/groups/[groupId]/sharing/sharing-list-panel";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-
-const CATEGORY_LABELS: Record<BulletinCategory, string> = {
-  general: "全体連絡",
-  gear: "持ち物",
-  dayof: "当日の連絡",
-  other: "その他",
-};
-
-const CATEGORY_OPTIONS: BulletinCategory[] = [
-  "general",
-  "gear",
-  "dayof",
-  "other",
-];
 
 function formatTs(v: unknown): string {
   if (!v) return "—";
@@ -52,8 +42,11 @@ function formatTs(v: unknown): string {
   return "—";
 }
 
-function excerpt(body: string, max = 120): string {
-  const t = body.trim().replace(/\s+/g, " ");
+function excerptTopic(data: BulletinTopicDoc, max = 120): string {
+  if (data.category === "recipe_vote" && data.recipePoll?.candidates?.length) {
+    return `候補 ${data.recipePoll.candidates.length}件のレシピ投票`;
+  }
+  const t = data.body.trim().replace(/\s+/g, " ");
   if (t.length <= max) return t;
   return t.slice(0, max) + "…";
 }
@@ -128,10 +121,21 @@ export function BulletinClient() {
   );
 
   async function handleCreateTopic() {
-    if (!user || !groupId || !newTitle.trim() || !newBody.trim()) return;
+    if (!user || !groupId || !newTitle.trim()) return;
+    if (newCategory !== "recipe_vote" && !newBody.trim()) return;
+    if (newCategory === "recipe_vote") {
+      const urls = parseRecipeUrlLines(newBody);
+      if (urls.length === 0) return;
+    }
     setBusy("create");
     setError(null);
     try {
+      const savedTitle = newTitle.trim();
+      let recipePoll = null;
+      if (newCategory === "recipe_vote") {
+        const urls = parseRecipeUrlLines(newBody);
+        recipePoll = await fetchRecipePollFromUrls(urls);
+      }
       const topicId = await createBulletinTopic(
         groupId,
         user.uid,
@@ -140,6 +144,7 @@ export function BulletinClient() {
         newBody,
         newCategory,
         newImportance,
+        recipePoll ?? undefined,
       );
       setNewTitle("");
       setNewBody("");
@@ -153,7 +158,7 @@ export function BulletinClient() {
         groupId,
         groupName: group?.name ?? "",
         topicId,
-        topicTitle: newTitle.trim(),
+        topicTitle: savedTitle,
         authorName: user.displayName ?? "メンバー",
         authorUid: user.uid,
       });
@@ -214,9 +219,14 @@ export function BulletinClient() {
       </Link>
 
       <div className="mt-4 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          トピック
-        </h1>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+            掲示板
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+            トピック
+          </h1>
+        </div>
         {user && isMember ? (
           <button
             type="button"
@@ -285,13 +295,19 @@ export function BulletinClient() {
               />
             </label>
             <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-              本文（最初の投稿）
+              {newCategory === "recipe_vote"
+                ? "レシピページのURL（1行に1件）"
+                : "本文（最初の投稿）"}
               <textarea
                 value={newBody}
                 onChange={(e) => setNewBody(e.target.value)}
-                rows={5}
+                rows={newCategory === "recipe_vote" ? 6 : 5}
                 className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                placeholder="内容"
+                placeholder={
+                  newCategory === "recipe_vote"
+                    ? "https://cookpad.com/jp/recipes/…"
+                    : "内容"
+                }
               />
             </label>
             <div className="flex flex-wrap gap-4">
@@ -304,9 +320,9 @@ export function BulletinClient() {
                   }
                   className="mt-1 block rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                 >
-                  {CATEGORY_OPTIONS.map((c) => (
+                  {BULLETIN_CATEGORY_OPTIONS.map((c) => (
                     <option key={c} value={c}>
-                      {CATEGORY_LABELS[c]}
+                      {BULLETIN_CATEGORY_LABELS[c]}
                     </option>
                   ))}
                 </select>
@@ -328,7 +344,13 @@ export function BulletinClient() {
             <button
               type="button"
               onClick={handleCreateTopic}
-              disabled={busy !== null || !newTitle.trim() || !newBody.trim()}
+              disabled={
+                busy !== null ||
+                !newTitle.trim() ||
+                (newCategory === "recipe_vote"
+                  ? parseRecipeUrlLines(newBody).length === 0
+                  : !newBody.trim())
+              }
               className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
             >
               {busy === "create" ? "作成中…" : "話題を作成"}
@@ -337,9 +359,9 @@ export function BulletinClient() {
         </section>
       ) : null}
 
-      <section className="mt-8">
-        <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-          トピック一覧
+      <section className="mt-8 border-t border-zinc-200 pt-8 dark:border-zinc-800">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
+          話題一覧
         </h2>
         {topics.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-500">
@@ -366,7 +388,7 @@ export function BulletinClient() {
                       </p>
                     ) : null}
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                      <h3 className="text-lg font-semibold leading-snug text-zinc-900 dark:text-zinc-100">
                         {data.title}
                       </h3>
                       <span className="shrink-0 text-xs text-zinc-500">
@@ -374,11 +396,11 @@ export function BulletinClient() {
                       </span>
                     </div>
                     <p className="mt-2 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
-                      {excerpt(data.body)}
+                      {excerptTopic(data)}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                       <span className="rounded bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800">
-                        {CATEGORY_LABELS[data.category]}
+                        {BULLETIN_CATEGORY_LABELS[data.category]}
                       </span>
                       {data.importance === "important" ? (
                         <span className="text-amber-700 dark:text-amber-300">

@@ -58,6 +58,19 @@ service cloud.firestore {
         (sharingAssignmentLegacy(data) && !hasFam);
     }
 
+    // レシピ投票のプレビュー（厳密な要素検証はクライアント任せ、サイズのみ制限）
+    function bulletinRecipePollOk(p) {
+      return p is map &&
+        p.keys().hasAll(['candidates']) &&
+        p.candidates is list &&
+        p.candidates.size() >= 1 &&
+        p.candidates.size() <= 20;
+    }
+
+    function bulletinRecipePollFieldOk(data) {
+      return !data.keys().hasAny(['recipePoll']) || bulletinRecipePollOk(data.recipePoll);
+    }
+
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
 
@@ -132,8 +145,14 @@ service cloud.firestore {
           request.resource.data.keys().hasAll([
             'title', 'body', 'authorUserId', 'authorDisplayName',
             'category', 'importance', 'pinned', 'createdAt', 'updatedAt'
-          ]);
-        allow update: if request.auth != null && isGroupMember(groupId) && (
+          ]) &&
+          bulletinRecipePollFieldOk(request.resource.data) &&
+          (
+            request.resource.data.category != 'recipe_vote' ||
+            request.resource.data.keys().hasAny(['recipePoll'])
+          );
+        allow update: if request.auth != null && isGroupMember(groupId) &&
+          bulletinRecipePollFieldOk(request.resource.data) && (
           isOwnerOrAdmin(groupId) ||
           (
             request.auth.uid == resource.data.authorUserId &&
@@ -171,6 +190,19 @@ service cloud.firestore {
             request.resource.data.keys().hasOnly(['lastReadReplyId', 'updatedAt']) &&
             (request.resource.data.lastReadReplyId == null || request.resource.data.lastReadReplyId is string);
           allow delete: if false;
+        }
+
+        match /recipeVotes/{voterUid} {
+          allow read: if request.auth != null && isGroupMember(groupId);
+          allow create, update: if request.auth != null && isGroupMember(groupId) &&
+            request.auth.uid == voterUid &&
+            request.resource.data.keys().hasOnly(['candidateIndex', 'updatedAt']) &&
+            request.resource.data.candidateIndex is int &&
+            request.resource.data.candidateIndex >= 0 &&
+            request.resource.data.candidateIndex < 50;
+          allow delete: if request.auth != null && isGroupMember(groupId) && (
+            request.auth.uid == voterUid || isOwnerOrAdmin(groupId)
+          );
         }
       }
 
@@ -337,20 +369,10 @@ service cloud.firestore {
             request.resource.data.assignedFamilyId is string) &&
           (request.resource.data.assignedFamilyName == null ||
             request.resource.data.assignedFamilyName is string);
-        // 更新は誤拒否しやすいため、メンバー＋作成者ID不変＋ラベル範囲＋割当フィールドの型のみ検証する
+        // 更新: 型混在の既存データで (x==null || x is string) が偽になり全拒否するのを避ける。
+        // 作成者の変更だけ防ぐ（メンバー同士の不正編集リスクは許容しやすい形）。
         allow update: if request.auth != null && isGroupMember(groupId) &&
-          request.resource.data.createdByUserId == resource.data.createdByUserId &&
-          request.resource.data.label is string &&
-          request.resource.data.label.size() > 0 &&
-          request.resource.data.label.size() <= 200 &&
-          (request.resource.data.assignedFamilyId == null ||
-            request.resource.data.assignedFamilyId is string) &&
-          (request.resource.data.assignedFamilyName == null ||
-            request.resource.data.assignedFamilyName is string) &&
-          (request.resource.data.assignedUserId == null ||
-            request.resource.data.assignedUserId is string) &&
-          (request.resource.data.assignedDisplayName == null ||
-            request.resource.data.assignedDisplayName is string);
+          request.resource.data.createdByUserId == resource.data.createdByUserId;
         allow delete: if request.auth != null && isGroupMember(groupId) && (
           resource.data.createdByUserId == request.auth.uid ||
           isOwnerOrAdmin(groupId)

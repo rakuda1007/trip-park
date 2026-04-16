@@ -1,5 +1,39 @@
 /** 掲示板カテゴリ（仕様の例に対応） */
-export type BulletinCategory = "general" | "gear" | "dayof" | "other";
+export type BulletinCategory =
+  | "general"
+  | "gear"
+  | "dayof"
+  | "other"
+  | "recipe_vote";
+
+/** レシピ投票でプレビューに保存する候補（URL 先から取得） */
+export type RecipePollCandidate = {
+  url: string;
+  sourceTitle: string | null;
+  imageUrl: string | null;
+  ingredients: string[];
+  fetchError: string | null;
+};
+
+export type RecipePollData = {
+  candidates: RecipePollCandidate[];
+};
+
+export const BULLETIN_CATEGORY_LABELS: Record<BulletinCategory, string> = {
+  general: "全体連絡",
+  gear: "持ち物",
+  dayof: "当日の連絡",
+  other: "その他",
+  recipe_vote: "レシピ投票",
+};
+
+export const BULLETIN_CATEGORY_OPTIONS: BulletinCategory[] = [
+  "general",
+  "gear",
+  "dayof",
+  "other",
+  "recipe_vote",
+];
 
 /** 重要度 */
 export type BulletinImportance = "normal" | "important";
@@ -13,7 +47,15 @@ export type BulletinTopicDoc = {
   category: BulletinCategory;
   importance: BulletinImportance;
   pinned: boolean;
+  /** カテゴリが recipe_vote のとき、候補のプレビュー（画像・材料） */
+  recipePoll?: RecipePollData;
   createdAt: unknown;
+  updatedAt: unknown;
+};
+
+/** `bulletinPosts/{topicId}/recipeVotes/{userId}` — 1人1票 */
+export type BulletinRecipeVoteDoc = {
+  candidateIndex: number;
   updatedAt: unknown;
 };
 

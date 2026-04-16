@@ -24,17 +24,21 @@ import {
 import { sendNotification } from "@/lib/notify";
 import { saveLastTripId } from "@/lib/last-trip";
 import type { GroupDoc, MemberDoc } from "@/types/group";
-import type { BulletinCategory, BulletinImportance, BulletinTopicDoc } from "@/types/bulletin";
+import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
+import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
+import {
+  BULLETIN_CATEGORY_LABELS,
+  BULLETIN_CATEGORY_OPTIONS,
+  type BulletinCategory,
+  type BulletinImportance,
+  type BulletinTopicDoc,
+  type RecipePollData,
+} from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
 import { SharingListPanel } from "@/app/groups/[groupId]/sharing/sharing-list-panel";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-
-const CATEGORY_LABELS: Record<BulletinCategory, string> = {
-  general: "全体連絡", gear: "持ち物", dayof: "当日の連絡", other: "その他",
-};
-const CATEGORY_OPTIONS: BulletinCategory[] = ["general", "gear", "dayof", "other"];
 
 function formatTs(v: unknown): string {
   if (!v) return "—";
@@ -64,8 +68,11 @@ function formatDateRange(start: string, end?: string | null): string {
 }
 
 /** トピック一覧・ダッシュボード共通の本文プレビュー */
-function excerptBulletinBody(body: string, max = 120): string {
-  const t = body.trim().replace(/\s+/g, " ");
+function excerptBulletinBody(data: BulletinTopicDoc, max = 120): string {
+  if (data.category === "recipe_vote" && data.recipePoll?.candidates?.length) {
+    return `候補 ${data.recipePoll.candidates.length}件のレシピ投票`;
+  }
+  const t = data.body.trim().replace(/\s+/g, " ");
   if (t.length <= max) return t;
   return t.slice(0, max) + "…";
 }
@@ -163,12 +170,30 @@ export function GroupDetailClient() {
   }, [groupId]);
 
   async function handleCreateTopic() {
-    if (!user || !groupId || !newTitle.trim() || !newBody.trim()) return;
+    if (!user || !groupId || !newTitle.trim()) return;
+    if (newCategory !== "recipe_vote" && !newBody.trim()) return;
+    if (newCategory === "recipe_vote" && parseRecipeUrlLines(newBody).length === 0) {
+      return;
+    }
     setBusy("create-topic");
     setError(null);
     try {
-      const topicId = await createBulletinTopic(groupId, user.uid, user.displayName, newTitle, newBody, newCategory, newImportance);
       const savedTitle = newTitle.trim();
+      let recipePoll: RecipePollData | null = null;
+      if (newCategory === "recipe_vote") {
+        const urls = parseRecipeUrlLines(newBody);
+        recipePoll = await fetchRecipePollFromUrls(urls);
+      }
+      const topicId = await createBulletinTopic(
+        groupId,
+        user.uid,
+        user.displayName,
+        newTitle,
+        newBody,
+        newCategory,
+        newImportance,
+        recipePoll ?? undefined,
+      );
       setNewTitle(""); setNewBody(""); setNewCategory("general"); setNewImportance("normal");
       setShowNewTopicForm(false);
       await load();
@@ -538,11 +563,18 @@ export function GroupDetailClient() {
         ) : null}
       </div>
 
-      {/* ── トピック ── */}
+      {/* ── トピック（機能名はラベル調。各話題タイトルとはサイズ・役割を分ける） ── */}
       <section className="mt-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60">
-        <div className="flex items-center justify-between px-4 pt-4">
-          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">トピック</h2>
-          <div className="flex items-center gap-2">
+        <div className="flex items-start justify-between gap-3 border-b border-zinc-100 bg-zinc-50/90 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-800/40">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+              トピック
+            </p>
+            <p className="mt-1 text-xs leading-snug text-zinc-600 dark:text-zinc-400">
+              話題ごとにチャットでやりとりできます。
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
             {!showNewTopicForm && (
               <button
                 type="button"
@@ -560,9 +592,6 @@ export function GroupDetailClient() {
             </Link>
           </div>
         </div>
-        <p className="px-4 pt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          トピックごとにチャットでやりとりできます。
-        </p>
 
         {/* 新規話題フォーム */}
         {showNewTopicForm && (
@@ -577,21 +606,24 @@ export function GroupDetailClient() {
                 placeholder="タイトル（件名）"
                 className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
               />
-              <textarea
-                value={newBody}
-                onChange={(e) => setNewBody(e.target.value)}
-                rows={3}
-                placeholder="本文"
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-              />
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">
+                {newCategory === "recipe_vote" ? "レシピページのURL（1行に1件）" : "本文"}
+                <textarea
+                  value={newBody}
+                  onChange={(e) => setNewBody(e.target.value)}
+                  rows={newCategory === "recipe_vote" ? 5 : 3}
+                  placeholder={newCategory === "recipe_vote" ? "https://cookpad.com/jp/recipes/…" : "本文"}
+                  className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                />
+              </label>
               <div className="flex flex-wrap gap-3">
                 <select
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value as BulletinCategory)}
                   className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                 >
-                  {CATEGORY_OPTIONS.map((c) => (
-                    <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+                  {BULLETIN_CATEGORY_OPTIONS.map((c) => (
+                    <option key={c} value={c}>{BULLETIN_CATEGORY_LABELS[c]}</option>
                   ))}
                 </select>
                 <select
@@ -607,7 +639,13 @@ export function GroupDetailClient() {
                 <button
                   type="button"
                   onClick={handleCreateTopic}
-                  disabled={busy !== null || !newTitle.trim() || !newBody.trim()}
+                  disabled={
+                    busy !== null ||
+                    !newTitle.trim() ||
+                    (newCategory === "recipe_vote"
+                      ? parseRecipeUrlLines(newBody).length === 0
+                      : !newBody.trim())
+                  }
                   className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
                 >
                   {busy === "create-topic" ? "作成中…" : "話題を作成"}
@@ -650,15 +688,15 @@ export function GroupDetailClient() {
                               📌 ピン留め
                             </p>
                           ) : null}
-                          <p className="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                          <h3 className="mt-0.5 text-base font-semibold leading-snug text-zinc-900 dark:text-zinc-100">
                             {data.title}
-                          </p>
+                          </h3>
                           <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
-                            {excerptBulletinBody(data.body)}
+                            {excerptBulletinBody(data)}
                           </p>
                           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
                             <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                              {CATEGORY_LABELS[data.category]}
+                              {BULLETIN_CATEGORY_LABELS[data.category]}
                             </span>
                             {data.importance === "important" ? (
                               <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">

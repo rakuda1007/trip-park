@@ -3,45 +3,43 @@
 import { useAuth } from "@/contexts/auth-context";
 import { useGroupRouteId } from "@/contexts/group-route-context";
 import {
+  clearAllRecipeVotes,
   computeReplyReadCounts,
   createBulletinReply,
   deleteBulletinReply,
   deleteBulletinTopic,
   getBulletinTopic,
   listBulletinReplies,
+  listRecipeVotes,
   listTopicReplyReadProgress,
   setBulletinTopicPinned,
+  setMyRecipeVote,
   setMyTopicReplyReadProgress,
   updateBulletinReply,
   updateBulletinTopic,
 } from "@/lib/firestore/bulletin";
+import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
+import {
+  normalizeUrlListSignature,
+  parseRecipeUrlLines,
+} from "@/lib/recipe-url-input";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
 import { sendNotification } from "@/lib/notify";
 import type { GroupDoc, MemberDoc } from "@/types/group";
-import type {
-  BulletinCategory,
-  BulletinImportance,
-  BulletinReplyDoc,
-  BulletinTopicDoc,
+import {
+  BULLETIN_CATEGORY_LABELS,
+  BULLETIN_CATEGORY_OPTIONS,
+  type BulletinCategory,
+  type BulletinImportance,
+  type BulletinReplyDoc,
+  type BulletinTopicDoc,
+  type BulletinRecipeVoteDoc,
+  type RecipePollData,
 } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
-const CATEGORY_LABELS: Record<BulletinCategory, string> = {
-  general: "全体連絡",
-  gear: "持ち物",
-  dayof: "当日の連絡",
-  other: "その他",
-};
-
-const CATEGORY_OPTIONS: BulletinCategory[] = [
-  "general",
-  "gear",
-  "dayof",
-  "other",
-];
 
 function formatTs(v: unknown): string {
   if (!v) return "—";
@@ -107,6 +105,9 @@ export function BulletinTopicClient() {
   const [replyReads, setReplyReads] = useState<
     { userId: string; lastReadReplyId: string | null }[]
   >([]);
+  const [recipeVotes, setRecipeVotes] = useState<
+    { userId: string; data: BulletinRecipeVoteDoc }[]
+  >([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -135,16 +136,18 @@ export function BulletinTopicClient() {
         setReplyReads([]);
         return;
       }
-      const [m, t, r, reads] = await Promise.all([
+      const [m, t, r, reads, rv] = await Promise.all([
         listMembers(groupId),
         getBulletinTopic(groupId, topicId),
         listBulletinReplies(groupId, topicId),
         listTopicReplyReadProgress(groupId, topicId).catch(() => []),
+        listRecipeVotes(groupId, topicId).catch(() => []),
       ]);
       setMembers(m);
       setTopic(t ?? null);
       setReplies(r);
       setReplyReads(reads);
+      setRecipeVotes(rv);
       if (t) {
         setEditTitle(t.title);
         setEditBody(t.body);
@@ -178,6 +181,25 @@ export function BulletinTopicClient() {
     [replies, replyReads],
   );
 
+  const recipeVoteTally = useMemo(() => {
+    const n = topic?.recipePoll?.candidates.length ?? 0;
+    const counts: number[] = Array.from({ length: n }, () => 0);
+    if (!topic || topic.category !== "recipe_vote") return counts;
+    for (const { data } of recipeVotes) {
+      const i = data.candidateIndex;
+      if (i >= 0 && i < n) counts[i]++;
+    }
+    return counts;
+  }, [topic, recipeVotes]);
+
+  const myRecipeVoteIndex = useMemo(() => {
+    if (!user) return null;
+    return (
+      recipeVotes.find((x) => x.userId === user.uid)?.data.candidateIndex ??
+      null
+    );
+  }, [recipeVotes, user]);
+
   const lastReplyId = replies.length > 0 ? replies[replies.length - 1]!.id : null;
 
   useEffect(() => {
@@ -196,10 +218,36 @@ export function BulletinTopicClient() {
   }, [groupId, topicId, user?.uid, isMember, lastReplyId]);
 
   async function handleSaveTopic() {
-    if (!groupId || !topicId || !editTitle.trim() || !editBody.trim()) return;
+    if (!groupId || !topicId || !topic || !editTitle.trim()) return;
+    if (editCategory !== "recipe_vote" && !editBody.trim()) return;
+    if (editCategory === "recipe_vote" && parseRecipeUrlLines(editBody).length === 0) {
+      return;
+    }
     setBusy("save-topic");
     setError(null);
     try {
+      let recipePoll: RecipePollData | null = null;
+      if (editCategory === "recipe_vote") {
+        const urls = parseRecipeUrlLines(editBody);
+        const nextSig = normalizeUrlListSignature(urls);
+        const prevSig = normalizeUrlListSignature(parseRecipeUrlLines(topic.body));
+        const reusePreview =
+          topic.category === "recipe_vote" &&
+          nextSig === prevSig &&
+          topic.recipePoll?.candidates &&
+          topic.recipePoll.candidates.length === urls.length;
+        if (reusePreview && topic.recipePoll) {
+          recipePoll = topic.recipePoll;
+        } else {
+          if (topic.category === "recipe_vote") {
+            await clearAllRecipeVotes(groupId, topicId);
+          }
+          recipePoll = await fetchRecipePollFromUrls(urls);
+        }
+      } else if (topic.category === "recipe_vote") {
+        await clearAllRecipeVotes(groupId, topicId);
+      }
+
       await updateBulletinTopic(
         groupId,
         topicId,
@@ -207,11 +255,35 @@ export function BulletinTopicClient() {
         editBody,
         editCategory,
         editImportance,
+        recipePoll,
       );
       setEditingTopic(false);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "更新に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleRecipeVote(candidateIndex: number) {
+    if (!user || !groupId || !topicId || !topic || !isMember) return;
+    if (topic.category !== "recipe_vote" || !topic.recipePoll?.candidates.length) {
+      return;
+    }
+    if (
+      candidateIndex < 0 ||
+      candidateIndex >= topic.recipePoll.candidates.length
+    ) {
+      return;
+    }
+    setBusy("vote");
+    setError(null);
+    try {
+      await setMyRecipeVote(groupId, topicId, user.uid, candidateIndex);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "投票に失敗しました");
     } finally {
       setBusy(null);
     }
@@ -390,12 +462,22 @@ export function BulletinTopicClient() {
               maxLength={200}
               className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
             />
-            <textarea
-              value={editBody}
-              onChange={(e) => setEditBody(e.target.value)}
-              rows={8}
-              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-            />
+            <label className="block text-xs text-zinc-500">
+              {editCategory === "recipe_vote"
+                ? "レシピページのURL（1行に1件）"
+                : "本文"}
+              <textarea
+                value={editBody}
+                onChange={(e) => setEditBody(e.target.value)}
+                rows={editCategory === "recipe_vote" ? 8 : 8}
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                placeholder={
+                  editCategory === "recipe_vote"
+                    ? "https://…"
+                    : undefined
+                }
+              />
+            </label>
             <div className="flex flex-wrap gap-4">
               <select
                 value={editCategory}
@@ -404,9 +486,9 @@ export function BulletinTopicClient() {
                 }
                 className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
               >
-                {CATEGORY_OPTIONS.map((c) => (
+                {BULLETIN_CATEGORY_OPTIONS.map((c) => (
                   <option key={c} value={c}>
-                    {CATEGORY_LABELS[c]}
+                    {BULLETIN_CATEGORY_LABELS[c]}
                   </option>
                 ))}
               </select>
@@ -425,7 +507,13 @@ export function BulletinTopicClient() {
               <button
                 type="button"
                 onClick={handleSaveTopic}
-                disabled={busy !== null}
+                disabled={
+                  busy !== null ||
+                  !editTitle.trim() ||
+                  (editCategory === "recipe_vote"
+                    ? parseRecipeUrlLines(editBody).length === 0
+                    : !editBody.trim())
+                }
                 className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs text-white dark:bg-zinc-100 dark:text-zinc-900"
               >
                 保存
@@ -453,15 +541,119 @@ export function BulletinTopicClient() {
             </h1>
             <div className="mt-1.5 flex flex-wrap gap-2 text-xs text-zinc-500">
               <span className="rounded bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800">
-                {CATEGORY_LABELS[topic.category]}
+                {BULLETIN_CATEGORY_LABELS[topic.category]}
               </span>
               {topic.importance === "important" ? (
                 <span className="text-amber-700 dark:text-amber-300">重要</span>
               ) : null}
             </div>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
-              {topic.body}
-            </p>
+            {topic.category === "recipe_vote" &&
+            topic.recipePoll?.candidates?.length ? (
+              <div className="mt-4 space-y-4">
+                <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                  候補を比較
+                </h2>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {topic.recipePoll.candidates.map((c, idx) => {
+                    const tally = recipeVoteTally[idx] ?? 0;
+                    const label = c.sourceTitle || c.url;
+                    const selected = myRecipeVoteIndex === idx;
+                    return (
+                      <div
+                        key={`${c.url}-${idx}`}
+                        className={`flex flex-col overflow-hidden rounded-xl border bg-zinc-50/80 dark:bg-zinc-900/50 ${
+                          selected
+                            ? "border-emerald-500 ring-1 ring-emerald-500/30"
+                            : "border-zinc-200 dark:border-zinc-600"
+                        }`}
+                      >
+                        {c.imageUrl ? (
+                          <div className="relative aspect-[4/3] w-full bg-zinc-200 dark:bg-zinc-800">
+                            <img
+                              src={c.imageUrl}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex aspect-[4/3] items-center justify-center bg-zinc-200 text-xs text-zinc-500 dark:bg-zinc-800">
+                            画像なし
+                          </div>
+                        )}
+                        <div className="flex flex-1 flex-col gap-2 p-3">
+                          <p className="text-sm font-semibold leading-snug text-zinc-900 dark:text-zinc-50">
+                            {label}
+                          </p>
+                          {c.fetchError ? (
+                            <p className="text-xs text-amber-700 dark:text-amber-300">
+                              {c.fetchError}
+                            </p>
+                          ) : null}
+                          {c.ingredients.length > 0 ? (
+                            <div>
+                              <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                                材料
+                              </p>
+                              <ul className="mt-1 max-h-36 list-inside list-disc overflow-y-auto text-xs text-zinc-700 dark:text-zinc-300">
+                                {c.ingredients.map((line, i) => (
+                                  <li key={i}>{line}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-zinc-500">
+                              材料リストを取得できませんでした（サイトによる）
+                            </p>
+                          )}
+                          <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-700">
+                            <span className="text-xs text-zinc-500">
+                              票 {tally}
+                            </span>
+                            <div className="flex gap-2">
+                              <a
+                                href={c.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-medium text-zinc-700 underline dark:text-zinc-300"
+                              >
+                                レシピを開く
+                              </a>
+                              {user && isMember ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRecipeVote(idx)}
+                                  disabled={busy !== null}
+                                  className={`rounded-full px-3 py-1 text-xs font-medium ${
+                                    selected
+                                      ? "bg-emerald-600 text-white"
+                                      : "border border-zinc-300 bg-white text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                                  }`}
+                                >
+                                  {selected ? "投票済み" : "投票する"}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <details className="text-xs text-zinc-500">
+                  <summary className="cursor-pointer text-zinc-600 dark:text-zinc-400">
+                    登録したURL一覧
+                  </summary>
+                  <pre className="mt-2 whitespace-pre-wrap break-all rounded-lg bg-zinc-100 p-2 text-[11px] dark:bg-zinc-800">
+                    {topic.body}
+                  </pre>
+                </details>
+              </div>
+            ) : (
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
+                {topic.body}
+              </p>
+            )}
             <p className="mt-2 text-[11px] text-zinc-500">
               {topic.authorDisplayName ||
                 topic.authorUserId.slice(0, 8) + "…"}{" "}

@@ -3,14 +3,17 @@ import { COLLECTIONS, SUB } from "@/lib/firestore/collections";
 import type {
   BulletinCategory,
   BulletinImportance,
+  BulletinRecipeVoteDoc,
   BulletinReplyDoc,
   BulletinTopicDoc,
   BulletinTopicReplyReadProgressDoc,
+  RecipePollData,
 } from "@/types/bulletin";
 import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getCountFromServer,
   getDoc,
@@ -20,6 +23,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 
 export async function listBulletinTopics(groupId: string): Promise<
@@ -118,6 +122,7 @@ export async function createBulletinTopic(
   body: string,
   category: BulletinCategory,
   importance: BulletinImportance,
+  recipePoll?: RecipePollData | null,
 ): Promise<string> {
   const db = getFirebaseFirestore();
   const col = collection(
@@ -126,7 +131,7 @@ export async function createBulletinTopic(
     groupId,
     SUB.bulletinPosts,
   );
-  const ref = await addDoc(col, {
+  const payload: Record<string, unknown> = {
     title: title.trim(),
     body: body.trim(),
     authorUserId: authorUid,
@@ -136,7 +141,11 @@ export async function createBulletinTopic(
     pinned: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  };
+  if (category === "recipe_vote" && recipePoll?.candidates?.length) {
+    payload.recipePoll = recipePoll;
+  }
+  const ref = await addDoc(col, payload);
   return ref.id;
 }
 
@@ -150,6 +159,7 @@ export async function updateBulletinTopic(
   body: string,
   category: BulletinCategory,
   importance: BulletinImportance,
+  recipePoll?: RecipePollData | null,
 ): Promise<void> {
   const db = getFirebaseFirestore();
   const ref = doc(
@@ -159,13 +169,19 @@ export async function updateBulletinTopic(
     SUB.bulletinPosts,
     topicId,
   );
-  await updateDoc(ref, {
+  const updates: Record<string, unknown> = {
     title: title.trim(),
     body: body.trim(),
     category,
     importance,
     updatedAt: serverTimestamp(),
-  });
+  };
+  if (category === "recipe_vote" && recipePoll?.candidates?.length) {
+    updates.recipePoll = recipePoll;
+  } else {
+    updates.recipePoll = deleteField();
+  }
+  await updateDoc(ref, updates);
 }
 
 export const updateBulletinPost = updateBulletinTopic;
@@ -207,9 +223,89 @@ export async function deleteBulletinTopic(
   );
   const repliesSnap = await getDocs(repliesCol);
   await Promise.all(repliesSnap.docs.map((d) => deleteDoc(d.ref)));
+
+  const votesCol = collection(
+    db,
+    COLLECTIONS.groups,
+    groupId,
+    SUB.bulletinPosts,
+    topicId,
+    SUB.recipeVotes,
+  );
+  const votesSnap = await getDocs(votesCol);
+  await Promise.all(votesSnap.docs.map((d) => deleteDoc(d.ref)));
+
   await deleteDoc(
     doc(db, COLLECTIONS.groups, groupId, SUB.bulletinPosts, topicId),
   );
+}
+
+export async function listRecipeVotes(
+  groupId: string,
+  topicId: string,
+): Promise<{ userId: string; data: BulletinRecipeVoteDoc }[]> {
+  const db = getFirebaseFirestore();
+  const col = collection(
+    db,
+    COLLECTIONS.groups,
+    groupId,
+    SUB.bulletinPosts,
+    topicId,
+    SUB.recipeVotes,
+  );
+  const snap = await getDocs(col);
+  const out: { userId: string; data: BulletinRecipeVoteDoc }[] = [];
+  snap.forEach((d) =>
+    out.push({
+      userId: d.id,
+      data: d.data() as BulletinRecipeVoteDoc,
+    }),
+  );
+  return out;
+}
+
+export async function setMyRecipeVote(
+  groupId: string,
+  topicId: string,
+  userId: string,
+  candidateIndex: number,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  const ref = doc(
+    db,
+    COLLECTIONS.groups,
+    groupId,
+    SUB.bulletinPosts,
+    topicId,
+    SUB.recipeVotes,
+    userId,
+  );
+  await setDoc(ref, {
+    candidateIndex,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** 候補やカテゴリ変更時に投票をリセット */
+export async function clearAllRecipeVotes(
+  groupId: string,
+  topicId: string,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  const col = collection(
+    db,
+    COLLECTIONS.groups,
+    groupId,
+    SUB.bulletinPosts,
+    topicId,
+    SUB.recipeVotes,
+  );
+  const snap = await getDocs(col);
+  const bs = writeBatch(db);
+  for (const d of snap.docs) {
+    bs.delete(d.ref);
+  }
+  await bs.commit();
 }
 
 export const deleteBulletinPost = deleteBulletinTopic;

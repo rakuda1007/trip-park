@@ -19,6 +19,8 @@ export const SUB = {
   replies: "replies",
   /** bulletinPosts/{topicId}/replyReadProgress/{userId} */
   replyReadProgress: "replyReadProgress",
+  /** bulletinPosts/{topicId}/recipeVotes/{userId} レシピ投票 */
+  recipeVotes: "recipeVotes",
   tripRoutes: "tripRoutes",
   expenses: "expenses",
   families: "families",
