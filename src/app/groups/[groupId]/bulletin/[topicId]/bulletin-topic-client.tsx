@@ -13,16 +13,23 @@ import {
   listRecipeVotes,
   listTopicReplyReadProgress,
   setBulletinTopicPinned,
-  setMyRecipeVote,
+  setMyRecipeRatings,
   setMyTopicReplyReadProgress,
   updateBulletinReply,
   updateBulletinTopic,
+  updateRecipePollResolution,
 } from "@/lib/firestore/bulletin";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
+import {
+  countRatedCandidates,
+  normalizeRecipeRatings,
+  validateRecipeRatings,
+} from "@/lib/recipe-vote";
 import {
   normalizeUrlListSignature,
   parseRecipeUrlLines,
 } from "@/lib/recipe-url-input";
+import { calcTripNumDays } from "@/lib/trip-dates";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
 import { sendNotification } from "@/lib/notify";
 import type { GroupDoc, MemberDoc } from "@/types/group";
@@ -35,8 +42,10 @@ import {
   type BulletinTopicDoc,
   type BulletinRecipeVoteDoc,
   type RecipePollData,
+  RECIPE_MEAL_LABELS,
+  type RecipeMealSlot,
 } from "@/types/bulletin";
-import { Timestamp } from "firebase/firestore";
+import { serverTimestamp, Timestamp } from "firebase/firestore";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -123,6 +132,13 @@ export function BulletinTopicClient() {
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
   const [editReplyBody, setEditReplyBody] = useState("");
 
+  /** レシピ投票: 自分の評価ドラフト（候補ごと 0〜5） */
+  const [draftRatings, setDraftRatings] = useState<number[]>([]);
+  /** 候補ごとの旅程割当（null = 旅程に出さない） */
+  const [resolutionPerCandidate, setResolutionPerCandidate] = useState<
+    Array<{ dayNumber: number; meal: RecipeMealSlot } | null>
+  >([]);
+
   const load = useCallback(async () => {
     if (!groupId || !topicId) return;
     setError(null);
@@ -181,24 +197,57 @@ export function BulletinTopicClient() {
     [replies, replyReads],
   );
 
-  const recipeVoteTally = useMemo(() => {
+  const recipeScoreTotals = useMemo(() => {
     const n = topic?.recipePoll?.candidates.length ?? 0;
-    const counts: number[] = Array.from({ length: n }, () => 0);
-    if (!topic || topic.category !== "recipe_vote") return counts;
+    const sums: number[] = Array.from({ length: n }, () => 0);
+    if (!topic || topic.category !== "recipe_vote") return sums;
     for (const { data } of recipeVotes) {
-      const i = data.candidateIndex;
-      if (i >= 0 && i < n) counts[i]++;
+      const r = normalizeRecipeRatings(data, n);
+      for (let j = 0; j < n; j++) sums[j] += r[j] ?? 0;
     }
-    return counts;
+    return sums;
   }, [topic, recipeVotes]);
 
-  const myRecipeVoteIndex = useMemo(() => {
-    if (!user) return null;
-    return (
-      recipeVotes.find((x) => x.userId === user.uid)?.data.candidateIndex ??
-      null
-    );
-  }, [recipeVotes, user]);
+  const nCandidates = topic?.recipePoll?.candidates.length ?? 0;
+
+  useEffect(() => {
+    if (!user || !topic || topic.category !== "recipe_vote" || nCandidates === 0) {
+      setDraftRatings([]);
+      return;
+    }
+    const mine = recipeVotes.find((x) => x.userId === user.uid);
+    if (mine) {
+      setDraftRatings(normalizeRecipeRatings(mine.data, nCandidates));
+    } else {
+      setDraftRatings(Array.from({ length: nCandidates }, () => 0));
+    }
+  }, [topic, recipeVotes, user, nCandidates]);
+
+  useEffect(() => {
+    const n = topic?.recipePoll?.candidates?.length ?? 0;
+    if (n === 0) {
+      setResolutionPerCandidate([]);
+      return;
+    }
+    const a = topic?.recipePollResolution?.assignments;
+    const next: Array<{ dayNumber: number; meal: RecipeMealSlot } | null> =
+      Array.from({ length: n }, () => null);
+    if (a?.length) {
+      for (const x of a) {
+        if (x.candidateIndex >= 0 && x.candidateIndex < n) {
+          next[x.candidateIndex] = {
+            dayNumber: x.dayNumber,
+            meal: x.meal,
+          };
+        }
+      }
+    } else {
+      for (let i = 0; i < n; i++) {
+        next[i] = { dayNumber: 1, meal: "dinner" };
+      }
+    }
+    setResolutionPerCandidate(next);
+  }, [topic?.recipePollResolution, topic?.recipePoll?.candidates, nCandidates]);
 
   const lastReplyId = replies.length > 0 ? replies[replies.length - 1]!.id : null;
 
@@ -241,11 +290,13 @@ export function BulletinTopicClient() {
         } else {
           if (topic.category === "recipe_vote") {
             await clearAllRecipeVotes(groupId, topicId);
+            await updateRecipePollResolution(groupId, topicId, null);
           }
           recipePoll = await fetchRecipePollFromUrls(urls);
         }
       } else if (topic.category === "recipe_vote") {
         await clearAllRecipeVotes(groupId, topicId);
+        await updateRecipePollResolution(groupId, topicId, null);
       }
 
       await updateBulletinTopic(
@@ -266,28 +317,129 @@ export function BulletinTopicClient() {
     }
   }
 
-  async function handleRecipeVote(candidateIndex: number) {
+  function setDraftRatingAt(index: number, score: number) {
+    setDraftRatings((prev) => {
+      const n = topic?.recipePoll?.candidates.length ?? 0;
+      if (n === 0) return prev;
+      const next = [...(prev.length === n ? prev : Array.from({ length: n }, () => 0))];
+      if (score === 0) {
+        next[index] = 0;
+        return next;
+      }
+      if (score >= 1 && score <= 5) {
+        for (let j = 0; j < n; j++) {
+          if (j !== index && next[j] === score) {
+            next[j] = 0;
+          }
+        }
+        next[index] = score;
+      }
+      return next;
+    });
+  }
+
+  async function handleSaveMyRatings() {
     if (!user || !groupId || !topicId || !topic || !isMember) return;
-    if (topic.category !== "recipe_vote" || !topic.recipePoll?.candidates.length) {
-      return;
-    }
-    if (
-      candidateIndex < 0 ||
-      candidateIndex >= topic.recipePoll.candidates.length
-    ) {
+    const n = topic.recipePoll?.candidates.length ?? 0;
+    if (n === 0 || draftRatings.length !== n) return;
+    const err = validateRecipeRatings(draftRatings);
+    if (err) {
+      setError(err);
       return;
     }
     setBusy("vote");
     setError(null);
     try {
-      await setMyRecipeVote(groupId, topicId, user.uid, candidateIndex);
+      await setMyRecipeRatings(groupId, topicId, user.uid, draftRatings);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "投票に失敗しました");
+      setError(e instanceof Error ? e.message : "投票の保存に失敗しました");
     } finally {
       setBusy(null);
     }
   }
+
+  function patchCandidateResolution(
+    candidateIndex: number,
+    slot: { dayNumber: number; meal: RecipeMealSlot } | null,
+  ) {
+    setResolutionPerCandidate((prev) => {
+      const n = topic?.recipePoll?.candidates.length ?? 0;
+      if (n === 0) return prev;
+      const next = [
+        ...(prev.length === n ? prev : Array.from({ length: n }, () => null)),
+      ];
+      next[candidateIndex] = slot;
+      return next;
+    });
+  }
+
+  async function handleConfirmResolution() {
+    if (!user || !groupId || !topicId || !topic?.recipePoll?.candidates.length) {
+      return;
+    }
+    const n = topic.recipePoll.candidates.length;
+    const assignments = resolutionPerCandidate
+      .map((slot, candidateIndex) =>
+        slot && slot.dayNumber >= 1
+          ? {
+              dayNumber: slot.dayNumber,
+              meal: slot.meal,
+              candidateIndex,
+            }
+          : null,
+      )
+      .filter(
+        (x): x is {
+          dayNumber: number;
+          meal: RecipeMealSlot;
+          candidateIndex: number;
+        } => x !== null,
+      );
+    if (assignments.length === 0) {
+      setError("少なくとも1件のレシピで Day と食事を指定してください");
+      return;
+    }
+    setBusy("resolution");
+    setError(null);
+    try {
+      await updateRecipePollResolution(groupId, topicId, {
+        confirmedByUserId: user.uid,
+        confirmedAt: serverTimestamp(),
+        assignments,
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "確定の保存に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleClearResolution() {
+    if (!groupId || !topicId) return;
+    if (!confirm("旅程への表示を取り消しますか？")) return;
+    setBusy("resolution");
+    setError(null);
+    try {
+      await updateRecipePollResolution(groupId, topicId, null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "取り消しに失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const tripNumDays =
+    group && group.tripStartDate
+      ? Math.max(1, calcTripNumDays(group.tripStartDate, group.tripEndDate))
+      : 1;
+  const canEditResolution =
+    user &&
+    topic &&
+    topic.category === "recipe_vote" &&
+    (user.uid === topic.authorUserId || canManage);
 
   async function handleDeleteTopic() {
     if (!groupId) return;
@@ -550,19 +702,36 @@ export function BulletinTopicClient() {
             {topic.category === "recipe_vote" &&
             topic.recipePoll?.candidates?.length ? (
               <div className="mt-4 space-y-4">
-                <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                  候補を比較
-                </h2>
+                <div>
+                  <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                    候補を比較・評価
+                  </h2>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    点数<strong>1・2・3・4・5</strong>はそれぞれ<strong>1回だけ</strong>使えます（同じ点数を複数のレシピに付けられません）。
+                    別のレシピに同じ点数を付けると、もともと付いていたレシピのその点数は外れます。最大<strong>5レシピ</strong>まで評価できます。
+                    合計点が多いほど人気です。
+                  </p>
+                  {user && isMember && draftRatings.length === nCandidates ? (
+                    <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-300">
+                      あなたの評価済み:{" "}
+                      <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                        {countRatedCandidates(draftRatings)}
+                      </span>
+                      / 5 候補
+                    </p>
+                  ) : null}
+                </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   {topic.recipePoll.candidates.map((c, idx) => {
-                    const tally = recipeVoteTally[idx] ?? 0;
+                    const total = recipeScoreTotals[idx] ?? 0;
                     const label = c.sourceTitle || c.url;
-                    const selected = myRecipeVoteIndex === idx;
+                    const my = draftRatings[idx] ?? 0;
+                    const active = my >= 1 && my <= 5;
                     return (
                       <div
                         key={`${c.url}-${idx}`}
                         className={`flex flex-col overflow-hidden rounded-xl border bg-zinc-50/80 dark:bg-zinc-900/50 ${
-                          selected
+                          active
                             ? "border-emerald-500 ring-1 ring-emerald-500/30"
                             : "border-zinc-200 dark:border-zinc-600"
                         }`}
@@ -606,40 +775,231 @@ export function BulletinTopicClient() {
                               材料リストを取得できませんでした（サイトによる）
                             </p>
                           )}
-                          <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-700">
-                            <span className="text-xs text-zinc-500">
-                              票 {tally}
-                            </span>
-                            <div className="flex gap-2">
-                              <a
-                                href={c.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs font-medium text-zinc-700 underline dark:text-zinc-300"
-                              >
-                                レシピを開く
-                              </a>
-                              {user && isMember ? (
+                          <div className="border-t border-zinc-200 pt-2 dark:border-zinc-700">
+                            <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                              合計点 {total}{" "}
+                              <span className="font-normal text-zinc-400">
+                                （全員の点数の合計）
+                              </span>
+                            </p>
+                          </div>
+                          {user && isMember ? (
+                            <div className="space-y-2">
+                              <p className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
+                                あなたの評価（1〜5）
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {([1, 2, 3, 4, 5] as const).map((s) => (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => setDraftRatingAt(idx, s)}
+                                    disabled={busy !== null}
+                                    className={`min-h-[36px] min-w-[36px] rounded-lg text-sm font-semibold transition ${
+                                      my === s
+                                        ? "bg-emerald-600 text-white"
+                                        : "border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                                    }`}
+                                  >
+                                    {s}
+                                  </button>
+                                ))}
                                 <button
                                   type="button"
-                                  onClick={() => handleRecipeVote(idx)}
+                                  onClick={() => setDraftRatingAt(idx, 0)}
                                   disabled={busy !== null}
-                                  className={`rounded-full px-3 py-1 text-xs font-medium ${
-                                    selected
-                                      ? "bg-emerald-600 text-white"
-                                      : "border border-zinc-300 bg-white text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-                                  }`}
+                                  className="rounded-lg border border-dashed border-zinc-300 px-2 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
                                 >
-                                  {selected ? "投票済み" : "投票する"}
+                                  クリア
                                 </button>
-                              ) : null}
+                              </div>
                             </div>
+                          ) : null}
+                          <div className="mt-auto border-t border-zinc-200 pt-2 dark:border-zinc-700">
+                            <a
+                              href={c.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs font-medium text-zinc-700 underline dark:text-zinc-300"
+                            >
+                              レシピを開く
+                            </a>
                           </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
+                {user && isMember && draftRatings.length === nCandidates ? (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleSaveMyRatings}
+                      disabled={busy !== null}
+                      className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+                    >
+                      {busy === "vote" ? "保存中…" : "評価を保存"}
+                    </button>
+                    <span className="text-xs text-zinc-500">
+                      変更後は「評価を保存」で反映されます
+                    </span>
+                  </div>
+                ) : null}
+
+                {canEditResolution ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
+                    <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                      投票結果を確定して旅程に反映
+                    </h3>
+                    <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-200/90">
+                      レシピ候補ごとに Day と食事を指定します。旅程の Day
+                      タブに表示されます。
+                    </p>
+                    <div className="mt-4 space-y-4">
+                      {topic.recipePoll!.candidates.map((cand, ci) => {
+                        const slot =
+                          ci < resolutionPerCandidate.length
+                            ? resolutionPerCandidate[ci]
+                            : null;
+                        const title = cand.sourceTitle || cand.url;
+                        return (
+                          <div
+                            key={`${cand.url}-${ci}`}
+                            className="rounded-xl border border-amber-100/80 bg-white/95 p-4 shadow-sm dark:border-zinc-600 dark:bg-zinc-900/80"
+                          >
+                            <div className="flex gap-3">
+                              {cand.imageUrl ? (
+                                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
+                                  <img
+                                    src={cand.imageUrl}
+                                    alt=""
+                                    className="h-full w-full object-cover"
+                                  />
+                                </div>
+                              ) : null}
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[11px] font-medium uppercase tracking-wide text-amber-800/80 dark:text-amber-200/80">
+                                  レシピ候補 {ci + 1}
+                                </p>
+                                <p className="mt-0.5 text-sm font-semibold leading-snug text-zinc-900 dark:text-zinc-50">
+                                  {title}
+                                </p>
+                                <a
+                                  href={cand.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="mt-1 inline-block text-xs text-amber-800 underline dark:text-amber-200"
+                                >
+                                  レシピを開く
+                                </a>
+                              </div>
+                            </div>
+                            {slot ? (
+                              <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-700">
+                                <label className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                                  Day
+                                  <select
+                                    value={slot.dayNumber}
+                                    onChange={(e) => {
+                                      const v = parseInt(e.target.value, 10);
+                                      patchCandidateResolution(ci, {
+                                        dayNumber: v,
+                                        meal: slot.meal,
+                                      });
+                                    }}
+                                    className="mt-0.5 block min-w-[6.5rem] rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                                  >
+                                    {Array.from(
+                                      { length: tripNumDays },
+                                      (_, i) => i + 1,
+                                    ).map((d) => (
+                                      <option key={d} value={d}>
+                                        Day {d}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                                  食事
+                                  <select
+                                    value={slot.meal}
+                                    onChange={(e) => {
+                                      const v = e.target.value as RecipeMealSlot;
+                                      patchCandidateResolution(ci, {
+                                        dayNumber: slot.dayNumber,
+                                        meal: v,
+                                      });
+                                    }}
+                                    className="mt-0.5 block min-w-[6.5rem] rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                                  >
+                                    {(
+                                      Object.entries(RECIPE_MEAL_LABELS) as [
+                                        RecipeMealSlot,
+                                        string,
+                                      ][]
+                                    ).map(([k, lab]) => (
+                                      <option key={k} value={k}>
+                                        {lab}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => patchCandidateResolution(ci, null)}
+                                  disabled={busy !== null}
+                                  className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                                >
+                                  旅程に表示しない
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="mt-4 border-t border-dashed border-zinc-200 pt-4 dark:border-zinc-700">
+                                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                  このレシピは旅程の献立に含めません。
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    patchCandidateResolution(ci, {
+                                      dayNumber: 1,
+                                      meal: "dinner",
+                                    })
+                                  }
+                                  disabled={busy !== null}
+                                  className="mt-2 text-xs font-medium text-amber-900 underline dark:text-amber-200"
+                                >
+                                  Day・食事を指定する
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-5 flex flex-wrap gap-2 border-t border-amber-200/60 pt-4 dark:border-amber-900/40">
+                      <button
+                        type="button"
+                        onClick={handleConfirmResolution}
+                        disabled={busy !== null}
+                        className="rounded-lg bg-amber-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
+                      >
+                        {busy === "resolution" ? "保存中…" : "この内容で確定"}
+                      </button>
+                      {topic.recipePollResolution ? (
+                        <button
+                          type="button"
+                          onClick={handleClearResolution}
+                          disabled={busy !== null}
+                          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-700 dark:border-zinc-600 dark:text-zinc-300"
+                        >
+                          旅程への表示を取り消す
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
                 <details className="text-xs text-zinc-500">
                   <summary className="cursor-pointer text-zinc-600 dark:text-zinc-400">
                     登録したURL一覧

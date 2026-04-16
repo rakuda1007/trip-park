@@ -19,6 +19,28 @@ export type RecipePollData = {
   candidates: RecipePollCandidate[];
 };
 
+/** 旅程に紐づける食事枠 */
+export type RecipeMealSlot = "breakfast" | "lunch" | "dinner";
+
+export const RECIPE_MEAL_LABELS: Record<RecipeMealSlot, string> = {
+  breakfast: "朝食",
+  lunch: "昼食",
+  dinner: "夕食",
+};
+
+/** レシピ投票の確定（旅程 Day タブに表示） */
+export type RecipePollResolution = {
+  confirmedByUserId: string;
+  confirmedAt: unknown;
+  assignments: RecipeMealAssignment[];
+};
+
+export type RecipeMealAssignment = {
+  dayNumber: number;
+  meal: RecipeMealSlot;
+  candidateIndex: number;
+};
+
 export const BULLETIN_CATEGORY_LABELS: Record<BulletinCategory, string> = {
   general: "全体連絡",
   gear: "持ち物",
@@ -49,13 +71,18 @@ export type BulletinTopicDoc = {
   pinned: boolean;
   /** カテゴリが recipe_vote のとき、候補のプレビュー（画像・材料） */
   recipePoll?: RecipePollData;
+  /** 投票確定後の食事割当（旅程で参照） */
+  recipePollResolution?: RecipePollResolution;
   createdAt: unknown;
   updatedAt: unknown;
 };
 
-/** `bulletinPosts/{topicId}/recipeVotes/{userId}` — 1人1票 */
+/** `bulletinPosts/{topicId}/recipeVotes/{userId}` — 候補ごとに 1〜5 点（最大5候補まで評価） */
 export type BulletinRecipeVoteDoc = {
-  candidateIndex: number;
+  /** 候補と同じ長さ。0=未評価、1〜5=点数 */
+  ratings: number[];
+  /** @deprecated 旧1票。読み取り互換のみ */
+  candidateIndex?: number;
   updatedAt: unknown;
 };
 

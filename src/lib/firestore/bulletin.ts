@@ -8,6 +8,7 @@ import type {
   BulletinTopicDoc,
   BulletinTopicReplyReadProgressDoc,
   RecipePollData,
+  RecipePollResolution,
 } from "@/types/bulletin";
 import {
   addDoc,
@@ -180,8 +181,35 @@ export async function updateBulletinTopic(
     updates.recipePoll = recipePoll;
   } else {
     updates.recipePoll = deleteField();
+    updates.recipePollResolution = deleteField();
   }
   await updateDoc(ref, updates);
+}
+
+export async function updateRecipePollResolution(
+  groupId: string,
+  topicId: string,
+  resolution: RecipePollResolution | null,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  const ref = doc(
+    db,
+    COLLECTIONS.groups,
+    groupId,
+    SUB.bulletinPosts,
+    topicId,
+  );
+  if (resolution === null) {
+    await updateDoc(ref, {
+      recipePollResolution: deleteField(),
+      updatedAt: serverTimestamp(),
+    });
+  } else {
+    await updateDoc(ref, {
+      recipePollResolution: resolution,
+      updatedAt: serverTimestamp(),
+    });
+  }
 }
 
 export const updateBulletinPost = updateBulletinTopic;
@@ -264,11 +292,11 @@ export async function listRecipeVotes(
   return out;
 }
 
-export async function setMyRecipeVote(
+export async function setMyRecipeRatings(
   groupId: string,
   topicId: string,
   userId: string,
-  candidateIndex: number,
+  ratings: number[],
 ): Promise<void> {
   const db = getFirebaseFirestore();
   const ref = doc(
@@ -281,7 +309,7 @@ export async function setMyRecipeVote(
     userId,
   );
   await setDoc(ref, {
-    candidateIndex,
+    ratings,
     updatedAt: serverTimestamp(),
   });
 }

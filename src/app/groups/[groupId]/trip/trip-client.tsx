@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import { useGroupRouteId } from "@/contexts/group-route-context";
+import { listBulletinTopics } from "@/lib/firestore/bulletin";
 import { getGroup } from "@/lib/firestore/groups";
 import {
   addTripRoute,
@@ -11,6 +12,9 @@ import {
   updateTripRoute,
   type TripRouteInput,
 } from "@/lib/firestore/trip";
+import { collectMealsForDayFromBulletin } from "@/lib/recipe-vote";
+import { calcTripNumDays, dateLabelForTripDay } from "@/lib/trip-dates";
+import { RECIPE_MEAL_LABELS } from "@/types/bulletin";
 import type { GroupDoc } from "@/types/group";
 import type { TripRouteDoc, TripWaypoint } from "@/types/trip";
 import Link from "next/link";
@@ -19,21 +23,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 // ────────────────────────────────
 // ユーティリティ
 // ────────────────────────────────
-
-function calcNumDays(start: string | null, end: string | null): number {
-  if (!start) return 0;
-  const s = new Date(start);
-  const e = end ? new Date(end) : s;
-  const diff = Math.round((e.getTime() - s.getTime()) / 86_400_000);
-  return Math.max(1, diff + 1);
-}
-
-function dateForDay(start: string | null, dayIndex: number): string | null {
-  if (!start) return null;
-  const d = new Date(start);
-  d.setDate(d.getDate() + dayIndex);
-  return d.toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" });
-}
 
 type WaypointDraft = { name: string; memo: string; mapUrl: string };
 
@@ -368,6 +357,9 @@ export function TripClient() {
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
   const [routes, setRoutes] = useState<{ id: string; data: TripRouteDoc }[]>([]);
+  const [bulletinTopics, setBulletinTopics] = useState<
+    Awaited<ReturnType<typeof listBulletinTopics>>
+  >([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<number>(1);
@@ -387,10 +379,18 @@ export function TripClient() {
         const firstIncomplete = r.find((x) => !x.data.isDone);
         if (firstIncomplete) setSelectedDay(firstIncomplete.data.dayNumber);
         else if (r.length > 0) setSelectedDay(r[r.length - 1]!.data.dayNumber);
+        try {
+          setBulletinTopics(await listBulletinTopics(groupId));
+        } catch {
+          setBulletinTopics([]);
+        }
+      } else {
+        setBulletinTopics([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
       setGroup(null);
+      setBulletinTopics([]);
     }
   }, [groupId]);
 
@@ -398,10 +398,18 @@ export function TripClient() {
 
   // Day数 = 旅程日数 OR 登録済み最大Day + 1（余裕）
   const numDays = useMemo(() => {
-    const fromDates = calcNumDays(group?.tripStartDate ?? null, group?.tripEndDate ?? null);
+    const fromDates = calcTripNumDays(
+      group?.tripStartDate ?? null,
+      group?.tripEndDate ?? null,
+    );
     const maxRoute = routes.reduce((m, r) => Math.max(m, r.data.dayNumber), 0);
     return Math.max(fromDates, maxRoute, 1);
   }, [group, routes]);
+
+  const mealsForSelectedDay = useMemo(
+    () => collectMealsForDayFromBulletin(selectedDay, bulletinTopics),
+    [selectedDay, bulletinTopics],
+  );
 
   const dayNumbers = useMemo(() => Array.from({ length: numDays }, (_, i) => i + 1), [numDays]);
 
@@ -554,7 +562,7 @@ export function TripClient() {
               <span>Day {day}</span>
               {group.tripStartDate && (
                 <span className={`text-[10px] ${selectedDay === day ? "text-zinc-300" : "text-zinc-400"}`}>
-                  {dateForDay(group.tripStartDate, day - 1)}
+                  {dateLabelForTripDay(group.tripStartDate, day - 1)}
                 </span>
               )}
               {done && (
@@ -579,9 +587,45 @@ export function TripClient() {
         <div className="mb-4 flex items-center gap-3">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Day {selectedDay}</h2>
           {group.tripStartDate && (
-            <span className="text-sm text-zinc-400">{dateForDay(group.tripStartDate, selectedDay - 1)}</span>
+            <span className="text-sm text-zinc-400">
+              {dateLabelForTripDay(group.tripStartDate, selectedDay - 1)}
+            </span>
           )}
         </div>
+
+        {mealsForSelectedDay.length > 0 ? (
+          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/25">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
+              この日の献立（レシピ投票の確定）
+            </p>
+            <ul className="mt-2 space-y-2">
+              {mealsForSelectedDay.map((m, i) => (
+                <li key={`${m.topicId}-${m.meal}-${i}`} className="text-sm text-zinc-800 dark:text-zinc-100">
+                  <span className="font-medium text-zinc-600 dark:text-zinc-300">
+                    {RECIPE_MEAL_LABELS[m.meal]}
+                  </span>
+                  {": "}
+                  <a
+                    href={m.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-emerald-800 underline underline-offset-2 hover:text-emerald-700 dark:text-emerald-300">
+                    {m.recipeTitle}
+                  </a>
+                  <span className="ml-1 text-xs text-zinc-500">
+                    （{m.topicTitle}）
+                  </span>
+                  <Link
+                    href={`/groups/${groupId}/bulletin/${m.topicId}`}
+                    className="ml-2 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                  >
+                    話題へ
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         {currentRoute === null ? (
           /* このDayのプランがない */

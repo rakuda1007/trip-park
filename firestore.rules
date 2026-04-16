@@ -67,8 +67,17 @@ service cloud.firestore {
         p.candidates.size() <= 20;
     }
 
+    function bulletinRecipePollResolutionOk(r) {
+      return r is map &&
+        r.keys().hasAll(['confirmedByUserId', 'confirmedAt', 'assignments']) &&
+        r.confirmedByUserId is string &&
+        r.assignments is list &&
+        r.assignments.size() <= 50;
+    }
+
     function bulletinRecipePollFieldOk(data) {
-      return !data.keys().hasAny(['recipePoll']) || bulletinRecipePollOk(data.recipePoll);
+      return (!data.keys().hasAny(['recipePoll']) || bulletinRecipePollOk(data.recipePoll)) &&
+        (!data.keys().hasAny(['recipePollResolution']) || bulletinRecipePollResolutionOk(data.recipePollResolution));
     }
 
     match /users/{userId} {
@@ -196,10 +205,19 @@ service cloud.firestore {
           allow read: if request.auth != null && isGroupMember(groupId);
           allow create, update: if request.auth != null && isGroupMember(groupId) &&
             request.auth.uid == voterUid &&
-            request.resource.data.keys().hasOnly(['candidateIndex', 'updatedAt']) &&
-            request.resource.data.candidateIndex is int &&
-            request.resource.data.candidateIndex >= 0 &&
-            request.resource.data.candidateIndex < 50;
+            (
+              (
+                request.resource.data.keys().hasOnly(['ratings', 'updatedAt']) &&
+                request.resource.data.ratings is list &&
+                request.resource.data.ratings.size() <= 25
+              ) ||
+              (
+                request.resource.data.keys().hasOnly(['candidateIndex', 'updatedAt']) &&
+                request.resource.data.candidateIndex is int &&
+                request.resource.data.candidateIndex >= 0 &&
+                request.resource.data.candidateIndex < 50
+              )
+            );
           allow delete: if request.auth != null && isGroupMember(groupId) && (
             request.auth.uid == voterUid || isOwnerOrAdmin(groupId)
           );
