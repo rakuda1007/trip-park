@@ -23,6 +23,34 @@ service cloud.firestore {
         memberRole(groupId) == 'owner';
     }
 
+    function sharingLabelValid(data) {
+      return data.label is string &&
+        data.label.size() > 0 &&
+        data.label.size() <= 200 &&
+        data.sortOrder is int &&
+        (data.memo is string || data.memo == null);
+    }
+
+    function sharingItemCoreKeys(data) {
+      return data.keys().hasAll([
+        'label', 'memo', 'sortOrder',
+        'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt'
+      ]);
+    }
+
+    function sharingAssignmentNew(data) {
+      return data.keys().hasAll(['assignedFamilyId', 'assignedFamilyName']);
+    }
+
+    function sharingAssignmentLegacy(data) {
+      return data.keys().hasAll(['assignedUserId', 'assignedDisplayName']);
+    }
+
+    function sharingAssignmentOk(data) {
+      return (sharingAssignmentNew(data) && !sharingAssignmentLegacy(data)) ||
+        (sharingAssignmentLegacy(data) && !sharingAssignmentNew(data));
+    }
+
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
 
@@ -295,21 +323,28 @@ service cloud.firestore {
         allow read: if request.auth != null && isGroupMember(groupId);
         allow create: if request.auth != null && isGroupMember(groupId) &&
           request.resource.data.createdByUserId == request.auth.uid &&
-          request.resource.data.label is string &&
-          request.resource.data.label.size() > 0 &&
-          request.resource.data.label.size() <= 200 &&
-          request.resource.data.sortOrder is int &&
-          request.resource.data.keys().hasAll([
-            'label', 'memo', 'assignedUserId', 'assignedDisplayName', 'sortOrder',
-            'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt'
-          ]);
+          sharingItemCoreKeys(request.resource.data) &&
+          sharingAssignmentOk(request.resource.data) &&
+          sharingAssignmentNew(request.resource.data) &&
+          sharingLabelValid(request.resource.data) &&
+          (request.resource.data.assignedFamilyId == null ||
+            request.resource.data.assignedFamilyId is string) &&
+          (request.resource.data.assignedFamilyName == null ||
+            request.resource.data.assignedFamilyName is string);
         allow update: if request.auth != null && isGroupMember(groupId) &&
           request.resource.data.createdByUserId == resource.data.createdByUserId &&
           request.resource.data.createdAt == resource.data.createdAt &&
-          request.resource.data.keys().hasAll([
-            'label', 'memo', 'assignedUserId', 'assignedDisplayName', 'sortOrder',
-            'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt'
-          ]);
+          sharingItemCoreKeys(request.resource.data) &&
+          sharingAssignmentOk(request.resource.data) &&
+          sharingLabelValid(request.resource.data) &&
+          (request.resource.data.assignedFamilyId == null ||
+            request.resource.data.assignedFamilyId is string) &&
+          (request.resource.data.assignedFamilyName == null ||
+            request.resource.data.assignedFamilyName is string) &&
+          (request.resource.data.assignedUserId == null ||
+            request.resource.data.assignedUserId is string) &&
+          (request.resource.data.assignedDisplayName == null ||
+            request.resource.data.assignedDisplayName is string);
         allow delete: if request.auth != null && isGroupMember(groupId) && (
           resource.data.createdByUserId == request.auth.uid ||
           isOwnerOrAdmin(groupId)

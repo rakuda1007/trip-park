@@ -5,7 +5,9 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
+  getDoc,
   getDocs,
   limit,
   orderBy,
@@ -14,7 +16,19 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
-export type SharingItemRow = { id: string; data: SharingItemDoc };
+export type SharingItemRow = {
+  id: string;
+  data: SharingItemDoc;
+  /** 旧スキーマ（メンバー割当）のみ。世帯に切り替えるまで表示用 */
+  legacyMemberAssignee?: { userId: string; displayName: string | null };
+};
+
+/** 世帯ごとの担当集計（UI 用） */
+export type SharingAssignmentByFamily = {
+  familyId: string;
+  familyName: string;
+  itemLabels: string[];
+};
 
 export async function listSharingItems(groupId: string): Promise<SharingItemRow[]> {
   const db = getFirebaseFirestore();
@@ -23,17 +37,43 @@ export async function listSharingItems(groupId: string): Promise<SharingItemRow[
   const out: SharingItemRow[] = [];
   snap.forEach((d) => {
     const raw = d.data() as Record<string, unknown>;
-    out.push({
+    const hasFamilyKey = "assignedFamilyId" in raw;
+    const legacyUserId =
+      typeof raw.assignedUserId === "string" && raw.assignedUserId
+        ? raw.assignedUserId
+        : null;
+    const legacyDisplay =
+      typeof raw.assignedDisplayName === "string"
+        ? raw.assignedDisplayName
+        : null;
+
+    let assignedFamilyId: string | null = null;
+    let assignedFamilyName: string | null = null;
+    let legacyMemberAssignee:
+      | { userId: string; displayName: string | null }
+      | undefined;
+
+    if (hasFamilyKey) {
+      assignedFamilyId =
+        typeof raw.assignedFamilyId === "string" ? raw.assignedFamilyId : null;
+      assignedFamilyName =
+        typeof raw.assignedFamilyName === "string"
+          ? raw.assignedFamilyName
+          : null;
+    } else if (legacyUserId) {
+      legacyMemberAssignee = {
+        userId: legacyUserId,
+        displayName: legacyDisplay,
+      };
+    }
+
+    const row: SharingItemRow = {
       id: d.id,
       data: {
         label: typeof raw.label === "string" ? raw.label : "",
         memo: typeof raw.memo === "string" ? raw.memo : null,
-        assignedUserId:
-          typeof raw.assignedUserId === "string" ? raw.assignedUserId : null,
-        assignedDisplayName:
-          typeof raw.assignedDisplayName === "string"
-            ? raw.assignedDisplayName
-            : null,
+        assignedFamilyId,
+        assignedFamilyName,
         sortOrder: typeof raw.sortOrder === "number" ? raw.sortOrder : 0,
         createdByUserId:
           typeof raw.createdByUserId === "string" ? raw.createdByUserId : "",
@@ -44,18 +84,85 @@ export async function listSharingItems(groupId: string): Promise<SharingItemRow[
         createdAt: raw.createdAt,
         updatedAt: raw.updatedAt,
       },
-    });
+    };
+    if (legacyMemberAssignee) {
+      row.legacyMemberAssignee = legacyMemberAssignee;
+    }
+    out.push(row);
   });
   return out;
 }
 
-/** 要約用: 全件数と未割当件数 */
+/** 世帯ごとに項目名をまとめる（集計表示用） */
+export function aggregateSharingAssignmentsByFamily(
+  items: SharingItemRow[],
+  families: { id: string; data: { name: string } }[],
+): {
+  byFamily: SharingAssignmentByFamily[];
+  unassignedLabels: string[];
+  legacyMemberLabels: { label: string; displayName: string | null }[];
+} {
+  const map = new Map<string, { name: string; labels: string[] }>();
+  const unassignedLabels: string[] = [];
+  const legacyMemberLabels: { label: string; displayName: string | null }[] = [];
+
+  for (const row of items) {
+    const { label } = row.data;
+    const fid = row.data.assignedFamilyId;
+    if (fid) {
+      const name =
+        families.find((f) => f.id === fid)?.data.name ??
+        row.data.assignedFamilyName?.trim() ??
+        "世帯";
+      let bucket = map.get(fid);
+      if (!bucket) {
+        bucket = { name, labels: [] };
+        map.set(fid, bucket);
+      }
+      bucket.labels.push(label);
+    } else if (row.legacyMemberAssignee) {
+      legacyMemberLabels.push({
+        label,
+        displayName: row.legacyMemberAssignee.displayName,
+      });
+    } else {
+      unassignedLabels.push(label);
+    }
+  }
+
+  const familyIds = new Set(families.map((f) => f.id));
+  const byFamily: SharingAssignmentByFamily[] = [];
+
+  for (const f of families) {
+    const b = map.get(f.id);
+    if (b && b.labels.length > 0) {
+      byFamily.push({
+        familyId: f.id,
+        familyName: f.data.name,
+        itemLabels: b.labels,
+      });
+    }
+  }
+  for (const [fid, b] of map) {
+    if (!familyIds.has(fid) && b.labels.length > 0) {
+      byFamily.push({
+        familyId: fid,
+        familyName: b.name,
+        itemLabels: b.labels,
+      });
+    }
+  }
+
+  return { byFamily, unassignedLabels, legacyMemberLabels };
+}
+
+/** 要約用: 全件数と世帯未割当件数（旧メンバー割当は未割当に含める） */
 export function sharingSummaryStats(items: SharingItemRow[]): {
   total: number;
   unassigned: number;
 } {
   const total = items.length;
-  const unassigned = items.filter((r) => !r.data.assignedUserId).length;
+  const unassigned = items.filter((r) => !r.data.assignedFamilyId).length;
   return { total, unassigned };
 }
 
@@ -64,9 +171,9 @@ export function sharingPreviewLines(
   items: SharingItemRow[],
   max = 3,
 ): string[] {
-  const assigned = items.filter((r) => r.data.assignedUserId);
+  const assigned = items.filter((r) => r.data.assignedFamilyId);
   return assigned.slice(0, max).map((r) => {
-    const name = r.data.assignedDisplayName?.trim() || "メンバー";
+    const name = r.data.assignedFamilyName?.trim() || "世帯";
     return `${r.data.label} → ${name}`;
   });
 }
@@ -92,8 +199,8 @@ export async function addSharingItem(
   const docRef = await addDoc(ref, {
     label,
     memo: params.memo?.trim() || null,
-    assignedUserId: null,
-    assignedDisplayName: null,
+    assignedFamilyId: null,
+    assignedFamilyName: null,
     sortOrder: nextOrder,
     createdByUserId: uid,
     createdByDisplayName: displayName,
@@ -103,18 +210,20 @@ export async function addSharingItem(
   return docRef.id;
 }
 
-export async function updateSharingItemAssignment(
+export async function updateSharingItemFamilyAssignment(
   groupId: string,
   itemId: string,
-  assignedUserId: string | null,
-  assignedDisplayName: string | null,
+  assignedFamilyId: string | null,
+  assignedFamilyName: string | null,
 ): Promise<void> {
   const db = getFirebaseFirestore();
   await updateDoc(
     doc(db, COLLECTIONS.groups, groupId, SUB.sharingItems, itemId),
     {
-      assignedUserId,
-      assignedDisplayName,
+      assignedFamilyId,
+      assignedFamilyName,
+      assignedUserId: deleteField(),
+      assignedDisplayName: deleteField(),
       updatedAt: serverTimestamp(),
     },
   );
@@ -128,14 +237,34 @@ export async function updateSharingItemFields(
   const db = getFirebaseFirestore();
   const label = params.label.trim();
   if (!label) throw new Error("項目名を入力してください。");
-  await updateDoc(
-    doc(db, COLLECTIONS.groups, groupId, SUB.sharingItems, itemId),
-    {
+  const ref = doc(db, COLLECTIONS.groups, groupId, SUB.sharingItems, itemId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("項目が見つかりません。");
+  const raw = snap.data() as Record<string, unknown>;
+  const memo = params.memo?.trim() || null;
+
+  if ("assignedFamilyId" in raw) {
+    await updateDoc(ref, {
       label,
-      memo: params.memo?.trim() || null,
+      memo,
+      assignedFamilyId:
+        typeof raw.assignedFamilyId === "string"
+          ? raw.assignedFamilyId
+          : null,
+      assignedFamilyName:
+        typeof raw.assignedFamilyName === "string"
+          ? raw.assignedFamilyName
+          : null,
       updatedAt: serverTimestamp(),
-    },
-  );
+    });
+    return;
+  }
+
+  await updateDoc(ref, {
+    label,
+    memo,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function deleteSharingItem(

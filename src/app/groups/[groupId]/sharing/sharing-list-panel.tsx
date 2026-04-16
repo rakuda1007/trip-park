@@ -2,19 +2,22 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import { useGroupRouteId } from "@/contexts/group-route-context";
+import { listFamilies } from "@/lib/firestore/families";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
 import {
   addSharingItem,
+  aggregateSharingAssignmentsByFamily,
   deleteSharingItem,
   listSharingItems,
   reorderSharingItemsOrder,
-  updateSharingItemAssignment,
+  updateSharingItemFamilyAssignment,
   updateSharingItemFields,
   type SharingItemRow,
 } from "@/lib/firestore/sharing";
+import type { FamilyDoc } from "@/types/family";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type SharingListPanelProps = {
   variant: "page" | "inline";
@@ -33,6 +36,7 @@ export function SharingListPanel({
   const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>(
     [],
   );
+  const [families, setFamilies] = useState<{ id: string; data: FamilyDoc }[]>([]);
   const [items, setItems] = useState<SharingItemRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -51,6 +55,7 @@ export function SharingListPanel({
       if (!g) {
         setGroup(null);
         setMembers([]);
+        setFamilies([]);
         setItems([]);
         return;
       }
@@ -60,8 +65,14 @@ export function SharingListPanel({
       } catch {
         setError("メンバー一覧を読み込めませんでした。");
         setMembers([]);
+        setFamilies([]);
         setItems([]);
         return;
+      }
+      try {
+        setFamilies(await listFamilies(groupId));
+      } catch {
+        setFamilies([]);
       }
       try {
         setItems(await listSharingItems(groupId));
@@ -86,6 +97,11 @@ export function SharingListPanel({
 
   const isMember = Boolean(user && members.some((x) => x.userId === user.uid));
 
+  const assignmentSummary = useMemo(
+    () => aggregateSharingAssignmentsByFamily(items, families),
+    [items, families],
+  );
+
   async function handleAdd() {
     if (!user || !newLabel.trim()) return;
     setBusy("add");
@@ -106,20 +122,23 @@ export function SharingListPanel({
     }
   }
 
-  async function handleAssign(item: SharingItemRow, assignUid: string | null) {
+  async function handleAssignFamily(
+    item: SharingItemRow,
+    familyId: string | null,
+  ) {
     if (!groupId) return;
     setBusy(`asg-${item.id}`);
     setError(null);
     try {
-      if (!assignUid) {
-        await updateSharingItemAssignment(groupId, item.id, null, null);
+      if (!familyId) {
+        await updateSharingItemFamilyAssignment(groupId, item.id, null, null);
       } else {
-        const m = members.find((x) => x.userId === assignUid);
-        const name = m?.data.displayName ?? assignUid.slice(0, 6) + "…";
-        await updateSharingItemAssignment(
+        const f = families.find((x) => x.id === familyId);
+        const name = f?.data.name?.trim() || "世帯";
+        await updateSharingItemFamilyAssignment(
           groupId,
           item.id,
-          assignUid,
+          familyId,
           name,
         );
       }
@@ -230,6 +249,79 @@ export function SharingListPanel({
       </div>
     ) : null;
 
+  const hasItems = items.length > 0;
+
+  const summaryBlock =
+    hasItems ? (
+      <div
+        className="rounded-lg border border-amber-200/90 bg-amber-50/70 p-3 dark:border-amber-800/70 dark:bg-amber-950/30"
+        aria-labelledby="sharing-assignment-heading"
+      >
+        <h3
+          id="sharing-assignment-heading"
+          className="text-xs font-semibold tracking-tight text-amber-950 dark:text-amber-100"
+        >
+          世帯ごとの担当（集計）
+        </h3>
+        <p className="mt-1 text-[11px] leading-relaxed text-amber-900/85 dark:text-amber-200/75">
+          下の「買い出し項目一覧」は行ごとの編集用です。ここでは世帯単位でまとめて確認できます。
+        </p>
+        <div className="mt-2 space-y-2">
+          {assignmentSummary.byFamily.map((row) => (
+            <div
+              key={row.familyId}
+              className="rounded-md border border-amber-200/70 bg-white/90 px-2.5 py-2 dark:border-amber-800/50 dark:bg-zinc-900/50"
+            >
+              <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
+                {row.familyName}
+                <span className="ml-1.5 font-normal text-zinc-500 dark:text-zinc-400">
+                  （{row.itemLabels.length}件）
+                </span>
+              </p>
+              <ul className="mt-1 list-inside list-disc text-[11px] text-zinc-700 dark:text-zinc-300">
+                {row.itemLabels.map((lab, i) => (
+                  <li key={`${row.familyId}-${i}-${lab}`}>{lab}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          {assignmentSummary.unassignedLabels.length > 0 ? (
+            <div className="rounded-md border border-dashed border-zinc-300 bg-white/60 px-2.5 py-2 dark:border-zinc-600 dark:bg-zinc-900/30">
+              <p className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                未割当（世帯）
+                <span className="ml-1.5 font-normal text-zinc-500">
+                  （{assignmentSummary.unassignedLabels.length}件）
+                </span>
+              </p>
+              <ul className="mt-1 list-inside list-disc text-[11px] text-zinc-600 dark:text-zinc-400">
+                {assignmentSummary.unassignedLabels.map((lab, i) => (
+                  <li key={`un-${i}-${lab}`}>{lab}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {assignmentSummary.legacyMemberLabels.length > 0 ? (
+            <div className="rounded-md border border-dashed border-violet-200 bg-violet-50/50 px-2.5 py-2 dark:border-violet-800/60 dark:bg-violet-950/20">
+              <p className="text-xs font-medium text-violet-900 dark:text-violet-100">
+                旧データ（メンバー割当）
+              </p>
+              <ul className="mt-1 space-y-0.5 text-[11px] text-violet-800/90 dark:text-violet-200/80">
+                {assignmentSummary.legacyMemberLabels.map((row, i) => (
+                  <li key={`leg-${i}-${row.label}`}>
+                    {row.label}
+                    <span className="text-violet-600/90 dark:text-violet-300/80">
+                      {" "}
+                      → メンバー「{row.displayName?.trim() || "—"}」
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    ) : null;
+
   const tableBlock = (
     <div className="rounded-xl border border-zinc-200 dark:border-zinc-700">
       <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
@@ -242,7 +334,7 @@ export function SharingListPanel({
               補足
             </th>
             <th className="w-[35%] min-w-0 px-1.5 py-2 sm:w-[30%] sm:px-3 sm:py-3">
-              担当
+              担当（世帯）
             </th>
             <th className="w-[23%] min-w-0 px-1.5 py-2 sm:w-[24%] sm:px-3 sm:py-3">
               操作
@@ -260,7 +352,9 @@ export function SharingListPanel({
               </td>
             </tr>
           ) : (
-            items.map(({ id, data }, rowIndex) => (
+            items.map((item, rowIndex) => {
+              const { id, data } = item;
+              return (
               <tr
                 key={id}
                 className="border-b border-zinc-100 last:border-0 dark:border-zinc-800"
@@ -291,25 +385,65 @@ export function SharingListPanel({
                 </td>
                 <td className="min-w-0 px-1.5 py-2 align-top sm:px-3">
                   {user && isMember ? (
-                    <select
-                      value={data.assignedUserId ?? ""}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        handleAssign({ id, data }, v === "" ? null : v);
-                      }}
-                      disabled={busy !== null}
-                      className="w-full max-w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1 py-1 text-[11px] dark:border-zinc-600 dark:bg-zinc-900 sm:max-w-[12rem] sm:px-2 sm:text-xs"
-                    >
-                      <option value="">未割当</option>
-                      {members.map(({ userId, data: md }) => (
-                        <option key={userId} value={userId}>
-                          {md.displayName ?? userId.slice(0, 6) + "…"}
+                    <div className="space-y-1">
+                      <select
+                        value={data.assignedFamilyId ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          handleAssignFamily(
+                            item,
+                            v === "" ? null : v,
+                          );
+                        }}
+                        disabled={busy !== null || families.length === 0}
+                        className="w-full max-w-full min-w-0 rounded-md border border-zinc-300 bg-white px-1 py-1 text-[11px] dark:border-zinc-600 dark:bg-zinc-900 sm:max-w-[12rem] sm:px-2 sm:text-xs"
+                      >
+                        <option value="">
+                          {families.length === 0
+                            ? "参加世帯を先に登録"
+                            : "未割当"}
                         </option>
-                      ))}
-                    </select>
+                        {families.map(({ id: fid, data: fd }) => (
+                          <option key={fid} value={fid}>
+                            {fd.name}
+                          </option>
+                        ))}
+                      </select>
+                      {families.length === 0 ? (
+                        <p className="text-[10px] text-amber-800 dark:text-amber-200/90">
+                          <Link
+                            href={`/groups/${groupId}/families`}
+                            className="underline underline-offset-2"
+                          >
+                            参加世帯
+                          </Link>
+                          で世帯を登録すると選べます。
+                        </p>
+                      ) : null}
+                      {data.assignedFamilyId == null &&
+                      item.legacyMemberAssignee ? (
+                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                          旧データ（メンバー「
+                          {item.legacyMemberAssignee.displayName?.trim() ||
+                            item.legacyMemberAssignee.userId.slice(0, 6) + "…"}
+                          」）→ 上から世帯を選び直してください
+                        </p>
+                      ) : null}
+                    </div>
                   ) : (
                     <span>
-                      {data.assignedDisplayName ?? (
+                      {data.assignedFamilyId ? (
+                        data.assignedFamilyName ?? (
+                          <span className="text-zinc-400">世帯</span>
+                        )
+                      ) : item.legacyMemberAssignee ? (
+                        <span className="text-zinc-500">
+                          （旧）メンバー「
+                          {item.legacyMemberAssignee.displayName?.trim() ||
+                            "—"}
+                          」
+                        </span>
+                      ) : (
                         <span className="text-zinc-400">未割当</span>
                       )}
                     </span>
@@ -389,14 +523,13 @@ export function SharingListPanel({
                   ) : null}
                 </td>
               </tr>
-            ))
+              );
+            })
           )}
         </tbody>
       </table>
     </div>
   );
-
-  const hasItems = items.length > 0;
 
   const listBody = (
     <>
@@ -420,6 +553,16 @@ export function SharingListPanel({
               variant === "page" ? "mt-6" : "mt-0"
             }
           >
+            {summaryBlock}
+          </div>
+          <div
+            className={
+              variant === "page" ? "mt-6" : "mt-4"
+            }
+          >
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              買い出し項目一覧
+            </h2>
             {tableBlock}
           </div>
           {formBlock ? (
@@ -500,7 +643,7 @@ export function SharingListPanel({
           買い出し・分担
         </h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          食材・飲み物など、誰が何を用意するかを共有します。担当はいつでも変更できます。
+          食材・飲み物など、参加世帯のどれが何を用意するかを共有します。担当（世帯）はいつでも変更できます。
         </p>
 
         {listBody}

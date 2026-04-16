@@ -7,9 +7,10 @@ export type SharingItemDoc = {
   label: string;
   /** 補足（数量・メモ） */
   memo: string | null;
-  /** 担当ユーザー（未割当は null） */
-  assignedUserId: string | null;
-  assignedDisplayName: string | null;
+  /** 担当世帯（参加世帯）。未割当は null */
+  assignedFamilyId: string | null;
+  /** 割当時の世帯名（表示用キャッシュ） */
+  assignedFamilyName: string | null;
   sortOrder: number;
   createdByUserId: string;
   createdByDisplayName: string | null;
