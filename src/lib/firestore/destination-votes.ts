@@ -115,3 +115,16 @@ export async function castDestinationVote(
     { candidateId, userId: uid, answer, updatedAt: serverTimestamp() },
   );
 }
+
+/** 候補への投票を削除（取り消し） */
+export async function deleteDestinationVote(
+  groupId: string,
+  uid: string,
+  candidateId: string,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  const docId = `${uid}_${candidateId}`;
+  await deleteDoc(
+    doc(db, COLLECTIONS.groups, groupId, SUB.destinationVotes, docId),
+  );
+}

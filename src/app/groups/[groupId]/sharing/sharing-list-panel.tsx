@@ -7,6 +7,7 @@ import {
   addSharingItem,
   deleteSharingItem,
   listSharingItems,
+  reorderSharingItemsOrder,
   updateSharingItemAssignment,
   updateSharingItemFields,
   type SharingItemRow,
@@ -165,6 +166,30 @@ export function SharingListPanel({
     }
   }
 
+  async function handleMoveItem(fromIndex: number, direction: "up" | "down") {
+    if (!groupId || busy !== null) return;
+    const toIndex = direction === "up" ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= items.length) return;
+    setBusy("reorder");
+    setError(null);
+    try {
+      const next = [...items];
+      const tmp = next[fromIndex]!;
+      next[fromIndex] = next[toIndex]!;
+      next[toIndex] = tmp;
+      await reorderSharingItemsOrder(
+        groupId,
+        next.map((r) => r.id),
+      );
+      await load();
+      onDataChanged?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "並び替えに失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const formBlock =
     user && isMember ? (
       <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
@@ -235,7 +260,7 @@ export function SharingListPanel({
               </td>
             </tr>
           ) : (
-            items.map(({ id, data }) => (
+            items.map(({ id, data }, rowIndex) => (
               <tr
                 key={id}
                 className="border-b border-zinc-100 last:border-0 dark:border-zinc-800"
@@ -313,6 +338,31 @@ export function SharingListPanel({
                         </>
                       ) : (
                         <>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveItem(rowIndex, "up")}
+                            disabled={
+                              busy !== null || rowIndex === 0
+                            }
+                            className="text-xs text-zinc-500 underline disabled:opacity-40 disabled:no-underline"
+                            aria-label="上へ移動"
+                            title="上へ移動"
+                          >
+                            上へ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveItem(rowIndex, "down")}
+                            disabled={
+                              busy !== null ||
+                              rowIndex >= items.length - 1
+                            }
+                            className="text-xs text-zinc-500 underline disabled:opacity-40 disabled:no-underline"
+                            aria-label="下へ移動"
+                            title="下へ移動"
+                          >
+                            下へ
+                          </button>
                           <button
                             type="button"
                             onClick={() => {

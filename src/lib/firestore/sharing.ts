@@ -147,3 +147,22 @@ export async function deleteSharingItem(
     doc(db, COLLECTIONS.groups, groupId, SUB.sharingItems, itemId),
   );
 }
+
+/** 表示順（上から）に itemId を並べ、sortOrder を 0..n-1 で保存 */
+export async function reorderSharingItemsOrder(
+  groupId: string,
+  orderedItemIds: string[],
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  await Promise.all(
+    orderedItemIds.map((itemId, index) =>
+      updateDoc(
+        doc(db, COLLECTIONS.groups, groupId, SUB.sharingItems, itemId),
+        {
+          sortOrder: index,
+          updatedAt: serverTimestamp(),
+        },
+      ),
+    ),
+  );
+}

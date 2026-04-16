@@ -6,6 +6,7 @@ import {
   addDestinationCandidate,
   castDestinationVote,
   deleteDestinationCandidate,
+  deleteDestinationVote,
   listDestinationCandidates,
   listDestinationVotes,
   updateDestinationCandidate,
@@ -232,6 +233,31 @@ export function DestinationVotesClient() {
     setBusy(`vote-${candidateId}-${answer}`);
     setError(null);
     try {
+      const myOnThis = votes.find(
+        (v) =>
+          v.data.userId === user.uid && v.data.candidateId === candidateId,
+      );
+
+      // 同じ選択を再度タップ → 取り消し
+      if (myOnThis?.data.answer === answer) {
+        await deleteDestinationVote(groupId, user.uid, candidateId);
+        await load();
+        return;
+      }
+
+      // 「ここに行きたい」「行きたい」はユーザー全体で各1件（他候補の同じ種別を外す）
+      if (answer === "first" || answer === "want") {
+        const othersSameAnswer = votes.filter(
+          (v) =>
+            v.data.userId === user.uid &&
+            v.data.answer === answer &&
+            v.data.candidateId !== candidateId,
+        );
+        for (const v of othersSameAnswer) {
+          await deleteDestinationVote(groupId, user.uid, v.data.candidateId);
+        }
+      }
+
       await castDestinationVote(groupId, user.uid, candidateId, answer);
       await load();
     } catch (ex) {
@@ -348,6 +374,7 @@ export function DestinationVotesClient() {
       <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">目的地を決める</h1>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
         候補を追加して、全員で投票しましょう。最後にオーナーが目的地を確定します。
+        「ここに行きたい」「行きたい」はそれぞれ1候補だけ選べます。選んだ状態でもう一度タップすると取り消せます。
       </p>
 
       <div className="mt-3">
@@ -507,7 +534,11 @@ export function DestinationVotesClient() {
                                       type="button"
                                       onClick={() => handleVote(c.id, a)}
                                       disabled={busy !== null}
-                                      title={ANSWER_LABELS[a]}
+                                      title={
+                                        isSelected
+                                          ? `${ANSWER_LABELS[a]}（もう一度タップで取り消し）`
+                                          : `${ANSWER_LABELS[a]}${a === "first" || a === "want" ? "（他候補では同じ種別は1つだけ）" : ""}`
+                                      }
                                       className={`shrink-0 rounded-full p-0.5 text-base leading-none transition hover:scale-110 disabled:opacity-40 ${isSelected ? "ring-2 ring-offset-1 ring-zinc-400" : "opacity-50 hover:opacity-100"}`}
                                     >
                                       {ICONS[a]}
