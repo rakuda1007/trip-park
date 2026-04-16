@@ -20,6 +20,12 @@ export type BulletinTopicDoc = {
 /** @deprecated BulletinTopicDoc を使用してください */
 export type BulletinPostDoc = BulletinTopicDoc;
 
+/** 返信の既読位置。`bulletinPosts/{topicId}/replyReadProgress/{userId}` */
+export type BulletinTopicReplyReadProgressDoc = {
+  lastReadReplyId: string | null;
+  updatedAt: unknown;
+};
+
 /** 話題への返信。`bulletinPosts/{topicId}/replies/{replyId}` に保存 */
 export type BulletinReplyDoc = {
   body: string;

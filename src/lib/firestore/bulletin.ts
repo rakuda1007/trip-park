@@ -5,6 +5,7 @@ import type {
   BulletinImportance,
   BulletinReplyDoc,
   BulletinTopicDoc,
+  BulletinTopicReplyReadProgressDoc,
 } from "@/types/bulletin";
 import {
   addDoc,
@@ -17,6 +18,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
 } from "firebase/firestore";
 
@@ -277,4 +279,70 @@ export async function deleteBulletinReply(
       replyId,
     ),
   );
+}
+
+/** 返信 ID 順（時系列）に対する「その返信まで読んだ人数」 */
+export function computeReplyReadCounts(
+  replyIdsOrdered: string[],
+  reads: { userId: string; lastReadReplyId: string | null }[],
+): number[] {
+  const idToIndex = new Map(replyIdsOrdered.map((id, i) => [id, i]));
+  const counts = new Array(replyIdsOrdered.length).fill(0);
+  for (const r of reads) {
+    if (r.lastReadReplyId == null) continue;
+    const j = idToIndex.get(r.lastReadReplyId);
+    if (j === undefined) continue;
+    for (let i = 0; i <= j; i++) {
+      counts[i]++;
+    }
+  }
+  return counts;
+}
+
+export async function listTopicReplyReadProgress(
+  groupId: string,
+  topicId: string,
+): Promise<{ userId: string; lastReadReplyId: string | null }[]> {
+  const db = getFirebaseFirestore();
+  const col = collection(
+    db,
+    COLLECTIONS.groups,
+    groupId,
+    SUB.bulletinPosts,
+    topicId,
+    SUB.replyReadProgress,
+  );
+  const snap = await getDocs(col);
+  const out: { userId: string; lastReadReplyId: string | null }[] = [];
+  snap.forEach((d) => {
+    const data = d.data() as BulletinTopicReplyReadProgressDoc;
+    out.push({
+      userId: d.id,
+      lastReadReplyId: data.lastReadReplyId ?? null,
+    });
+  });
+  return out;
+}
+
+/** 自分が「この返信まで読んだ」と記録（時系列で最後の返信 ID を渡す） */
+export async function setMyTopicReplyReadProgress(
+  groupId: string,
+  topicId: string,
+  readerUid: string,
+  lastReadReplyId: string | null,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  const ref = doc(
+    db,
+    COLLECTIONS.groups,
+    groupId,
+    SUB.bulletinPosts,
+    topicId,
+    SUB.replyReadProgress,
+    readerUid,
+  );
+  await setDoc(ref, {
+    lastReadReplyId,
+    updatedAt: serverTimestamp(),
+  });
 }

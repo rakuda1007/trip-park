@@ -17,6 +17,8 @@ export const SUB = {
   bulletinPosts: "bulletinPosts",
   /** bulletinPosts/{topicId}/replies */
   replies: "replies",
+  /** bulletinPosts/{topicId}/replyReadProgress/{userId} */
+  replyReadProgress: "replyReadProgress",
   tripRoutes: "tripRoutes",
   expenses: "expenses",
   families: "families",

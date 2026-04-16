@@ -128,6 +128,15 @@ service cloud.firestore {
             isOwnerOrAdmin(groupId) || resource.data.authorUserId == request.auth.uid
           );
         }
+
+        match /replyReadProgress/{readerUid} {
+          allow read: if request.auth != null && isGroupMember(groupId);
+          allow create, update: if request.auth != null && isGroupMember(groupId) &&
+            request.auth.uid == readerUid &&
+            request.resource.data.keys().hasOnly(['lastReadReplyId', 'updatedAt']) &&
+            (request.resource.data.lastReadReplyId == null || request.resource.data.lastReadReplyId is string);
+          allow delete: if false;
+        }
       }
 
       match /scheduleCandidates/{candidateId} {

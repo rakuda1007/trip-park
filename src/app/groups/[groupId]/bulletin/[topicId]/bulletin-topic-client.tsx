@@ -3,12 +3,15 @@
 import { useAuth } from "@/contexts/auth-context";
 import { useGroupRouteId } from "@/contexts/group-route-context";
 import {
+  computeReplyReadCounts,
   createBulletinReply,
   deleteBulletinReply,
   deleteBulletinTopic,
   getBulletinTopic,
   listBulletinReplies,
+  listTopicReplyReadProgress,
   setBulletinTopicPinned,
+  setMyTopicReplyReadProgress,
   updateBulletinReply,
   updateBulletinTopic,
 } from "@/lib/firestore/bulletin";
@@ -24,7 +27,7 @@ import type {
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const CATEGORY_LABELS: Record<BulletinCategory, string> = {
   general: "全体連絡",
@@ -101,6 +104,9 @@ export function BulletinTopicClient() {
   const [replies, setReplies] = useState<
     { id: string; data: BulletinReplyDoc }[]
   >([]);
+  const [replyReads, setReplyReads] = useState<
+    { userId: string; lastReadReplyId: string | null }[]
+  >([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -126,16 +132,19 @@ export function BulletinTopicClient() {
         setMembers([]);
         setTopic(null);
         setReplies([]);
+        setReplyReads([]);
         return;
       }
-      const [m, t, r] = await Promise.all([
+      const [m, t, r, reads] = await Promise.all([
         listMembers(groupId),
         getBulletinTopic(groupId, topicId),
         listBulletinReplies(groupId, topicId),
+        listTopicReplyReadProgress(groupId, topicId).catch(() => []),
       ]);
       setMembers(m);
       setTopic(t ?? null);
       setReplies(r);
+      setReplyReads(reads);
       if (t) {
         setEditTitle(t.title);
         setEditBody(t.body);
@@ -146,6 +155,7 @@ export function BulletinTopicClient() {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
       setGroup(null);
       setTopic(null);
+      setReplyReads([]);
     }
   }, [groupId, topicId]);
 
@@ -158,6 +168,32 @@ export function BulletinTopicClient() {
   );
   const canManage =
     user && group ? canManageBulletin(group, members, user.uid) : false;
+
+  const replyReadCounts = useMemo(
+    () =>
+      computeReplyReadCounts(
+        replies.map((x) => x.id),
+        replyReads,
+      ),
+    [replies, replyReads],
+  );
+
+  const lastReplyId = replies.length > 0 ? replies[replies.length - 1]!.id : null;
+
+  useEffect(() => {
+    if (!groupId || !topicId || !user?.uid || !isMember || !lastReplyId) return;
+    const timer = setTimeout(() => {
+      void setMyTopicReplyReadProgress(
+        groupId,
+        topicId,
+        user.uid,
+        lastReplyId,
+      ).then(() =>
+        listTopicReplyReadProgress(groupId, topicId).then(setReplyReads),
+      );
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [groupId, topicId, user?.uid, isMember, lastReplyId]);
 
   async function handleSaveTopic() {
     if (!groupId || !topicId || !editTitle.trim() || !editBody.trim()) return;
@@ -476,11 +512,12 @@ export function BulletinTopicClient() {
           返信 {replies.length} 件
         </p>
         <ul className="space-y-3">
-          {replies.map(({ id, data }) => {
+          {replies.map(({ id, data }, idx) => {
             const isOwn = user?.uid === data.authorUserId;
             const label =
               data.authorDisplayName ||
               data.authorUserId.slice(0, 8) + "…";
+            const readCount = replyReadCounts[idx] ?? 0;
             return (
               <li
                 key={id}
@@ -536,6 +573,7 @@ export function BulletinTopicClient() {
                         {isUpdatedReply(data) ? (
                           <span>（更新 {formatTs(data.updatedAt)}）</span>
                         ) : null}
+                        <span className="text-zinc-500"> · 既読 {readCount}</span>
                       </p>
                       <div
                         className={`mt-0.5 flex gap-2 ${
