@@ -43,14 +43,15 @@ service cloud.firestore {
           data.createdByDisplayName == null);
     }
 
-    /** 更新時: createdAt の厳密比較や keys().hasAll は欠損キーで誤拒否しやすいので緩い検証に留める */
+    /** 更新時: マージ後のドキュメントを検証。sortOrder は型が環境で異なることがあるため null も許可 */
     function sharingItemUpdateShape(data) {
       return data.label is string &&
         data.label.size() > 0 &&
         data.label.size() <= 200 &&
-        (data.sortOrder is int || data.sortOrder is float) &&
+        (data.sortOrder is int || data.sortOrder is float || data.sortOrder == null) &&
         (data.memo is string || data.memo == null) &&
         data.createdByUserId is string &&
+        data.createdByUserId.size() > 0 &&
         (data.createdByDisplayName is string || data.createdByDisplayName == null);
     }
 
@@ -58,11 +59,14 @@ service cloud.firestore {
       return data.keys().hasAll(['assignedUserId', 'assignedDisplayName']);
     }
 
-    // 世帯フィールドと旧メンバーフィールドは同時に存在させない
+    // 世帯フィールドと旧メンバー割当（実値があるとき）を同時に許可しない。
+    // keys().hasAny だと null のキーだけでもレガシー扱いになり誤拒否するため、文字列の有無で見る。
     function sharingAssignmentOk(data) {
       let hasFam = data.keys().hasAll(['assignedFamilyId', 'assignedFamilyName']);
-      let hasLegacy = data.keys().hasAny(['assignedUserId', 'assignedDisplayName']);
-      return (hasFam && !hasLegacy) ||
+      let hasLegacyStrings =
+        (data.assignedUserId is string && data.assignedUserId.size() > 0) ||
+        (data.assignedDisplayName is string && data.assignedDisplayName.size() > 0);
+      return (hasFam && !hasLegacyStrings) ||
         (sharingAssignmentLegacy(data) && !hasFam);
     }
 

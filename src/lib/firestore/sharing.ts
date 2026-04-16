@@ -218,27 +218,9 @@ export async function updateSharingItemFamilyAssignment(
 ): Promise<void> {
   const db = getFirebaseFirestore();
   const ref = doc(db, COLLECTIONS.groups, groupId, SUB.sharingItems, itemId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) throw new Error("項目が見つかりません。");
-  const raw = snap.data() as Record<string, unknown>;
-  const label = typeof raw.label === "string" ? raw.label : "";
-  const memo =
-    typeof raw.memo === "string" ? raw.memo : null;
-  const sortOrder =
-    typeof raw.sortOrder === "number" ? raw.sortOrder : 0;
-  const createdByUserId =
-    typeof raw.createdByUserId === "string" ? raw.createdByUserId : "";
-  const createdByDisplayName =
-    typeof raw.createdByDisplayName === "string"
-      ? raw.createdByDisplayName
-      : null;
-
+  // createdByUserId 等はマージで維持する。再書き込みすると型が崩れたとき空文字になり
+  // ルールの createdByUserId 一致で permission denied になるため、割当フィールドのみ更新する。
   await updateDoc(ref, {
-    label,
-    memo,
-    sortOrder,
-    createdByUserId,
-    createdByDisplayName,
     assignedFamilyId,
     assignedFamilyName,
     assignedUserId: deleteField(),
