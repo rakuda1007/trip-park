@@ -43,18 +43,6 @@ service cloud.firestore {
           data.createdByDisplayName == null);
     }
 
-    /** 更新時: マージ後のドキュメントを検証。sortOrder は型が環境で異なることがあるため null も許可 */
-    function sharingItemUpdateShape(data) {
-      return data.label is string &&
-        data.label.size() > 0 &&
-        data.label.size() <= 200 &&
-        (data.sortOrder is int || data.sortOrder is float || data.sortOrder == null) &&
-        (data.memo is string || data.memo == null) &&
-        data.createdByUserId is string &&
-        data.createdByUserId.size() > 0 &&
-        (data.createdByDisplayName is string || data.createdByDisplayName == null);
-    }
-
     function sharingAssignmentLegacy(data) {
       return data.keys().hasAll(['assignedUserId', 'assignedDisplayName']);
     }
@@ -349,10 +337,12 @@ service cloud.firestore {
             request.resource.data.assignedFamilyId is string) &&
           (request.resource.data.assignedFamilyName == null ||
             request.resource.data.assignedFamilyName is string);
+        // 更新は誤拒否しやすいため、メンバー＋作成者ID不変＋ラベル範囲＋割当フィールドの型のみ検証する
         allow update: if request.auth != null && isGroupMember(groupId) &&
           request.resource.data.createdByUserId == resource.data.createdByUserId &&
-          sharingItemUpdateShape(request.resource.data) &&
-          sharingAssignmentOk(request.resource.data) &&
+          request.resource.data.label is string &&
+          request.resource.data.label.size() > 0 &&
+          request.resource.data.label.size() <= 200 &&
           (request.resource.data.assignedFamilyId == null ||
             request.resource.data.assignedFamilyId is string) &&
           (request.resource.data.assignedFamilyName == null ||

@@ -145,6 +145,7 @@ export function SharingListPanel({
       await load();
       onDataChanged?.();
     } catch (e) {
+      console.error("[sharing] assign family failed", e);
       setError(e instanceof Error ? e.message : "更新に失敗しました");
     } finally {
       setBusy(null);
