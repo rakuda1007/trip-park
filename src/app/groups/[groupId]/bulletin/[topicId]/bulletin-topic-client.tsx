@@ -33,17 +33,21 @@ import { calcTripNumDays } from "@/lib/trip-dates";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
 import { sendNotification } from "@/lib/notify";
 import type { GroupDoc, MemberDoc } from "@/types/group";
+import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
 import {
   BULLETIN_CATEGORY_LABELS,
   BULLETIN_CATEGORY_OPTIONS,
+  BULLETIN_TOPIC_TAG_LABELS,
   type BulletinCategory,
   type BulletinImportance,
   type BulletinReplyDoc,
   type BulletinTopicDoc,
   type BulletinRecipeVoteDoc,
+  type BulletinTopicTag,
   type RecipePollData,
   RECIPE_MEAL_LABELS,
   type RecipeMealSlot,
+  normalizeBulletinTopicTags,
 } from "@/types/bulletin";
 import { serverTimestamp, Timestamp } from "firebase/firestore";
 import Link from "next/link";
@@ -126,6 +130,7 @@ export function BulletinTopicClient() {
   const [editCategory, setEditCategory] = useState<BulletinCategory>("general");
   const [editImportance, setEditImportance] =
     useState<BulletinImportance>("normal");
+  const [editTags, setEditTags] = useState<BulletinTopicTag[]>([]);
 
   const [newReplyBody, setNewReplyBody] = useState("");
 
@@ -169,6 +174,7 @@ export function BulletinTopicClient() {
         setEditBody(t.body);
         setEditCategory(t.category);
         setEditImportance(t.importance);
+        setEditTags(normalizeBulletinTopicTags(t));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -307,6 +313,7 @@ export function BulletinTopicClient() {
         editCategory,
         editImportance,
         recipePoll,
+        editTags,
       );
       setEditingTopic(false);
       await load();
@@ -658,6 +665,11 @@ export function BulletinTopicClient() {
                 <option value="important">重要</option>
               </select>
             </div>
+            <BulletinTopicTagsField
+              value={editTags}
+              onChange={setEditTags}
+              disabled={busy !== null}
+            />
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -681,6 +693,7 @@ export function BulletinTopicClient() {
                   setEditBody(topic.body);
                   setEditCategory(topic.category);
                   setEditImportance(topic.importance);
+                  setEditTags(normalizeBulletinTopicTags(topic));
                 }}
                 disabled={busy !== null}
                 className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs dark:border-zinc-600"
@@ -698,6 +711,18 @@ export function BulletinTopicClient() {
               <span className="rounded bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800">
                 {BULLETIN_CATEGORY_LABELS[topic.category]}
               </span>
+              {normalizeBulletinTopicTags(topic).map((t) => (
+                <span
+                  key={t}
+                  className={`rounded px-2 py-0.5 ${
+                    t === "priority_top"
+                      ? "bg-rose-100 font-medium text-rose-900 dark:bg-rose-950/60 dark:text-rose-200"
+                      : "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200"
+                  }`}
+                >
+                  {BULLETIN_TOPIC_TAG_LABELS[t]}
+                </span>
+              ))}
               {topic.importance === "important" ? (
                 <span className="text-amber-700 dark:text-amber-300">重要</span>
               ) : null}

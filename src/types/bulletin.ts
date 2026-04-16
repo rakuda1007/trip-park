@@ -60,6 +60,21 @@ export const BULLETIN_CATEGORY_OPTIONS: BulletinCategory[] = [
 /** 重要度 */
 export type BulletinImportance = "normal" | "important";
 
+/** トピックに付与できるタグ（複数可） */
+export type BulletinTopicTag = "recipe" | "movement" | "priority_top";
+
+export const BULLETIN_TOPIC_TAG_LABELS: Record<BulletinTopicTag, string> = {
+  recipe: "レシピ",
+  movement: "移動",
+  priority_top: "上位表示",
+};
+
+export const BULLETIN_TOPIC_TAG_ALL: BulletinTopicTag[] = [
+  "recipe",
+  "movement",
+  "priority_top",
+];
+
 /** 話題（スレッドの親）。`bulletinPosts/{topicId}` に保存 */
 export type BulletinTopicDoc = {
   title: string;
@@ -69,6 +84,8 @@ export type BulletinTopicDoc = {
   category: BulletinCategory;
   importance: BulletinImportance;
   pinned: boolean;
+  /** 付与したタグ（未設定の旧データは空配列として扱う） */
+  tags?: BulletinTopicTag[];
   /** カテゴリが recipe_vote のとき、候補のプレビュー（画像・材料） */
   recipePoll?: RecipePollData;
   /** 投票確定後の食事割当（旅程で参照） */
@@ -76,6 +93,23 @@ export type BulletinTopicDoc = {
   createdAt: unknown;
   updatedAt: unknown;
 };
+
+/** Firestore / 旧データから正規化 */
+export function normalizeBulletinTopicTags(
+  data: Pick<BulletinTopicDoc, "tags">,
+): BulletinTopicTag[] {
+  const raw = data.tags;
+  if (!raw || !Array.isArray(raw)) return [];
+  const allowed = new Set<string>(BULLETIN_TOPIC_TAG_ALL);
+  const seen = new Set<string>();
+  const out: BulletinTopicTag[] = [];
+  for (const t of raw) {
+    if (typeof t !== "string" || !allowed.has(t) || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t as BulletinTopicTag);
+  }
+  return out;
+}
 
 /** `bulletinPosts/{topicId}/recipeVotes/{userId}` — 候補ごとに 1〜5 点（最大5候補まで評価） */
 export type BulletinRecipeVoteDoc = {

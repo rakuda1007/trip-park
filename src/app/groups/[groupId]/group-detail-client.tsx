@@ -23,13 +23,17 @@ import { saveLastTripId } from "@/lib/last-trip";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
 import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
+import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
 import {
   BULLETIN_CATEGORY_LABELS,
   BULLETIN_CATEGORY_OPTIONS,
+  BULLETIN_TOPIC_TAG_LABELS,
   type BulletinCategory,
   type BulletinImportance,
   type BulletinTopicDoc,
+  type BulletinTopicTag,
   type RecipePollData,
+  normalizeBulletinTopicTags,
 } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
 import { SharingListPanel } from "@/app/groups/[groupId]/sharing/sharing-list-panel";
@@ -109,6 +113,7 @@ export function GroupDetailClient() {
   const [newCategory, setNewCategory] = useState<BulletinCategory>("general");
   const [newImportance, setNewImportance] =
     useState<BulletinImportance>("normal");
+  const [newTags, setNewTags] = useState<BulletinTopicTag[]>([]);
 
   /** 買い出し・分担（トピック欄の要約用） */
   const [sharingSummary, setSharingSummary] = useState<{
@@ -198,11 +203,13 @@ export function GroupDetailClient() {
         newCategory,
         newImportance,
         recipePoll ?? undefined,
+        newTags,
       );
       setNewTitle("");
       setNewBody("");
       setNewCategory("general");
       setNewImportance("normal");
+      setNewTags([]);
       setShowNewTopicForm(false);
       await load();
       // 通知送信（失敗しても続行）
@@ -695,6 +702,11 @@ export function GroupDetailClient() {
                   <option value="important">重要</option>
                 </select>
               </div>
+              <BulletinTopicTagsField
+                value={newTags}
+                onChange={setNewTags}
+                disabled={busy !== null}
+              />
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -716,6 +728,7 @@ export function GroupDetailClient() {
                     setShowNewTopicForm(false);
                     setNewTitle("");
                     setNewBody("");
+                    setNewTags([]);
                   }}
                   className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400"
                 >
@@ -737,6 +750,7 @@ export function GroupDetailClient() {
               {topics.map(({ id, data, replyCount }) => {
                 const showImportant =
                   data.importance === "important" || data.pinned;
+                const tags = normalizeBulletinTopicTags(data);
                 return (
                   <li key={id}>
                     <Link
@@ -764,6 +778,18 @@ export function GroupDetailClient() {
                             <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
                               {BULLETIN_CATEGORY_LABELS[data.category]}
                             </span>
+                            {tags.map((t) => (
+                              <span
+                                key={t}
+                                className={`rounded px-1.5 py-0.5 text-[10px] ${
+                                  t === "priority_top"
+                                    ? "bg-rose-100 font-medium text-rose-900 dark:bg-rose-950/60 dark:text-rose-200"
+                                    : "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200"
+                                }`}
+                              >
+                                {BULLETIN_TOPIC_TAG_LABELS[t]}
+                              </span>
+                            ))}
                             {data.importance === "important" ? (
                               <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
                                 重要

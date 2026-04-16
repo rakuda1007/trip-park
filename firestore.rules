@@ -80,6 +80,12 @@ service cloud.firestore {
         (!data.keys().hasAny(['recipePollResolution']) || bulletinRecipePollResolutionOk(data.recipePollResolution));
     }
 
+    function bulletinTagsOk(tags) {
+      return tags is list &&
+        tags.size() <= 3 &&
+        tags.hasOnly(['recipe', 'movement', 'priority_top']);
+    }
+
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
 
@@ -153,15 +159,17 @@ service cloud.firestore {
           request.resource.data.pinned == false &&
           request.resource.data.keys().hasAll([
             'title', 'body', 'authorUserId', 'authorDisplayName',
-            'category', 'importance', 'pinned', 'createdAt', 'updatedAt'
+            'category', 'importance', 'pinned', 'tags', 'createdAt', 'updatedAt'
           ]) &&
+          bulletinTagsOk(request.resource.data.tags) &&
           bulletinRecipePollFieldOk(request.resource.data) &&
           (
             request.resource.data.category != 'recipe_vote' ||
             request.resource.data.keys().hasAny(['recipePoll'])
           );
         allow update: if request.auth != null && isGroupMember(groupId) &&
-          bulletinRecipePollFieldOk(request.resource.data) && (
+          bulletinRecipePollFieldOk(request.resource.data) &&
+          (!request.resource.data.keys().hasAny(['tags']) || bulletinTagsOk(request.resource.data.tags)) && (
           isOwnerOrAdmin(groupId) ||
           (
             request.auth.uid == resource.data.authorUserId &&

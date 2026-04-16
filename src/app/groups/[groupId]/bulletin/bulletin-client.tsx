@@ -16,12 +16,16 @@ import {
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
 import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
+import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
 import {
   BULLETIN_CATEGORY_LABELS,
   BULLETIN_CATEGORY_OPTIONS,
+  BULLETIN_TOPIC_TAG_LABELS,
   type BulletinCategory,
   type BulletinImportance,
   type BulletinTopicDoc,
+  type BulletinTopicTag,
+  normalizeBulletinTopicTags,
 } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
 import { SharingListPanel } from "@/app/groups/[groupId]/sharing/sharing-list-panel";
@@ -73,6 +77,7 @@ export function BulletinClient() {
   const [newCategory, setNewCategory] = useState<BulletinCategory>("general");
   const [newImportance, setNewImportance] =
     useState<BulletinImportance>("normal");
+  const [newTags, setNewTags] = useState<BulletinTopicTag[]>([]);
 
   const load = useCallback(async () => {
     if (!groupId) return;
@@ -145,11 +150,13 @@ export function BulletinClient() {
         newCategory,
         newImportance,
         recipePoll ?? undefined,
+        newTags,
       );
       setNewTitle("");
       setNewBody("");
       setNewCategory("general");
       setNewImportance("normal");
+      setNewTags([]);
       setShowForm(false);
       await load();
       // 通知送信（失敗しても続行）
@@ -341,6 +348,11 @@ export function BulletinClient() {
                 </select>
               </label>
             </div>
+            <BulletinTopicTagsField
+              value={newTags}
+              onChange={setNewTags}
+              disabled={busy !== null}
+            />
             <button
               type="button"
               onClick={handleCreateTopic}
@@ -372,6 +384,7 @@ export function BulletinClient() {
             {topics.map(({ id, data, replyCount }) => {
               const showImportant =
                 data.importance === "important" || data.pinned;
+              const tags = normalizeBulletinTopicTags(data);
               return (
                 <li key={id}>
                   <Link
@@ -402,6 +415,18 @@ export function BulletinClient() {
                       <span className="rounded bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800">
                         {BULLETIN_CATEGORY_LABELS[data.category]}
                       </span>
+                      {tags.map((t) => (
+                        <span
+                          key={t}
+                          className={`rounded px-2 py-0.5 ${
+                            t === "priority_top"
+                              ? "bg-rose-100 font-medium text-rose-900 dark:bg-rose-950/60 dark:text-rose-200"
+                              : "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200"
+                          }`}
+                        >
+                          {BULLETIN_TOPIC_TAG_LABELS[t]}
+                        </span>
+                      ))}
                       {data.importance === "important" ? (
                         <span className="text-amber-700 dark:text-amber-300">
                           重要

@@ -1,14 +1,16 @@
 import { getFirebaseFirestore } from "@/lib/firebase/client";
 import { COLLECTIONS, SUB } from "@/lib/firestore/collections";
-import type {
-  BulletinCategory,
-  BulletinImportance,
-  BulletinRecipeVoteDoc,
-  BulletinReplyDoc,
-  BulletinTopicDoc,
-  BulletinTopicReplyReadProgressDoc,
-  RecipePollData,
-  RecipePollResolution,
+import {
+  normalizeBulletinTopicTags,
+  type BulletinCategory,
+  type BulletinImportance,
+  type BulletinRecipeVoteDoc,
+  type BulletinReplyDoc,
+  type BulletinTopicDoc,
+  type BulletinTopicReplyReadProgressDoc,
+  type BulletinTopicTag,
+  type RecipePollData,
+  type RecipePollResolution,
 } from "@/types/bulletin";
 import {
   addDoc,
@@ -23,9 +25,30 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
+
+function bulletinTopicCreatedAtMs(data: BulletinTopicDoc): number {
+  const v = data.createdAt;
+  if (v instanceof Timestamp) return v.toMillis();
+  return 0;
+}
+
+/** 一覧表示順: 上位表示タグ → ピン留め → それ以外。同一帯域内は新しい順 */
+function compareBulletinTopicsForList(
+  a: { data: BulletinTopicDoc },
+  b: { data: BulletinTopicDoc },
+): number {
+  const aTop = normalizeBulletinTopicTags(a.data).includes("priority_top");
+  const bTop = normalizeBulletinTopicTags(b.data).includes("priority_top");
+  if (aTop !== bTop) return aTop ? -1 : 1;
+  if (a.data.pinned !== b.data.pinned) return a.data.pinned ? -1 : 1;
+  const ma = bulletinTopicCreatedAtMs(a.data);
+  const mb = bulletinTopicCreatedAtMs(b.data);
+  return mb - ma;
+}
 
 export async function listBulletinTopics(groupId: string): Promise<
   { id: string; data: BulletinTopicDoc }[]
@@ -42,10 +65,7 @@ export async function listBulletinTopics(groupId: string): Promise<
   snap.forEach((d) =>
     out.push({ id: d.id, data: d.data() as BulletinTopicDoc }),
   );
-  out.sort((a, b) => {
-    if (a.data.pinned !== b.data.pinned) return a.data.pinned ? -1 : 1;
-    return 0;
-  });
+  out.sort(compareBulletinTopicsForList);
   return out;
 }
 
@@ -124,6 +144,7 @@ export async function createBulletinTopic(
   category: BulletinCategory,
   importance: BulletinImportance,
   recipePoll?: RecipePollData | null,
+  tags?: BulletinTopicTag[],
 ): Promise<string> {
   const db = getFirebaseFirestore();
   const col = collection(
@@ -140,6 +161,7 @@ export async function createBulletinTopic(
     category,
     importance,
     pinned: false,
+    tags: tags?.length ? tags : [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -161,6 +183,7 @@ export async function updateBulletinTopic(
   category: BulletinCategory,
   importance: BulletinImportance,
   recipePoll?: RecipePollData | null,
+  tags?: BulletinTopicTag[],
 ): Promise<void> {
   const db = getFirebaseFirestore();
   const ref = doc(
@@ -175,6 +198,7 @@ export async function updateBulletinTopic(
     body: body.trim(),
     category,
     importance,
+    tags: tags?.length ? tags : [],
     updatedAt: serverTimestamp(),
   };
   if (category === "recipe_vote" && recipePoll?.candidates?.length) {
