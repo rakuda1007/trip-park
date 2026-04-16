@@ -17,10 +17,7 @@ import {
   createBulletinTopic,
   listBulletinTopicsWithReplyCounts,
 } from "@/lib/firestore/bulletin";
-import {
-  listSharingItems,
-  sharingSummaryStats,
-} from "@/lib/firestore/sharing";
+import { listSharingItems, sharingSummaryStats } from "@/lib/firestore/sharing";
 import { sendNotification } from "@/lib/notify";
 import { saveLastTripId } from "@/lib/last-trip";
 import type { GroupDoc, MemberDoc } from "@/types/group";
@@ -103,12 +100,15 @@ export function GroupDetailClient() {
   const [draftDesc, setDraftDesc] = useState("");
 
   // トピック
-  const [topics, setTopics] = useState<{ id: string; data: BulletinTopicDoc; replyCount: number }[]>([]);
+  const [topics, setTopics] = useState<
+    { id: string; data: BulletinTopicDoc; replyCount: number }[]
+  >([]);
   const [showNewTopicForm, setShowNewTopicForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
   const [newCategory, setNewCategory] = useState<BulletinCategory>("general");
-  const [newImportance, setNewImportance] = useState<BulletinImportance>("normal");
+  const [newImportance, setNewImportance] =
+    useState<BulletinImportance>("normal");
 
   /** 買い出し・分担（トピック欄の要約用） */
   const [sharingSummary, setSharingSummary] = useState<{
@@ -142,7 +142,9 @@ export function GroupDetailClient() {
         setMembers(await listMembers(groupId));
       } catch {
         setMembers([]);
-        setError("メンバー一覧を読み込めませんでした。ネットワークまたは権限を確認してください。");
+        setError(
+          "メンバー一覧を読み込めませんでした。ネットワークまたは権限を確認してください。",
+        );
         setTopics([]);
         setSharingSummary({ total: 0, unassigned: 0 });
         return;
@@ -172,7 +174,10 @@ export function GroupDetailClient() {
   async function handleCreateTopic() {
     if (!user || !groupId || !newTitle.trim()) return;
     if (newCategory !== "recipe_vote" && !newBody.trim()) return;
-    if (newCategory === "recipe_vote" && parseRecipeUrlLines(newBody).length === 0) {
+    if (
+      newCategory === "recipe_vote" &&
+      parseRecipeUrlLines(newBody).length === 0
+    ) {
       return;
     }
     setBusy("create-topic");
@@ -194,7 +199,10 @@ export function GroupDetailClient() {
         newImportance,
         recipePoll ?? undefined,
       );
-      setNewTitle(""); setNewBody(""); setNewCategory("general"); setNewImportance("normal");
+      setNewTitle("");
+      setNewBody("");
+      setNewCategory("general");
+      setNewImportance("normal");
       setShowNewTopicForm(false);
       await load();
       // 通知送信（失敗しても続行）
@@ -268,7 +276,8 @@ export function GroupDetailClient() {
   }
 
   async function copyInvite() {
-    if (!group || typeof navigator === "undefined" || !navigator.clipboard) return;
+    if (!group || typeof navigator === "undefined" || !navigator.clipboard)
+      return;
     const url = buildWelcomeUrl(group.inviteCode);
     try {
       await navigator.clipboard.writeText(url);
@@ -345,11 +354,17 @@ export function GroupDetailClient() {
       <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
         <p className="text-sm text-zinc-600">旅行が見つかりません。</p>
         {error ? (
-          <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
+          <p
+            className="mt-2 text-sm text-red-600 dark:text-red-400"
+            role="alert"
+          >
             {error}
           </p>
         ) : null}
-        <Link href="/groups" className="mt-4 inline-block text-sm text-zinc-900 underline">
+        <Link
+          href="/groups"
+          className="mt-4 inline-block text-sm text-zinc-900 underline"
+        >
           旅行一覧へ
         </Link>
       </div>
@@ -370,7 +385,7 @@ export function GroupDetailClient() {
         <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
           <Link
             href={`/groups/${groupId}`}
-            className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 hover:text-zinc-700 hover:underline dark:hover:text-zinc-200"
+            className="rounded-md hover:text-zinc-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:hover:text-zinc-200"
           >
             {group.name}
           </Link>
@@ -409,8 +424,13 @@ export function GroupDetailClient() {
               onClick={async () => {
                 setBusy("desc");
                 try {
-                  await updateGroupDescription(groupId, draftDesc.trim() || null);
-                  setGroup((g) => g ? { ...g, description: draftDesc.trim() || null } : g);
+                  await updateGroupDescription(
+                    groupId,
+                    draftDesc.trim() || null,
+                  );
+                  setGroup((g) =>
+                    g ? { ...g, description: draftDesc.trim() || null } : g,
+                  );
                   setEditingDesc(false);
                 } catch {
                   // ignore
@@ -434,12 +454,14 @@ export function GroupDetailClient() {
       ) : (
         <div className="mt-2 flex items-start gap-2">
           {group.description ? (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">{group.description}</p>
-          ) : (
-            isOwner ? (
-              <span className="text-xs text-zinc-400 dark:text-zinc-500">説明未設定</span>
-            ) : null
-          )}
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              {group.description}
+            </p>
+          ) : isOwner ? (
+            <span className="text-xs text-zinc-400 dark:text-zinc-500">
+              説明未設定
+            </span>
+          ) : null}
           {isOwner ? (
             <button
               type="button"
@@ -510,7 +532,9 @@ export function GroupDetailClient() {
                     setEditingDates(false);
                     await load();
                   } catch (e) {
-                    setError(e instanceof Error ? e.message : "クリアに失敗しました");
+                    setError(
+                      e instanceof Error ? e.message : "クリアに失敗しました",
+                    );
                   } finally {
                     setBusy(null);
                   }
@@ -545,7 +569,8 @@ export function GroupDetailClient() {
           <span className="select-none" aria-hidden>
             {shoppingOpen ? "▼" : "▶"}
           </span>
-          買出しリスト（全{sharingSummary.total}項目、未割当{sharingSummary.unassigned}項目）
+          買出しリスト（全{sharingSummary.total}項目、未割当
+          {sharingSummary.unassigned}項目）
         </button>
         {shoppingOpen ? (
           <div
@@ -563,40 +588,63 @@ export function GroupDetailClient() {
         ) : null}
       </div>
 
-      {/* ── トピック（機能名はラベル調。各話題タイトルとはサイズ・役割を分ける） ── */}
-      <section className="mt-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60">
-        <div className="flex items-start justify-between gap-3 border-b border-zinc-100 bg-zinc-50/90 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-800/40">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
-              トピック
-            </p>
-            <p className="mt-1 text-xs leading-snug text-zinc-600 dark:text-zinc-400">
-              話題ごとにチャットでやりとりできます。
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {!showNewTopicForm && (
-              <button
-                type="button"
-                onClick={() => setShowNewTopicForm(true)}
-                className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+      {/* ── トピック（見出し帯と本文・一覧で色とレイアウトを分ける） ── */}
+      <section className="mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60">
+        <div className="border-b border-emerald-100 bg-gradient-to-br from-emerald-50 via-emerald-50/95 to-white px-4 py-4 dark:border-emerald-900/45 dark:from-emerald-950/50 dark:via-emerald-950/35 dark:to-zinc-900/80">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-emerald-200/90 dark:bg-zinc-900 dark:ring-emerald-800/60"
+                aria-hidden
               >
-                ＋ 新しい話題
-              </button>
-            )}
-            <Link
-              href={`/groups/${groupId}/bulletin`}
-              className="text-xs text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
-            >
-              すべて見る →
-            </Link>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="h-4 w-4 text-emerald-700 dark:text-emerald-300"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"
+                  />
+                </svg>
+              </div>
+              <h2 className="whitespace-nowrap text-sm font-semibold leading-none tracking-tight text-emerald-950 dark:text-emerald-100">
+                トピック
+              </h2>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {!showNewTopicForm && (
+                <button
+                  type="button"
+                  onClick={() => setShowNewTopicForm(true)}
+                  className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  ＋ 新しい話題
+                </button>
+              )}
+              <Link
+                href={`/groups/${groupId}/bulletin`}
+                className="text-xs text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
+              >
+                すべて見る →
+              </Link>
+            </div>
           </div>
+          <p className="mt-2 w-full min-w-0 text-left text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+            話題ごとにチャットでやり取りできます。
+          </p>
         </div>
 
         {/* 新規話題フォーム */}
         {showNewTopicForm && (
           <div className="mx-4 mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
-            <p className="mb-3 text-xs font-semibold text-zinc-700 dark:text-zinc-300">新しい話題を立てる</p>
+            <p className="mb-3 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+              新しい話題を立てる
+            </p>
             <div className="space-y-2">
               <input
                 type="text"
@@ -607,28 +655,40 @@ export function GroupDetailClient() {
                 className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
               />
               <label className="block text-xs text-zinc-500 dark:text-zinc-400">
-                {newCategory === "recipe_vote" ? "レシピページのURL（1行に1件）" : "本文"}
+                {newCategory === "recipe_vote"
+                  ? "レシピページのURL（1行に1件）"
+                  : "本文"}
                 <textarea
                   value={newBody}
                   onChange={(e) => setNewBody(e.target.value)}
                   rows={newCategory === "recipe_vote" ? 5 : 3}
-                  placeholder={newCategory === "recipe_vote" ? "https://cookpad.com/jp/recipes/…" : "本文"}
+                  placeholder={
+                    newCategory === "recipe_vote"
+                      ? "https://cookpad.com/jp/recipes/…"
+                      : "本文"
+                  }
                   className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                 />
               </label>
               <div className="flex flex-wrap gap-3">
                 <select
                   value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value as BulletinCategory)}
+                  onChange={(e) =>
+                    setNewCategory(e.target.value as BulletinCategory)
+                  }
                   className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                 >
                   {BULLETIN_CATEGORY_OPTIONS.map((c) => (
-                    <option key={c} value={c}>{BULLETIN_CATEGORY_LABELS[c]}</option>
+                    <option key={c} value={c}>
+                      {BULLETIN_CATEGORY_LABELS[c]}
+                    </option>
                   ))}
                 </select>
                 <select
                   value={newImportance}
-                  onChange={(e) => setNewImportance(e.target.value as BulletinImportance)}
+                  onChange={(e) =>
+                    setNewImportance(e.target.value as BulletinImportance)
+                  }
                   className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                 >
                   <option value="normal">通常</option>
@@ -652,7 +712,11 @@ export function GroupDetailClient() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setShowNewTopicForm(false); setNewTitle(""); setNewBody(""); }}
+                  onClick={() => {
+                    setShowNewTopicForm(false);
+                    setNewTitle("");
+                    setNewBody("");
+                  }}
                   className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400"
                 >
                   キャンセル
@@ -663,9 +727,11 @@ export function GroupDetailClient() {
         )}
 
         {/* 話題一覧 */}
-        <div className="mt-3 pb-2">
+        <div className="bg-white pb-2 pt-1 dark:bg-transparent">
           {topics.length === 0 ? (
-            <p className="px-4 pb-4 text-sm text-zinc-400 dark:text-zinc-500">まだ話題がありません。</p>
+            <p className="px-4 pb-4 text-sm text-zinc-400 dark:text-zinc-500">
+              まだ話題がありません。
+            </p>
           ) : (
             <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {topics.map(({ id, data, replyCount }) => {
@@ -688,7 +754,7 @@ export function GroupDetailClient() {
                               📌 ピン留め
                             </p>
                           ) : null}
-                          <h3 className="mt-0.5 text-base font-semibold leading-snug text-zinc-900 dark:text-zinc-100">
+                          <h3 className="mt-0.5 text-sm font-medium leading-snug text-zinc-700 dark:text-zinc-300">
                             {data.title}
                           </h3>
                           <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
@@ -753,7 +819,11 @@ export function GroupDetailClient() {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-md bg-[#06C755] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#05b34c]"
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5">
+            <svg
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="h-3.5 w-3.5"
+            >
               <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.064-.022.134-.032.2-.032.211 0 .391.09.51.25l2.444 3.317V8.108c0-.345.282-.63.63-.63.345 0 .628.285.628.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.070 9.436-6.975C23.176 14.393 24 12.458 24 10.314" />
             </svg>
             LINEで送る
@@ -774,7 +844,12 @@ export function GroupDetailClient() {
               }}
               className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-3.5 w-3.5"
+              >
                 <path d="M13 4.5a2.5 2.5 0 1 1 .702 1.737L6.97 9.604a2.518 2.518 0 0 1 0 .792l6.733 3.367a2.5 2.5 0 1 1-.671 1.341l-6.733-3.367a2.5 2.5 0 1 1 0-3.474l6.733-3.367A2.52 2.52 0 0 1 13 4.5Z" />
               </svg>
               その他で共有
@@ -805,7 +880,9 @@ export function GroupDetailClient() {
                       : "メンバー"}
                 </span>
                 {userId === user?.uid ? (
-                  <span className="ml-1 text-xs text-emerald-600">（あなた）</span>
+                  <span className="ml-1 text-xs text-emerald-600">
+                    （あなた）
+                  </span>
                 ) : null}
               </span>
               {isOwner && userId !== group.ownerId ? (
