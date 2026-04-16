@@ -215,7 +215,7 @@ export function BulletinClient() {
 
       <div className="mt-4 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          掲示板
+          トピック
         </h1>
         {user && isMember ? (
           <button
@@ -228,7 +228,7 @@ export function BulletinClient() {
         ) : null}
       </div>
       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-        話題ごとにスレッドが分かれます。一覧から話題を選ぶと、本文と返信を見たり書き込みできます。
+        トピックごとにチャットでやりとりできます。
       </p>
 
       <div className="mt-4">
@@ -339,7 +339,7 @@ export function BulletinClient() {
 
       <section className="mt-8">
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-          話題一覧
+          トピック一覧
         </h2>
         {topics.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-500">

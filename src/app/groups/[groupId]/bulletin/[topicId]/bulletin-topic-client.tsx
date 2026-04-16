@@ -292,7 +292,7 @@ export function BulletinTopicClient() {
           href={`/groups/${groupId}/bulletin`}
           className="mt-4 inline-block text-sm text-zinc-900 underline"
         >
-          掲示板一覧へ
+          トピック一覧へ
         </Link>
       </div>
     );
@@ -323,7 +323,7 @@ export function BulletinTopicClient() {
         href={`/groups/${groupId}/bulletin`}
         className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
       >
-        ← 話題一覧
+        ← トピック一覧
       </Link>
 
       {error ? (

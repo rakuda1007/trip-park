@@ -110,7 +110,7 @@ export function PushNotificationManager() {
                 プッシュ通知を有効にしますか？
               </p>
               <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                掲示板の投稿・返信などをお知らせします
+                トピックの投稿・返信などをお知らせします
               </p>
               <div className="mt-3 flex gap-2">
                 <button

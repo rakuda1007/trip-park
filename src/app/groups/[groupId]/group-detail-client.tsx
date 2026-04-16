@@ -63,7 +63,7 @@ function formatDateRange(start: string, end?: string | null): string {
   return `${sy}年${sm}月${sd}日 〜 ${ey}年${em}月${ed}日`;
 }
 
-/** 掲示板一覧・ダッシュボード共通の本文プレビュー */
+/** トピック一覧・ダッシュボード共通の本文プレビュー */
 function excerptBulletinBody(body: string, max = 120): string {
   const t = body.trim().replace(/\s+/g, " ");
   if (t.length <= max) return t;
@@ -95,7 +95,7 @@ export function GroupDetailClient() {
   const [editingDesc, setEditingDesc] = useState(false);
   const [draftDesc, setDraftDesc] = useState("");
 
-  // 掲示板
+  // トピック
   const [topics, setTopics] = useState<{ id: string; data: BulletinTopicDoc; replyCount: number }[]>([]);
   const [showNewTopicForm, setShowNewTopicForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -103,7 +103,7 @@ export function GroupDetailClient() {
   const [newCategory, setNewCategory] = useState<BulletinCategory>("general");
   const [newImportance, setNewImportance] = useState<BulletinImportance>("normal");
 
-  /** 買い出し・分担（掲示板上の要約用） */
+  /** 買い出し・分担（トピック欄の要約用） */
   const [sharingSummary, setSharingSummary] = useState<{
     total: number;
     unassigned: number;
@@ -130,7 +130,7 @@ export function GroupDetailClient() {
         return;
       }
       setGroup(g);
-      // メンバーは必須。掲示板・分担は個別に失敗しても旅行トップは表示する（権限未デプロイ等）
+      // メンバーは必須。トピック・分担は個別に失敗しても旅行トップは表示する（権限未デプロイ等）
       try {
         setMembers(await listMembers(groupId));
       } catch {
@@ -508,7 +508,7 @@ export function GroupDetailClient() {
         </div>
       ) : null}
 
-      {/* ── 買出しリスト（掲示板の上・折りたたみ） ── */}
+      {/* ── 買出しリスト（トピックの上・折りたたみ） ── */}
       <div className="mt-4">
         <button
           type="button"
@@ -538,10 +538,10 @@ export function GroupDetailClient() {
         ) : null}
       </div>
 
-      {/* ── 掲示板 ── */}
+      {/* ── トピック ── */}
       <section className="mt-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60">
         <div className="flex items-center justify-between px-4 pt-4">
-          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">掲示板</h2>
+          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">トピック</h2>
           <div className="flex items-center gap-2">
             {!showNewTopicForm && (
               <button
@@ -560,6 +560,9 @@ export function GroupDetailClient() {
             </Link>
           </div>
         </div>
+        <p className="px-4 pt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          トピックごとにチャットでやりとりできます。
+        </p>
 
         {/* 新規話題フォーム */}
         {showNewTopicForm && (

@@ -271,7 +271,7 @@ export function PushNotificationToggle() {
               : status === "blocked"
                 ? "ブラウザで通知がブロックされています"
                 : isEnabled
-                  ? "掲示板の投稿・返信などをお知らせします"
+                  ? "トピックの投稿・返信などをお知らせします"
                   : "タップして有効にする"}
           </p>
         </div>

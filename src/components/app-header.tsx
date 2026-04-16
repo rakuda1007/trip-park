@@ -131,7 +131,7 @@ export function AppHeader() {
                       </svg>
                       ダッシュボード
                     </Link>
-                    {/* 3. 掲示板（グループ選択中のみ） */}
+                    {/* 3. トピック（グループ選択中のみ） */}
                     {currentGroupId ? (
                       <Link
                         href={`/groups/${currentGroupId}/bulletin`}
@@ -140,7 +140,7 @@ export function AppHeader() {
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
                           <path fillRule="evenodd" d="M2 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5.414l-2.707 2.707A1 1 0 0 1 1 17V5Zm3 1a1 1 0 0 0 0 2h10a1 1 0 1 0 0-2H5Zm0 4a1 1 0 0 0 0 2h6a1 1 0 1 0 0-2H5Z" clipRule="evenodd" />
                         </svg>
-                        掲示板
+                        トピック
                       </Link>
                     ) : null}
                     {/* 4. 旅行一覧 */}
