@@ -5,6 +5,8 @@ import { getFirebaseAuth } from "@/lib/firebase/client";
 import { isFirebaseConfigured } from "@/lib/firebase/env";
 import { clearLastTripId } from "@/lib/last-trip";
 import { TripSelector } from "@/components/trip-selector";
+import { VisibilityBadge } from "@/components/visibility-badge";
+import { getGroup, getMemberForUser } from "@/lib/firestore/groups";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "firebase/auth";
@@ -21,11 +23,47 @@ export function AppHeader() {
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  /** null: 未判定。管理者メニューは true のときだけ表示 */
+  const [showAdminMenuLink, setShowAdminMenuLink] = useState<boolean | null>(
+    null,
+  );
 
   // パス変化でメニューを閉じる
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!user || !currentGroupId) {
+      setShowAdminMenuLink(false);
+      return;
+    }
+    let cancelled = false;
+    setShowAdminMenuLink(null);
+    void (async () => {
+      try {
+        const [g, m] = await Promise.all([
+          getGroup(currentGroupId),
+          getMemberForUser(currentGroupId, user.uid),
+        ]);
+        if (cancelled) return;
+        if (!g) {
+          setShowAdminMenuLink(false);
+          return;
+        }
+        const ok =
+          g.ownerId === user.uid ||
+          m?.role === "admin" ||
+          m?.role === "owner";
+        setShowAdminMenuLink(ok);
+      } catch {
+        if (!cancelled) setShowAdminMenuLink(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, currentGroupId]);
 
   // 外クリックで閉じる
   useEffect(() => {
@@ -98,7 +136,7 @@ export function AppHeader() {
 
               {/* ドロップダウン */}
               {menuOpen && (
-                <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                <div className="absolute right-0 mt-2 min-w-[12rem] max-w-[min(100vw-2rem,20rem)] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
                   {/* ユーザー情報（小さく） */}
                   <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
                     <p className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">
@@ -165,16 +203,17 @@ export function AppHeader() {
                         参加世帯
                       </Link>
                     ) : null}
-                    {/* 6. 管理者メニュー（グループ選択中のみ） */}
-                    {currentGroupId ? (
+                    {/* 6. 管理者メニュー（オーナー・管理者のみ） */}
+                    {currentGroupId && showAdminMenuLink === true ? (
                       <Link
                         href={`/groups/${currentGroupId}/admin`}
-                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
                           <path fillRule="evenodd" d="M8.34 1.804A1 1 0 0 1 9.32 1h1.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l.962.962a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v1.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-.962.962a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H9.32a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-.962-.962a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 10.68V9.32a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l.962-.962A1 1 0 0 1 5.38 3.03l1.25.834a6.957 6.957 0 0 1 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clipRule="evenodd" />
                         </svg>
-                        管理者メニュー
+                        <span className="min-w-0 flex-1 leading-snug">管理者メニュー</span>
+                        <VisibilityBadge kind="admin" className="shrink-0" />
                       </Link>
                     ) : null}
                   </nav>

@@ -205,6 +205,22 @@ export async function getGroup(groupId: string): Promise<GroupDoc | null> {
   return snap.data() as GroupDoc;
 }
 
+/** 指定ユーザーがグループに参加しているときのメンバー情報（未参加なら null） */
+export async function getMemberForUser(
+  groupId: string,
+  uid: string,
+): Promise<MemberDoc | null> {
+  const db = getFirebaseFirestore();
+  const snap = await getDoc(
+    doc(db, COLLECTIONS.groups, groupId, SUB.members, uid),
+  );
+  if (!snap.exists()) return null;
+  const raw = snap.data() as MemberDoc & { code?: string };
+  const { code: _c, ...rest } = raw;
+  void _c;
+  return rest;
+}
+
 export async function listMembers(groupId: string): Promise<
   { userId: string; data: MemberDoc }[]
 > {
