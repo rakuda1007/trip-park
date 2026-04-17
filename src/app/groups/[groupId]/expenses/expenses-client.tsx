@@ -346,38 +346,10 @@ export function ExpensesClient() {
     );
   }
 
-  return (
-    <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
-      <Link
-        href={`/groups/${groupId}`}
-        className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-      >
-        ← 旅行詳細
-      </Link>
+  const hasExpenses = expenses.length > 0;
 
-      <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        支出・精算
-      </h1>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        立て替えと負担の対象は
-        <span className="font-semibold">世帯単位</span>
-        です。
-        <Link
-          href={`/groups/${groupId}/families`}
-          className="font-medium text-emerald-800 underline dark:text-emerald-400"
-        >
-          参加世帯の登録
-        </Link>
-        が必要です。
-      </p>
-
-      {error ? (
-        <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      <section className="mt-8 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+  const addExpenseFormSection = (
+      <section className={`${hasExpenses ? "mt-10" : "mt-8"} rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50`}>
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
           {editingId ? "支出を編集" : "支出を追加"}
         </h2>
@@ -591,8 +563,9 @@ export function ExpensesClient() {
           </div>
         </form>
       </section>
+  );
 
-      {/* 精算の目安 */}
+  const settlementGuideSection = (
       <section className="mt-10">
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
           精算の目安
@@ -643,9 +616,10 @@ export function ExpensesClient() {
           </div>
         )}
       </section>
+  );
 
-      {/* 支出一覧 */}
-      <section className="mt-10">
+  const expenseListSection = (
+      <section className={`${hasExpenses ? "mt-8" : "mt-10"}`}>
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
           支出一覧
         </h2>
@@ -722,6 +696,52 @@ export function ExpensesClient() {
           </ul>
         )}
       </section>
+  );
+
+  return (
+    <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
+      <Link
+        href={`/groups/${groupId}`}
+        className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+      >
+        ← 旅行詳細
+      </Link>
+
+      <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+        支出・精算
+      </h1>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        立て替えと負担の対象は
+        <span className="font-semibold">世帯単位</span>
+        です。
+        <Link
+          href={`/groups/${groupId}/families`}
+          className="font-medium text-emerald-800 underline dark:text-emerald-400"
+        >
+          参加世帯の登録
+        </Link>
+        が必要です。
+      </p>
+
+      {error ? (
+        <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      {hasExpenses ? (
+        <>
+          {expenseListSection}
+          {settlementGuideSection}
+          {addExpenseFormSection}
+        </>
+      ) : (
+        <>
+          {addExpenseFormSection}
+          {settlementGuideSection}
+          {expenseListSection}
+        </>
+      )}
     </div>
   );
 }
