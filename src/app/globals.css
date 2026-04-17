@@ -19,3 +19,17 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
+
+/* 狭いコンテナ内の type=date が内部最小幅ではみ出すのを防ぐ（Chrome / Safari 等） */
+input.trip-date-input[type="date"] {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+input.trip-date-input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  min-width: 0;
+}
+input.trip-date-input[type="date"]::-webkit-datetime-edit {
+  min-width: 0;
+}

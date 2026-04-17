@@ -349,13 +349,13 @@ export function ExpensesClient() {
   const hasExpenses = expenses.length > 0;
 
   const addExpenseFormSection = (
-      <section className={`${hasExpenses ? "mt-10" : "mt-8"} rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50`}>
+      <section className={`${hasExpenses ? "mt-10" : "mt-8"} min-w-0 max-w-full overflow-x-clip rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50`}>
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
           {editingId ? "支出を編集" : "支出を追加"}
         </h2>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="block min-w-0 text-xs text-zinc-600 dark:text-zinc-400">
+        <form onSubmit={handleSubmit} className="mt-4 min-w-0 max-w-full space-y-3">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-stretch">
+            <label className="flex min-w-0 flex-1 flex-col text-xs text-zinc-600 dark:text-zinc-400">
               金額（円）<span className="text-red-600">*</span>
               <input
                 type="text"
@@ -367,14 +367,14 @@ export function ExpensesClient() {
                 className="mt-1 box-border w-full min-w-0 max-w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
               />
             </label>
-            <label className="block min-w-0 text-xs text-zinc-600 dark:text-zinc-400">
+            <label className="flex min-w-0 flex-1 flex-col text-xs text-zinc-600 dark:text-zinc-400">
               日付
               <input
                 type="date"
                 required
                 value={expenseDate}
                 onChange={(e) => setExpenseDate(e.target.value)}
-                className="mt-1 box-border w-full min-w-0 max-w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                className="trip-date-input mt-1 box-border w-full min-w-0 max-w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
               />
             </label>
           </div>
@@ -699,7 +699,7 @@ export function ExpensesClient() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
+    <div className="mx-auto w-full min-w-0 max-w-3xl flex-1 px-4 py-10 sm:py-14">
       <Link
         href={`/groups/${groupId}`}
         className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
