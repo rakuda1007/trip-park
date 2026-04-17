@@ -12,6 +12,7 @@ import {
   listDestinationCandidates,
   listDestinationPolls,
   listDestinationVotes,
+  listLegacyDestinationCandidates,
   migrateLegacyDestinationPollIfNeeded,
   setPollDecidedDestination,
   updateDestinationCandidate,
@@ -174,6 +175,8 @@ export function DestinationVotesClient() {
   const [editingPollId, setEditingPollId] = useState<string | null>(null);
   const [editPollTitleDraft, setEditPollTitleDraft] = useState("");
   const [editPollSortDraft, setEditPollSortDraft] = useState("0");
+  /** 旧レイアウトのデータが残っているが投票ブロックが無い（オーナーによる移行待ち） */
+  const [legacyMigrationHint, setLegacyMigrationHint] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined" || !groupId) return;
@@ -184,6 +187,7 @@ export function DestinationVotesClient() {
     setGroup(undefined);
     setBundles([]);
     setError(null);
+    setLegacyMigrationHint(false);
   }, [groupId]);
 
   const load = useCallback(async () => {
@@ -262,6 +266,19 @@ export function DestinationVotesClient() {
       }
     }
     setBundles(loaded);
+
+    if (polls.length === 0) {
+      try {
+        const legacy = await listLegacyDestinationCandidates(groupId);
+        setLegacyMigrationHint(
+          legacy.length > 0 || !!(g.destination?.trim()),
+        );
+      } catch {
+        setLegacyMigrationHint(false);
+      }
+    } else {
+      setLegacyMigrationHint(false);
+    }
   }, [groupId, user]);
 
   useEffect(() => {
@@ -606,6 +623,16 @@ export function DestinationVotesClient() {
           </p>
           <p className="mt-1 text-sm text-zinc-800 dark:text-zinc-200">
             {group.destination}
+          </p>
+        </div>
+      ) : null}
+
+      {legacyMigrationHint ? (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/30">
+          <p className="text-sm text-amber-900 dark:text-amber-100">
+            {isOwner
+              ? "以前の目的地データは、オーナーまたは管理者がこのページを開いたときに自動で移行されます。表示が変わらない場合はページを再読み込みするか、Firestore のセキュリティルールを最新にデプロイしてください。"
+              : "以前の目的地データがまだ新しい形式に移行されていません。オーナーまたは管理者に、このページを一度開いてもらってください。"}
           </p>
         </div>
       ) : null}

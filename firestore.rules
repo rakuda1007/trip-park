@@ -377,14 +377,15 @@ service cloud.firestore {
       match /destinationVotes/{voteId} {
         allow read: if request.auth != null && isGroupMember(groupId);
         // create/update: 書き込み内容の userId が本人。setDoc の上書きは update。
+        // オーナー／管理者はレガシー移行時に他ユーザーの投票を複製できる
         allow create: if request.auth != null && isGroupMember(groupId) &&
-          request.resource.data.userId == request.auth.uid;
+          (request.resource.data.userId == request.auth.uid || isOwnerOrAdmin(groupId));
         allow update: if request.auth != null && isGroupMember(groupId) &&
           resource.data.userId == request.auth.uid &&
           request.resource.data.userId == request.auth.uid;
         // delete: 削除後の request.resource では userId を検証できないため resource を使う
         allow delete: if request.auth != null && isGroupMember(groupId) &&
-          resource.data.userId == request.auth.uid;
+          (resource.data.userId == request.auth.uid || isOwnerOrAdmin(groupId));
       }
 
       // 日別などの目的地投票ブロック（タイトル付き）
@@ -414,8 +415,9 @@ service cloud.firestore {
 
         match /destinationCandidates/{candidateId} {
           allow read: if request.auth != null && isGroupMember(groupId);
+          // オーナー／管理者はレガシー移行時に他ユーザーの提案を複製できる
           allow create: if request.auth != null && isGroupMember(groupId) &&
-            request.resource.data.proposedByUserId == request.auth.uid;
+            (request.resource.data.proposedByUserId == request.auth.uid || isOwnerOrAdmin(groupId));
           allow delete: if request.auth != null && (
             isOwnerOrAdmin(groupId) ||
             resource.data.proposedByUserId == request.auth.uid
@@ -429,12 +431,12 @@ service cloud.firestore {
         match /destinationVotes/{voteId} {
           allow read: if request.auth != null && isGroupMember(groupId);
           allow create: if request.auth != null && isGroupMember(groupId) &&
-            request.resource.data.userId == request.auth.uid;
+            (request.resource.data.userId == request.auth.uid || isOwnerOrAdmin(groupId));
           allow update: if request.auth != null && isGroupMember(groupId) &&
             resource.data.userId == request.auth.uid &&
             request.resource.data.userId == request.auth.uid;
           allow delete: if request.auth != null && isGroupMember(groupId) &&
-            resource.data.userId == request.auth.uid;
+            (resource.data.userId == request.auth.uid || isOwnerOrAdmin(groupId));
         }
       }
 

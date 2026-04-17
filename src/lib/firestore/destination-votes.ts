@@ -107,7 +107,8 @@ export async function isDestinationStepComplete(
 
 // ── レガシー（ルート直下）読み取り ─────────────────────────────
 
-async function listLegacyDestinationCandidates(
+/** レガシー候補が残っているか（移行案内表示用） */
+export async function listLegacyDestinationCandidates(
   groupId: string,
 ): Promise<CandidateItem[]> {
   const db = getFirebaseFirestore();
@@ -149,6 +150,17 @@ export async function migrateLegacyDestinationPollIfNeeded(
   const db = getFirebaseFirestore();
   const pollsSnap = await getDocs(pollsCollection(groupId));
   if (!pollsSnap.empty) return;
+
+  // 移行は他ユーザーの候補・投票を一括書き込みするため、オーナー／管理者のみ（ルールと整合）
+  const memberSnap = await getDoc(
+    doc(db, COLLECTIONS.groups, groupId, SUB.members, uid),
+  );
+  const role = memberSnap.exists()
+    ? ((memberSnap.data() as { role?: string }).role ?? "member")
+    : null;
+  if (role !== "owner" && role !== "admin") {
+    return;
+  }
 
   const [legacyCandidates, legacyVotes, groupSnap] = await Promise.all([
     listLegacyDestinationCandidates(groupId),
