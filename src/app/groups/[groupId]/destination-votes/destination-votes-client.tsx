@@ -24,6 +24,7 @@ import {
 import { getGroup, listMembers } from "@/lib/firestore/groups";
 import type { DestinationAnswer } from "@/types/destination";
 import type { GroupDoc } from "@/types/group";
+import { VisibilityBadge } from "@/components/visibility-badge";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -909,9 +910,17 @@ function PollSection({
           </div>
         ) : (
           <div>
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              {poll.data.title}
-            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                {poll.data.title}
+              </h2>
+              {isOwner ? (
+                <VisibilityBadge
+                  kind="owner"
+                  title="ブロック削除・確定の解除・候補の「確定」はオーナーにのみ表示されます。"
+                />
+              ) : null}
+            </div>
             {decidedLocked ? (
               <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-300">
                 ✓ 確定: {poll.data.decidedDestinationName}

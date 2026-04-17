@@ -19,6 +19,7 @@ import type {
   ScheduleCandidateDoc,
   ScheduleConfigDoc,
 } from "@/types/schedule";
+import { VisibilityBadge } from "@/components/visibility-badge";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -443,13 +444,16 @@ export function ScheduleClient() {
           className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950/40"
           role="status"
         >
-          <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
-            確定日程:{" "}
-            {formatDateRangeLabel(
-              config.confirmedStartDate,
-              config.confirmedEndDate,
-            )}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
+              確定日程:{" "}
+              {formatDateRangeLabel(
+                config.confirmedStartDate,
+                config.confirmedEndDate,
+              )}
+            </p>
+            {canManage ? <VisibilityBadge kind="admin" /> : null}
+          </div>
           {canManage ? (
             <button
               type="button"
@@ -465,9 +469,12 @@ export function ScheduleClient() {
 
       {canManage ? (
         <section className="mt-8 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
-          <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-            候補日程の追加
-          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              候補日程の追加
+            </h2>
+            <VisibilityBadge kind="admin" />
+          </div>
           <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
             旅行のように複数日にわたる場合は、開始日と終了日を指定します。1日だけの候補は同じ日付を選んでください。
           </p>
@@ -510,9 +517,12 @@ export function ScheduleClient() {
 
           {candidates.length > 0 ? (
             <div className="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
-              <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                日程の確定
-              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                  日程の確定
+                </h2>
+                <VisibilityBadge kind="admin" />
+              </div>
               <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
                 下の表で選んだ候補の日程を確定します。確定済みの場合は上部に表示されます。
               </p>
@@ -551,9 +561,17 @@ export function ScheduleClient() {
 
       <section className="mt-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-            回答一覧
-          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              回答一覧
+            </h2>
+            {canManage ? (
+              <VisibilityBadge
+                kind="admin"
+                title="この一覧は全員に表示されます。候補ごとの「確定」「削除」リンクは管理者のみが使えます。"
+              />
+            ) : null}
+          </div>
           {candidates.length > 0 && user && isMember ? (
             <div className="flex flex-col items-stretch gap-2 sm:items-end">
               {hasUnsavedMyAnswers ? (

@@ -24,6 +24,7 @@ import type { GroupDoc, MemberDoc } from "@/types/group";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
 import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
 import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
+import { VisibilityBadge } from "@/components/visibility-badge";
 import {
   BULLETIN_CATEGORY_LABELS,
   BULLETIN_CATEGORY_OPTIONS,
@@ -487,9 +488,12 @@ export function GroupDetailClient() {
       {/* 日程編集フォーム（オーナーのみ） */}
       {editingDates && isOwner ? (
         <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
-          <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-            旅行日程を設定
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              旅行日程を設定
+            </p>
+            <VisibilityBadge kind="owner" />
+          </div>
           <p className="mt-0.5 text-xs text-zinc-500">
             日程調整で確定した場合は自動的に反映されます。
           </p>
@@ -885,9 +889,17 @@ export function GroupDetailClient() {
       </section>
 
       <section className="mt-8">
-        <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-          メンバー
-        </h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+            メンバー
+          </h2>
+          {isOwner ? (
+            <VisibilityBadge
+              kind="owner"
+              title="「外す」ボタンはオーナーにのみ表示されます。"
+            />
+          ) : null}
+        </div>
         <ul className="mt-3 space-y-2">
           {members.map(({ userId, data }) => (
             <li
@@ -926,7 +938,7 @@ export function GroupDetailClient() {
         </ul>
       </section>
 
-      <div className="mt-10 flex flex-wrap gap-3 border-t border-zinc-200 pt-8 dark:border-zinc-700">
+      <div className="mt-10 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-8 dark:border-zinc-700">
         {!isOwner ? (
           <button
             type="button"
@@ -938,14 +950,17 @@ export function GroupDetailClient() {
           </button>
         ) : null}
         {isOwner ? (
-          <button
-            type="button"
-            onClick={handleDeleteGroup}
-            disabled={busy !== null}
-            className="rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-800 hover:bg-red-100 disabled:opacity-50 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200 dark:hover:bg-red-950/60"
-          >
-            {busy === "delete" ? "削除中…" : "旅行を削除"}
-          </button>
+          <>
+            <VisibilityBadge kind="owner" />
+            <button
+              type="button"
+              onClick={handleDeleteGroup}
+              disabled={busy !== null}
+              className="rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-800 hover:bg-red-100 disabled:opacity-50 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200 dark:hover:bg-red-950/60"
+            >
+              {busy === "delete" ? "削除中…" : "旅行を削除"}
+            </button>
+          </>
         ) : null}
       </div>
     </div>

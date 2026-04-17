@@ -7,6 +7,7 @@ import { getGroup, listMembers } from "@/lib/firestore/groups";
 import type { GroupDoc, GroupRole, MemberDoc } from "@/types/group";
 import type { NotifyStatusResponse } from "@/app/api/admin/notify-status/route";
 import { Timestamp } from "firebase/firestore";
+import { VisibilityBadge } from "@/components/visibility-badge";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -128,9 +129,15 @@ export function AdminClient() {
         ← {group?.name ?? "旅行詳細"}
       </Link>
 
-      <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        管理者メニュー
-      </h1>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+          管理者メニュー
+        </h1>
+        <VisibilityBadge
+          kind="admin"
+          title="このページ全体はオーナー・管理者のみが開けます。"
+        />
+      </div>
       <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
         {group?.name} のメンバー状況を確認できます。
       </p>

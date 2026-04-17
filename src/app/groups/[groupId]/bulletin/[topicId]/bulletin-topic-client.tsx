@@ -35,6 +35,7 @@ import { shareBulletinTopicPreferred } from "@/lib/bulletin-share";
 import { sendNotification } from "@/lib/notify";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
+import { VisibilityBadge } from "@/components/visibility-badge";
 import {
   BULLETIN_CATEGORY_LABELS,
   BULLETIN_CATEGORY_OPTIONS,
@@ -530,11 +531,15 @@ export function BulletinTopicClient() {
     group && group.tripStartDate
       ? Math.max(1, calcTripNumDays(group.tripStartDate, group.tripEndDate))
       : 1;
-  const canEditResolution =
-    user &&
-    topic &&
-    topic.category === "recipe_vote" &&
-    (user.uid === topic.authorUserId || canManage);
+  /** 旅程への献立反映（オーナー・管理者のみ。集計一覧は全員表示） */
+  const canManageRecipeJourney =
+    Boolean(
+      user &&
+      topic &&
+      topic.category === "recipe_vote" &&
+      canManage &&
+      (topic.recipePoll?.candidates?.length ?? 0) > 0,
+    );
 
   async function handleDeleteTopic() {
     if (!groupId) return;
@@ -879,9 +884,12 @@ export function BulletinTopicClient() {
                   ) : null}
                   {canManage && recipeVoteAdminSummary ? (
                     <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50/90 p-3 dark:border-violet-900/50 dark:bg-violet-950/25">
-                      <h3 className="text-xs font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-200">
-                        投票の進捗（管理者向け）
-                      </h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-200">
+                          投票の進捗
+                        </h3>
+                        <VisibilityBadge kind="admin" />
+                      </div>
                       <p className="mt-1 text-xs text-violet-900/85 dark:text-violet-200/90">
                         メンバーのうち、1点以上付けて「評価を保存」した人:{" "}
                         <span className="font-semibold">
@@ -1061,14 +1069,76 @@ export function BulletinTopicClient() {
                   </div>
                 ) : null}
 
-                {canEditResolution ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
-                    <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-                      投票結果を確定して旅程に反映
-                    </h3>
+                <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                    投票結果の集計（合計点の高い順）
+                  </h3>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    皆の投票の点数を合計し、多い順に並べています。
+                  </p>
+                  <ul className="mt-4 space-y-3">
+                    {recipeJourneyOrderIndices.map((ci, rankIdx) => {
+                      const cand = topic.recipePoll!.candidates[ci]!;
+                      const title = cand.sourceTitle || cand.url;
+                      const totalPts = recipeScoreTotals[ci] ?? 0;
+                      return (
+                        <li
+                          key={`rank-${cand.url}-${ci}`}
+                          className="flex gap-3 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-600 dark:bg-zinc-900/60"
+                        >
+                          {cand.imageUrl ? (
+                            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
+                              <img
+                                src={cand.imageUrl}
+                                alt=""
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-zinc-200 text-[10px] text-zinc-500 dark:bg-zinc-800">
+                              画像なし
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                              <span className="text-zinc-800 dark:text-zinc-200">
+                                {rankIdx + 1}位
+                              </span>
+                              {" · 合計点 "}
+                              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                                {totalPts}
+                              </span>
+                            </p>
+                            <p className="mt-1 text-sm font-semibold leading-snug text-zinc-900 dark:text-zinc-50">
+                              {title}
+                            </p>
+                            <a
+                              href={cand.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-1.5 inline-block text-xs font-medium text-emerald-700 underline hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200"
+                            >
+                              レシピを開く
+                            </a>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+
+                {canManageRecipeJourney ? (
+                  <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/80 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                        投票結果を確定して旅程に反映
+                      </h3>
+                      <VisibilityBadge kind="admin" />
+                    </div>
                     <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-200/90">
-                      下の一覧は<strong className="font-semibold">皆の投票の合計点が高い順</strong>
-                      です。レシピ候補ごとに Day と食事を指定し、
+                      上の「投票結果の集計」と<strong className="font-semibold">同じ順</strong>
+                      で、レシピ候補ごとに Day と食事を指定し、
                       <strong className="font-semibold">各カードの茶色のボタン</strong>
                       で<strong>その候補だけ</strong>旅程に保存します。ドロップダウンを変えただけでは保存されません。
                       保存後は同じカードのボタンは隠れます。設定し直すときは「旅程に表示しない」のあと「Day・食事を指定する」でボタンが戻ります。
@@ -1081,43 +1151,17 @@ export function BulletinTopicClient() {
                             ? resolutionPerCandidate[ci]
                             : null;
                         const title = cand.sourceTitle || cand.url;
-                        const totalPts = recipeScoreTotals[ci] ?? 0;
                         return (
                           <div
-                            key={`${cand.url}-${ci}`}
+                            key={`res-${cand.url}-${ci}`}
                             className="rounded-xl border border-amber-100/80 bg-white/95 p-4 shadow-sm dark:border-zinc-600 dark:bg-zinc-900/80"
                           >
-                            <div className="flex gap-3">
-                              {cand.imageUrl ? (
-                                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
-                                  <img
-                                    src={cand.imageUrl}
-                                    alt=""
-                                    className="h-full w-full object-cover"
-                                  />
-                                </div>
-                              ) : null}
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[11px] font-medium uppercase tracking-wide text-amber-800/80 dark:text-amber-200/80">
-                                  {rankIdx + 1}位 · 合計点 {totalPts}
-                                  <span className="font-normal text-zinc-500 dark:text-zinc-400">
-                                    {" "}
-                                    （候補 {ci + 1}）
-                                  </span>
-                                </p>
-                                <p className="mt-0.5 text-sm font-semibold leading-snug text-zinc-900 dark:text-zinc-50">
-                                  {title}
-                                </p>
-                                <a
-                                  href={cand.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="mt-1 inline-block text-xs text-amber-800 underline dark:text-amber-200"
-                                >
-                                  レシピを開く
-                                </a>
-                              </div>
-                            </div>
+                            <p className="text-sm font-semibold text-amber-950 dark:text-amber-50">
+                              第{rankIdx + 1}位
+                              <span className="ml-2 font-normal text-zinc-700 dark:text-zinc-300">
+                                {title}
+                              </span>
+                            </p>
                             {slot ? (
                               <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-700">
                                 <label className="text-[11px] text-zinc-600 dark:text-zinc-400">
@@ -1283,7 +1327,7 @@ export function BulletinTopicClient() {
                     disabled={busy !== null}
                   />
                 </label>
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => void handleShareLine()}
@@ -1293,20 +1337,23 @@ export function BulletinTopicClient() {
                     {busy === "share-line" ? "開いています…" : "LINEで共有"}
                   </button>
                   {isTopicAuthor || canManage ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleRemindPush()}
-                      disabled={busy !== null}
-                      className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
-                    >
-                      {busy === "remind-push" ? "送信中…" : "プッシュで再通知"}
-                    </button>
+                    <>
+                      <VisibilityBadge kind="authorOrAdmin" />
+                      <button
+                        type="button"
+                        onClick={() => void handleRemindPush()}
+                        disabled={busy !== null}
+                        className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                      >
+                        {busy === "remind-push" ? "送信中…" : "プッシュで再通知"}
+                      </button>
+                    </>
                   ) : null}
                 </div>
               </div>
             ) : null}
 
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               {isTopicAuthor ? (
                 <button
                   type="button"
@@ -1318,24 +1365,30 @@ export function BulletinTopicClient() {
                 </button>
               ) : null}
               {canManage ? (
-                <button
-                  type="button"
-                  onClick={handleTogglePin}
-                  disabled={busy !== null}
-                  className="text-xs text-amber-800 underline dark:text-amber-200"
-                >
-                  {topic.pinned ? "ピンを外す" : "ピン留め"}
-                </button>
+                <>
+                  <VisibilityBadge kind="admin" />
+                  <button
+                    type="button"
+                    onClick={handleTogglePin}
+                    disabled={busy !== null}
+                    className="text-xs text-amber-800 underline dark:text-amber-200"
+                  >
+                    {topic.pinned ? "ピンを外す" : "ピン留め"}
+                  </button>
+                </>
               ) : null}
               {(isTopicAuthor || canManage) && (
-                <button
-                  type="button"
-                  onClick={handleDeleteTopic}
-                  disabled={busy !== null}
-                  className="text-xs text-red-600 underline"
-                >
-                  話題を削除
-                </button>
+                <>
+                  <VisibilityBadge kind="authorOrAdmin" />
+                  <button
+                    type="button"
+                    onClick={handleDeleteTopic}
+                    disabled={busy !== null}
+                    className="text-xs text-red-600 underline"
+                  >
+                    話題を削除
+                  </button>
+                </>
               )}
             </div>
           </>
