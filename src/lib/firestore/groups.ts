@@ -274,6 +274,40 @@ async function deleteGroupSubcollection(
   await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
 }
 
+/** destinationPolls/{pollId} 配下の候補・投票を消してから各 poll を削除 */
+async function deleteDestinationPollsTree(
+  db: Firestore,
+  groupId: string,
+): Promise<void> {
+  const pollsSnap = await getDocs(
+    collection(db, COLLECTIONS.groups, groupId, SUB.destinationPolls),
+  );
+  for (const p of pollsSnap.docs) {
+    const candCol = collection(
+      db,
+      COLLECTIONS.groups,
+      groupId,
+      SUB.destinationPolls,
+      p.id,
+      SUB.destinationCandidates,
+    );
+    const voteCol = collection(
+      db,
+      COLLECTIONS.groups,
+      groupId,
+      SUB.destinationPolls,
+      p.id,
+      SUB.destinationVotes,
+    );
+    const [cSnap, vSnap] = await Promise.all([getDocs(candCol), getDocs(voteCol)]);
+    await Promise.all([
+      ...cSnap.docs.map((d) => deleteDoc(d.ref)),
+      ...vSnap.docs.map((d) => deleteDoc(d.ref)),
+    ]);
+    await deleteDoc(p.ref);
+  }
+}
+
 /** 掲示板: 各話題の返信を消してから話題を消す */
 async function deleteBulletinPostsTree(db: Firestore, groupId: string) {
   const topicsSnap = await getDocs(
@@ -308,6 +342,7 @@ export async function deleteGroup(ownerUid: string, groupId: string): Promise<vo
 
   // ① サブコレクション削除（エラーは無視して続行）
   // この時点ではメンバードキュメントが存在するので isGroupMember が有効
+  await deleteDestinationPollsTree(db, groupId).catch(() => {});
   const cleanups = [
     SUB.scheduleCandidates,
     SUB.scheduleResponses,

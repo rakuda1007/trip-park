@@ -26,10 +26,12 @@ export const SUB = {
   families: "families",
   /** users/{uid}/households/{householdId} */
   households: "households",
-  /** groups/{groupId}/destinationCandidates/{id} */
+  /** groups/{groupId}/destinationCandidates/{id}（レガシー・移行後は未使用） */
   destinationCandidates: "destinationCandidates",
-  /** groups/{groupId}/destinationVotes/{docId} */
+  /** groups/{groupId}/destinationVotes/{docId}（レガシー） */
   destinationVotes: "destinationVotes",
+  /** groups/{groupId}/destinationPolls/{pollId} 日別などの投票ブロック */
+  destinationPolls: "destinationPolls",
   /** groups/{groupId}/sharingItems/{itemId} 買い出し・分担 */
   sharingItems: "sharingItems",
 } as const;

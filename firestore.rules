@@ -125,7 +125,10 @@ service cloud.firestore {
         (memberRole(groupId) == 'admin' &&
           request.resource.data.ownerId == resource.data.ownerId &&
           request.resource.data.inviteCode == resource.data.inviteCode &&
-          request.resource.data.name == resource.data.name)
+          request.resource.data.name == resource.data.name) ||
+        // メンバーが目的地投票の集計で groups.destination のみ更新（他フィールドは不変）
+        (isGroupMember(groupId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['destination', 'updatedAt']))
       );
       allow delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
 
@@ -382,6 +385,57 @@ service cloud.firestore {
         // delete: 削除後の request.resource では userId を検証できないため resource を使う
         allow delete: if request.auth != null && isGroupMember(groupId) &&
           resource.data.userId == request.auth.uid;
+      }
+
+      // 日別などの目的地投票ブロック（タイトル付き）
+      match /destinationPolls/{pollId} {
+        allow read: if request.auth != null && isGroupMember(groupId);
+        allow create: if request.auth != null && isGroupMember(groupId) &&
+          request.resource.data.keys().hasAll([
+            'title', 'sortOrder', 'decidedDestinationName',
+            'createdByUserId', 'createdAt', 'updatedAt'
+          ]) &&
+          request.resource.data.createdByUserId == request.auth.uid &&
+          request.resource.data.title is string &&
+          request.resource.data.title.size() > 0 &&
+          request.resource.data.title.size() <= 200 &&
+          (request.resource.data.sortOrder is int || request.resource.data.sortOrder is float) &&
+          (request.resource.data.decidedDestinationName == null ||
+            request.resource.data.decidedDestinationName is string);
+        allow update: if request.auth != null && isGroupMember(groupId) && (
+          isOwnerOrAdmin(groupId) ||
+          (
+            resource.data.createdByUserId == request.auth.uid &&
+            request.resource.data.decidedDestinationName == resource.data.decidedDestinationName &&
+            request.resource.data.createdByUserId == resource.data.createdByUserId
+          )
+        );
+        allow delete: if request.auth != null && isGroupMember(groupId) && isOwnerOrAdmin(groupId);
+
+        match /destinationCandidates/{candidateId} {
+          allow read: if request.auth != null && isGroupMember(groupId);
+          allow create: if request.auth != null && isGroupMember(groupId) &&
+            request.resource.data.proposedByUserId == request.auth.uid;
+          allow delete: if request.auth != null && (
+            isOwnerOrAdmin(groupId) ||
+            resource.data.proposedByUserId == request.auth.uid
+          );
+          allow update: if request.auth != null && isGroupMember(groupId) && (
+            isOwnerOrAdmin(groupId) ||
+            resource.data.proposedByUserId == request.auth.uid
+          );
+        }
+
+        match /destinationVotes/{voteId} {
+          allow read: if request.auth != null && isGroupMember(groupId);
+          allow create: if request.auth != null && isGroupMember(groupId) &&
+            request.resource.data.userId == request.auth.uid;
+          allow update: if request.auth != null && isGroupMember(groupId) &&
+            resource.data.userId == request.auth.uid &&
+            request.resource.data.userId == request.auth.uid;
+          allow delete: if request.auth != null && isGroupMember(groupId) &&
+            resource.data.userId == request.auth.uid;
+        }
       }
 
       match /sharingItems/{itemId} {

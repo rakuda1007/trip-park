@@ -5,7 +5,7 @@ import { listMyGroups } from "@/lib/firestore/groups";
 import { clearLastTripId, loadLastTripId, saveLastTripId } from "@/lib/last-trip";
 import type { UserGroupRefDoc } from "@/types/group";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type TripItem = { groupId: string; data: UserGroupRefDoc };
@@ -42,8 +42,10 @@ function daysUntil(dateStr: string): number {
 export function TripSelector() {
   const { user } = useAuth();
   const router = useRouter();
-  const params = useParams();
-  const currentGroupId = params?.groupId as string | undefined;
+  const pathname = usePathname();
+  // useParams().groupId はネストしたルートで欠けることがあるため URL から取る（AppHeader と同じ）
+  const currentGroupId =
+    pathname.match(/^\/groups\/([^/]+)/)?.[1] ?? undefined;
 
   const [trips, setTrips] = useState<TripItem[]>([]);
   const [open, setOpen] = useState(false);

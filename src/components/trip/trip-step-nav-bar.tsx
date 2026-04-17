@@ -1,6 +1,7 @@
 "use client";
 
 import { useGroupRouteId } from "@/contexts/group-route-context";
+import { isDestinationStepComplete } from "@/lib/firestore/destination-votes";
 import { getGroup } from "@/lib/firestore/groups";
 import { listTripRoutes } from "@/lib/firestore/trip";
 import type { GroupDoc } from "@/types/group";
@@ -40,13 +41,31 @@ function isGroupPage(pathname: string, groupId: string): boolean {
 export function TripStepNavBar({ groupId }: { groupId: string }) {
   const pathname = usePathname();
   const [group, setGroup] = useState<GroupDoc | null>(null);
+  const [destStepDone, setDestStepDone] = useState(false);
   const [tripRoutes, setTripRoutes] = useState<
     { id: string; data: TripRouteDoc }[]
   >([]);
 
   useEffect(() => {
-    getGroup(groupId).then(setGroup).catch(() => {});
-  }, [groupId]);
+    getGroup(groupId)
+      .then(async (g) => {
+        setGroup(g);
+        if (!g) {
+          setDestStepDone(false);
+          return;
+        }
+        try {
+          const done = await isDestinationStepComplete(
+            groupId,
+            g.destination,
+          );
+          setDestStepDone(done);
+        } catch {
+          setDestStepDone(!!g.destination);
+        }
+      })
+      .catch(() => {});
+  }, [groupId, pathname]);
 
   useEffect(() => {
     listTripRoutes(groupId)
@@ -83,7 +102,7 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
   const activeStep = getActiveStep(pathname, groupId);
 
   const datesDone = !!group?.tripStartDate;
-  const destDone = !!group?.destination;
+  const destDone = destStepDone;
   const status = group?.status ?? "planning";
   const settleDone = status === "completed";
 
