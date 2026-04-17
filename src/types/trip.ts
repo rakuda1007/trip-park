@@ -23,6 +23,11 @@ export type TripRouteDoc = {
   destinationMapUrl: string | null;
   /** 経由地リスト */
   waypoints: TripWaypoint[];
+  /**
+   * 区間ごとのルート地図リンク（任意）。経由地が n 件のとき長さ n+1。
+   * [0]=出発地→第1経由地, [1..n-1]=経由同士, [n]=最終経由地→目的地
+   */
+  segmentRouteMapUrls: (string | null)[];
   /** 全体のルート地図リンク（任意） */
   routeMapUrl: string | null;
   /** メモ（任意） */

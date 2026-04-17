@@ -20,11 +20,72 @@ import type { TripRouteDoc, TripWaypoint } from "@/types/trip";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+function initialSegmentDrafts(initial?: Partial<TripRouteDoc>): string[] {
+  const wp = initial?.waypoints?.length ?? 0;
+  if (wp === 0) return [];
+  const len = wp + 1;
+  const raw = initial?.segmentRouteMapUrls;
+  const arr = Array.isArray(raw) ? raw : [];
+  return Array.from({ length: len }, (_, i) => {
+    const v = arr[i];
+    return typeof v === "string" ? v : "";
+  });
+}
+
+function segmentUrlsFromDrafts(
+  drafts: string[],
+  waypointCount: number,
+): (string | null)[] {
+  if (waypointCount === 0) return [];
+  const len = waypointCount + 1;
+  const out: (string | null)[] = [];
+  for (let i = 0; i < len; i++) {
+    const s = (drafts[i] ?? "").trim();
+    out.push(s.length ? s : null);
+  }
+  return out;
+}
+
+/** 表示用: 区間 i のラベル（経由地が n 件のとき i は 0..n） */
+function segmentRouteLabelForRoute(i: number, route: TripRouteDoc): string {
+  const w = route.waypoints;
+  const n = w.length;
+  if (n === 0) return "";
+  const dep = route.departurePoint?.trim() || "出発地";
+  if (i === 0) return `${dep} → ${w[0]!.name}`;
+  if (i < n) return `${w[i - 1]!.name} → ${w[i]!.name}`;
+  return `${w[n - 1]!.name} → ${route.destinationName}`;
+}
+
 // ────────────────────────────────
 // ユーティリティ
 // ────────────────────────────────
 
 type WaypointDraft = { name: string; memo: string; mapUrl: string };
+
+/** フォーム用: 下書きの経由地名で区間ラベル */
+function segmentRouteLabelDraft(
+  i: number,
+  waypointCount: number,
+  departureDraft: string,
+  waypointDrafts: WaypointDraft[],
+  destinationDraft: string,
+): string {
+  const dep = departureDraft.trim() || "出発地";
+  if (waypointCount === 0) return "";
+  if (i === 0) {
+    const to = waypointDrafts[0]?.name.trim() || "経由地1";
+    return `${dep} → ${to}`;
+  }
+  if (i < waypointCount) {
+    const a = waypointDrafts[i - 1]?.name.trim() || `経由地${i}`;
+    const b = waypointDrafts[i]?.name.trim() || `経由地${i + 1}`;
+    return `${a} → ${b}`;
+  }
+  const last = waypointDrafts[waypointCount - 1]?.name.trim() || `経由地${waypointCount}`;
+  const dest = destinationDraft.trim() || "目的地";
+  return `${last} → ${dest}`;
+}
 
 function emptyDrafts(): WaypointDraft[] { return []; }
 function toDrafts(wp: TripWaypoint[]): WaypointDraft[] {
@@ -43,9 +104,17 @@ function fromDrafts(drafts: WaypointDraft[]): TripWaypoint[] {
 function WaypointEditor({
   waypoints,
   onChange,
+  departureDraft,
+  destinationDraft,
+  segmentRouteMapUrls,
+  onSegmentRouteMapUrlsChange,
 }: {
   waypoints: WaypointDraft[];
   onChange: (next: WaypointDraft[]) => void;
+  departureDraft: string;
+  destinationDraft: string;
+  segmentRouteMapUrls: string[];
+  onSegmentRouteMapUrlsChange: (next: string[]) => void;
 }) {
   return (
     <div>
@@ -76,6 +145,36 @@ function WaypointEditor({
             </li>
           ))}
         </ul>
+      )}
+      {waypoints.length > 0 && segmentRouteMapUrls.length === waypoints.length + 1 && (
+        <div className="mt-3 rounded-md border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-600 dark:bg-zinc-900/30">
+          <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">区間ごとのルート地図（任意）</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+            出発地から最初の経由地、経由地同士、最後の経由地から目的地まで、区間ごとに別のナビ・ルートURLを登録できます。
+          </p>
+          <ul className="mt-2 space-y-2">
+            {segmentRouteMapUrls.map((url, i) => (
+              <li key={i}>
+                <label className="block text-[11px] text-zinc-600 dark:text-zinc-400">
+                  <span className="mb-0.5 block font-medium text-zinc-700 dark:text-zinc-300">
+                    {segmentRouteLabelDraft(i, waypoints.length, departureDraft, waypoints, destinationDraft)}
+                  </span>
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => {
+                      const n = [...segmentRouteMapUrls];
+                      n[i] = e.target.value;
+                      onSegmentRouteMapUrlsChange(n);
+                    }}
+                    placeholder="https://maps.google.com/..."
+                    className="mt-0.5 w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900"
+                  />
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       <button type="button"
         onClick={() => onChange([...waypoints, { name: "", memo: "", mapUrl: "" }])}
@@ -115,12 +214,31 @@ function DayForm({
   const [waypoints, setWaypoints] = useState<WaypointDraft[]>(
     initial?.waypoints ? toDrafts(initial.waypoints) : emptyDrafts(),
   );
+  const [segmentRouteMapUrls, setSegmentRouteMapUrls] = useState<string[]>(() =>
+    initialSegmentDrafts(initial),
+  );
   const [routeMapUrl, setRouteMapUrl] = useState(initial?.routeMapUrl ?? "");
   const [memo, setMemo] = useState(initial?.memo ?? "");
+
+  useEffect(() => {
+    const n = waypoints.length;
+    if (n === 0) {
+      setSegmentRouteMapUrls([]);
+      return;
+    }
+    const targetLen = n + 1;
+    setSegmentRouteMapUrls((prev) => {
+      if (prev.length === targetLen) return prev;
+      const next = prev.slice(0, targetLen);
+      while (next.length < targetLen) next.push("");
+      return next;
+    });
+  }, [waypoints.length]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!destName.trim()) return;
+    const wp = fromDrafts(waypoints);
     onSubmit({
       dayNumber,
       departurePoint: departure.trim() || null,
@@ -128,7 +246,8 @@ function DayForm({
       departureMapUrl: departureMapUrl.trim() || null,
       destinationName: destName.trim(),
       destinationMapUrl: destMapUrl.trim() || null,
-      waypoints: fromDrafts(waypoints),
+      waypoints: wp,
+      segmentRouteMapUrls: segmentUrlsFromDrafts(segmentRouteMapUrls, wp.length),
       routeMapUrl: routeMapUrl.trim() || null,
       memo: memo.trim() || null,
       isDone: initial?.isDone ?? false,
@@ -167,7 +286,14 @@ function DayForm({
           placeholder="https://maps.google.com/..."
           className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900" />
       </label>
-      <WaypointEditor waypoints={waypoints} onChange={setWaypoints} />
+      <WaypointEditor
+        waypoints={waypoints}
+        onChange={setWaypoints}
+        departureDraft={departure}
+        destinationDraft={destName}
+        segmentRouteMapUrls={segmentRouteMapUrls}
+        onSegmentRouteMapUrlsChange={setSegmentRouteMapUrls}
+      />
       <label className="block text-xs text-zinc-600 dark:text-zinc-400">
         全体のルート地図リンク（任意）
         <input type="url" value={routeMapUrl} onChange={(e) => setRouteMapUrl(e.target.value)}
@@ -278,6 +404,32 @@ function DayCard({
               </li>
             ))}
           </ol>
+          {(route.segmentRouteMapUrls ?? []).some((u) => u) && (
+            <div className="mt-3 border-t border-zinc-100 pt-2 dark:border-zinc-800">
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                区間のルート
+              </p>
+              <ul className="mt-1.5 space-y-1.5">
+                {(route.segmentRouteMapUrls ?? []).map((url, i) =>
+                  url ? (
+                    <li key={i} className="flex flex-wrap items-baseline gap-2 text-sm">
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline hover:text-blue-800 dark:text-blue-400"
+                      >
+                        ルートを開く
+                      </a>
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {segmentRouteLabelForRoute(i, route)}
+                      </span>
+                    </li>
+                  ) : null,
+                )}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

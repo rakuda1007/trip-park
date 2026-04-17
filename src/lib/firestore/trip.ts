@@ -31,6 +31,22 @@ function normalizeWaypoints(raw: unknown): TripWaypoint[] {
   return out;
 }
 
+function normalizeSegmentRouteMapUrls(
+  raw: unknown,
+  waypointCount: number,
+): (string | null)[] {
+  if (waypointCount === 0) return [];
+  const len = waypointCount + 1;
+  const arr = Array.isArray(raw) ? raw : [];
+  const out: (string | null)[] = [];
+  for (let i = 0; i < len; i++) {
+    const v = arr[i];
+    const s = typeof v === "string" ? v.trim() : "";
+    out.push(s.length ? s : null);
+  }
+  return out;
+}
+
 export async function listTripRoutes(groupId: string): Promise<
   { id: string; data: TripRouteDoc }[]
 > {
@@ -40,11 +56,16 @@ export async function listTripRoutes(groupId: string): Promise<
   const out: { id: string; data: TripRouteDoc }[] = [];
   snap.forEach((d) => {
     const raw = d.data() as Record<string, unknown>;
+    const waypoints = normalizeWaypoints(raw.waypoints);
     out.push({
       id: d.id,
         data: {
         ...(raw as TripRouteDoc),
-        waypoints: normalizeWaypoints(raw.waypoints),
+        waypoints,
+        segmentRouteMapUrls: normalizeSegmentRouteMapUrls(
+          raw.segmentRouteMapUrls,
+          waypoints.length,
+        ),
         isDone: raw.isDone === true,
         dayNumber: typeof raw.dayNumber === "number" ? raw.dayNumber : (raw.sortOrder as number ?? 0) + 1,
         memo: typeof raw.memo === "string" ? raw.memo : (raw.destinationMemo as string | null ?? null),
@@ -66,6 +87,7 @@ export type TripRouteInput = {
   destinationName: string;
   destinationMapUrl: string | null;
   waypoints: TripWaypoint[];
+  segmentRouteMapUrls: (string | null)[];
   routeMapUrl: string | null;
   memo: string | null;
   isDone: boolean;
@@ -79,6 +101,7 @@ export async function addTripRoute(
 ): Promise<string> {
   const db = getFirebaseFirestore();
   const col = collection(db, COLLECTIONS.groups, groupId, SUB.tripRoutes);
+  const waypointsNorm = normalizeWaypoints(input.waypoints);
   const ref = await addDoc(col, {
     dayNumber: input.dayNumber,
     departurePoint: input.departurePoint?.trim() || null,
@@ -86,7 +109,11 @@ export async function addTripRoute(
     departureMapUrl: input.departureMapUrl?.trim() || null,
     destinationName: input.destinationName.trim(),
     destinationMapUrl: input.destinationMapUrl?.trim() || null,
-    waypoints: normalizeWaypoints(input.waypoints),
+    waypoints: waypointsNorm,
+    segmentRouteMapUrls: normalizeSegmentRouteMapUrls(
+      input.segmentRouteMapUrls,
+      waypointsNorm.length,
+    ),
     routeMapUrl: input.routeMapUrl?.trim() || null,
     memo: input.memo?.trim() || null,
     isDone: input.isDone,
@@ -111,6 +138,7 @@ export async function updateTripRoute(
 ): Promise<void> {
   const db = getFirebaseFirestore();
   const ref = doc(db, COLLECTIONS.groups, groupId, SUB.tripRoutes, routeId);
+  const waypointsNorm = normalizeWaypoints(input.waypoints);
   await updateDoc(ref, {
     dayNumber: input.dayNumber,
     departurePoint: input.departurePoint?.trim() || null,
@@ -118,7 +146,11 @@ export async function updateTripRoute(
     departureMapUrl: input.departureMapUrl?.trim() || null,
     destinationName: input.destinationName.trim(),
     destinationMapUrl: input.destinationMapUrl?.trim() || null,
-    waypoints: normalizeWaypoints(input.waypoints),
+    waypoints: waypointsNorm,
+    segmentRouteMapUrls: normalizeSegmentRouteMapUrls(
+      input.segmentRouteMapUrls,
+      waypointsNorm.length,
+    ),
     routeMapUrl: input.routeMapUrl?.trim() || null,
     memo: input.memo?.trim() || null,
     isDone: input.isDone,
