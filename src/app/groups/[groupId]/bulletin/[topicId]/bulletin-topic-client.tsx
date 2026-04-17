@@ -217,6 +217,20 @@ export function BulletinTopicClient() {
     return sums;
   }, [topic, recipeVotes]);
 
+  /** 「旅程に反映」エリアの候補の並び: 合計点の高い順（同点は候補の登録順） */
+  const recipeJourneyOrderIndices = useMemo(() => {
+    const n = topic?.recipePoll?.candidates.length ?? 0;
+    if (n === 0) return [];
+    const order = Array.from({ length: n }, (_, i) => i);
+    order.sort((a, b) => {
+      const ta = recipeScoreTotals[a] ?? 0;
+      const tb = recipeScoreTotals[b] ?? 0;
+      if (tb !== ta) return tb - ta;
+      return a - b;
+    });
+    return order;
+  }, [topic?.recipePoll?.candidates.length, recipeScoreTotals]);
+
   const nCandidates = topic?.recipePoll?.candidates.length ?? 0;
 
   useEffect(() => {
@@ -927,18 +941,21 @@ export function BulletinTopicClient() {
                       投票結果を確定して旅程に反映
                     </h3>
                     <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-200/90">
-                      レシピ候補ごとに Day と食事を指定し、
+                      下の一覧は<strong className="font-semibold">皆の投票の合計点が高い順</strong>
+                      です。レシピ候補ごとに Day と食事を指定し、
                       <strong className="font-semibold">各カードの茶色のボタン</strong>
                       で旅程に保存します。ドロップダウンを変えただけでは保存されません。
                       保存時は画面上の候補の設定がすべてまとめて反映されます。
                     </p>
                     <div className="mt-4 space-y-4">
-                      {topic.recipePoll!.candidates.map((cand, ci) => {
+                      {recipeJourneyOrderIndices.map((ci, rankIdx) => {
+                        const cand = topic.recipePoll!.candidates[ci]!;
                         const slot =
                           ci < resolutionPerCandidate.length
                             ? resolutionPerCandidate[ci]
                             : null;
                         const title = cand.sourceTitle || cand.url;
+                        const totalPts = recipeScoreTotals[ci] ?? 0;
                         return (
                           <div
                             key={`${cand.url}-${ci}`}
@@ -956,7 +973,11 @@ export function BulletinTopicClient() {
                               ) : null}
                               <div className="min-w-0 flex-1">
                                 <p className="text-[11px] font-medium uppercase tracking-wide text-amber-800/80 dark:text-amber-200/80">
-                                  レシピ候補 {ci + 1}
+                                  {rankIdx + 1}位 · 合計点 {totalPts}
+                                  <span className="font-normal text-zinc-500 dark:text-zinc-400">
+                                    {" "}
+                                    （候補 {ci + 1}）
+                                  </span>
                                 </p>
                                 <p className="mt-0.5 text-sm font-semibold leading-snug text-zinc-900 dark:text-zinc-50">
                                   {title}
