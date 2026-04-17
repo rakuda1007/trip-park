@@ -571,6 +571,18 @@ export function DestinationVotesClient() {
 
   const isOwner = user && group.ownerId === user.uid;
 
+  /** 未確定のブロックを上に、確定済みのブロックは下に（同じ区分内は sortOrder） */
+  const sortedBundles = useMemo(() => {
+    return [...bundles].sort((a, b) => {
+      const aDecided = !!(a.poll.data.decidedDestinationName?.trim());
+      const bDecided = !!(b.poll.data.decidedDestinationName?.trim());
+      if (aDecided !== bDecided) {
+        return aDecided ? 1 : -1;
+      }
+      return a.poll.data.sortOrder - b.poll.data.sortOrder;
+    });
+  }, [bundles]);
+
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
       <Link
@@ -702,7 +714,7 @@ export function DestinationVotesClient() {
         </p>
       ) : null}
 
-      {bundles.map((bundle) => (
+      {sortedBundles.map((bundle) => (
         <PollSection
           key={bundle.poll.id}
           bundle={bundle}
