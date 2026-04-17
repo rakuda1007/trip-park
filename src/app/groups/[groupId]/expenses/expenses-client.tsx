@@ -354,8 +354,8 @@ export function ExpensesClient() {
           {editingId ? "支出を編集" : "支出を追加"}
         </h2>
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block min-w-0 text-xs text-zinc-600 dark:text-zinc-400">
               金額（円）<span className="text-red-600">*</span>
               <input
                 type="text"
@@ -364,17 +364,17 @@ export function ExpensesClient() {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="例: 3500"
-                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                className="mt-1 box-border w-full min-w-0 max-w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
               />
             </label>
-            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+            <label className="block min-w-0 text-xs text-zinc-600 dark:text-zinc-400">
               日付
               <input
                 type="date"
                 required
                 value={expenseDate}
                 onChange={(e) => setExpenseDate(e.target.value)}
-                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                className="mt-1 box-border w-full min-w-0 max-w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
               />
             </label>
           </div>
