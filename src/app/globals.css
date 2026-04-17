@@ -20,16 +20,42 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
-/* 狭いコンテナ内の type=date が内部最小幅ではみ出すのを防ぐ（Chrome / Safari 等） */
+/* 狭いコンテナ内の type=date が内部最小幅ではみ出すのを防ぐ（Blink / デスクトップ Safari 等） */
+/* iOS Safari / PWA は親の overflow と WebKit 内部の min-height / flex が絡みやすいのでラッパー .trip-date-field と併用 */
+.trip-date-field {
+  box-sizing: border-box;
+  /* レイアウト境界を明示し、子の intrinsic width が親を広げにくくする */
+  contain: inline-size;
+  min-width: 0;
+}
+
 input.trip-date-input[type="date"] {
+  display: block;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  /* iOS: ネイティブの立体的な見た目の余計な最小幅を抑える（タップでピッカーは従来どおり） */
+  -webkit-appearance: none;
+  appearance: none;
 }
+
 input.trip-date-input[type="date"]::-webkit-datetime-edit-fields-wrapper {
   min-width: 0;
 }
+
 input.trip-date-input[type="date"]::-webkit-datetime-edit {
   min-width: 0;
+  flex: 1;
+}
+
+input.trip-date-input[type="date"]::-webkit-datetime-edit-text {
+  padding: 0;
+}
+
+/* 年・月・日の各パートが最小幅で押し広げないよう余白を詰める（iOS WebKit 向け） */
+input.trip-date-input[type="date"]::-webkit-datetime-edit-year-field,
+input.trip-date-input[type="date"]::-webkit-datetime-edit-month-field,
+input.trip-date-input[type="date"]::-webkit-datetime-edit-day-field {
+  padding-inline: 1px;
 }

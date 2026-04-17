@@ -369,13 +369,15 @@ export function ExpensesClient() {
             </label>
             <label className="flex min-w-0 flex-1 flex-col text-xs text-zinc-600 dark:text-zinc-400">
               日付
-              <input
-                type="date"
-                required
-                value={expenseDate}
-                onChange={(e) => setExpenseDate(e.target.value)}
-                className="trip-date-input mt-1 box-border w-full min-w-0 max-w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-              />
+              <div className="trip-date-field mt-1 flex w-full min-w-0 max-w-full overflow-x-clip rounded-md border border-zinc-300 bg-white shadow-sm dark:border-zinc-600 dark:bg-zinc-900">
+                <input
+                  type="date"
+                  required
+                  value={expenseDate}
+                  onChange={(e) => setExpenseDate(e.target.value)}
+                  className="trip-date-input min-h-[2.5rem] w-full min-w-0 flex-1 border-0 bg-transparent py-2 pl-3 pr-2 text-[16px] text-zinc-900 shadow-none outline-none ring-0 dark:text-zinc-100"
+                />
+              </div>
             </label>
           </div>
 
