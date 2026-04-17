@@ -31,6 +31,7 @@ import {
 } from "@/lib/recipe-url-input";
 import { calcTripNumDays } from "@/lib/trip-dates";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
+import { shareBulletinTopicPreferred } from "@/lib/bulletin-share";
 import { sendNotification } from "@/lib/notify";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
@@ -123,6 +124,8 @@ export function BulletinTopicClient() {
   >([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  /** LINE共有・プッシュ再通知用の一言 */
+  const [remindComment, setRemindComment] = useState("");
 
   const [editingTopic, setEditingTopic] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -476,6 +479,50 @@ export function BulletinTopicClient() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "ピン留めの更新に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleShareLine() {
+    if (!group || !topic) return;
+    setError(null);
+    setBusy("share-line");
+    try {
+      const absoluteUrl = `${window.location.origin}/groups/${groupId}/bulletin/${topicId}`;
+      await shareBulletinTopicPreferred({
+        groupName: group.name,
+        topicTitle: topic.title,
+        absoluteUrl,
+        comment: remindComment.trim() || undefined,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "共有に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleRemindPush() {
+    if (!user || !group || !topic) return;
+    setError(null);
+    setBusy("remind-push");
+    try {
+      const ok = await sendNotification({
+        type: "bulletin_topic_remind",
+        groupId,
+        groupName: group.name,
+        topicId,
+        topicTitle: topic.title,
+        senderName: user.displayName ?? "メンバー",
+        senderUid: user.uid,
+        comment: remindComment.trim() || null,
+      });
+      if (!ok) {
+        setError(
+          "プッシュ通知を送信できませんでした。ログイン状態とネット接続を確認してください。",
+        );
+      }
     } finally {
       setBusy(null);
     }
@@ -1061,6 +1108,49 @@ export function BulletinTopicClient() {
                 <span>（更新: {formatTs(topic.updatedAt)}）</span>
               ) : null}
             </p>
+
+            {user && isMember ? (
+              <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50/80 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
+                <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
+                  共有・再通知
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-sky-800/90 dark:text-sky-300/90">
+                  一言を添えて LINE で共有するか、投稿者・管理者はメンバーへプッシュで再通知できます。
+                </p>
+                <label className="mt-2 block text-[11px] text-zinc-600 dark:text-zinc-400">
+                  一言メッセージ（任意・300文字まで）
+                  <textarea
+                    value={remindComment}
+                    onChange={(e) => setRemindComment(e.target.value.slice(0, 300))}
+                    rows={2}
+                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                    placeholder="例: 締切は金曜までです"
+                    disabled={busy !== null}
+                  />
+                </label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleShareLine()}
+                    disabled={busy !== null}
+                    className="rounded-md bg-[#06C755] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {busy === "share-line" ? "開いています…" : "LINEで共有"}
+                  </button>
+                  {isTopicAuthor || canManage ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleRemindPush()}
+                      disabled={busy !== null}
+                      className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                    >
+                      {busy === "remind-push" ? "送信中…" : "プッシュで再通知"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             <div className="mt-2 flex flex-wrap gap-2">
               {isTopicAuthor ? (
                 <button

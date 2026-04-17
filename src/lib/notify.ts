@@ -5,14 +5,14 @@ import { getFirebaseAuth } from "@/lib/firebase/client";
 
 /**
  * 通知APIを呼び出す。
- * 失敗してもユーザー体験を損なわないよう例外を飲み込む。
+ * 失敗してもユーザー体験を損なわないよう例外を飲み込み、成功可否のみ返す（再通知UIなどで利用）。
  */
-export async function sendNotification(payload: NotifyPayload): Promise<void> {
+export async function sendNotification(payload: NotifyPayload): Promise<boolean> {
   try {
     const user = getFirebaseAuth().currentUser;
-    if (!user) return;
+    if (!user) return false;
     const idToken = await user.getIdToken();
-    await fetch("/api/notify", {
+    const res = await fetch("/api/notify", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -20,7 +20,8 @@ export async function sendNotification(payload: NotifyPayload): Promise<void> {
       },
       body: JSON.stringify(payload),
     });
+    return res.ok;
   } catch {
-    // 通知送信の失敗はメイン処理に影響させない
+    return false;
   }
 }
