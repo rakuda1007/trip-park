@@ -146,6 +146,10 @@ export function BulletinTopicClient() {
   const [resolutionPerCandidate, setResolutionPerCandidate] = useState<
     Array<{ dayNumber: number; meal: RecipeMealSlot } | null>
   >([]);
+  /** 各候補の「旅程に反映」ボタンを隠す（保存直後〜「旅程に表示しない」まで） */
+  const [reflectButtonHidden, setReflectButtonHidden] = useState<
+    Record<number, boolean>
+  >({});
 
   const load = useCallback(async () => {
     if (!groupId || !topicId) return;
@@ -272,6 +276,22 @@ export function BulletinTopicClient() {
     setResolutionPerCandidate(next);
   }, [topic?.recipePollResolution, topic?.recipePoll?.candidates, nCandidates]);
 
+  /** サーバの確定済み割当に合わせて「反映済みでボタン非表示」を同期 */
+  useEffect(() => {
+    const n = topic?.recipePoll?.candidates.length ?? 0;
+    if (n === 0) {
+      setReflectButtonHidden({});
+      return;
+    }
+    const next: Record<number, boolean> = {};
+    for (const a of topic?.recipePollResolution?.assignments ?? []) {
+      if (a.candidateIndex >= 0 && a.candidateIndex < n) {
+        next[a.candidateIndex] = true;
+      }
+    }
+    setReflectButtonHidden(next);
+  }, [topicId, topic?.recipePollResolution, topic?.recipePoll?.candidates.length]);
+
   const lastReplyId = replies.length > 0 ? replies[replies.length - 1]!.id : null;
 
   useEffect(() => {
@@ -396,45 +416,50 @@ export function BulletinTopicClient() {
       next[candidateIndex] = slot;
       return next;
     });
+    if (slot === null) {
+      setReflectButtonHidden((prev) => ({ ...prev, [candidateIndex]: false }));
+    }
   }
 
-  /** 任意のカードから確定。画面上の全候補の設定をまとめて保存する（未保存の編集が消えないようにする）。 */
-  async function handleConfirmResolution(fromCandidateIndex?: number) {
+  /** この候補だけをサーバの割当にマージして保存（他候補の既存確定は維持） */
+  async function handleConfirmResolution(ci: number) {
     if (!user || !groupId || !topicId || !topic?.recipePoll?.candidates.length) {
       return;
     }
     const n = topic.recipePoll.candidates.length;
-    const assignments = resolutionPerCandidate
-      .map((slot, candidateIndex) =>
-        slot && slot.dayNumber >= 1
-          ? {
-              dayNumber: slot.dayNumber,
-              meal: slot.meal,
-              candidateIndex,
-            }
-          : null,
-      )
-      .filter(
-        (x): x is {
-          dayNumber: number;
-          meal: RecipeMealSlot;
-          candidateIndex: number;
-        } => x !== null,
-      );
-    if (assignments.length === 0) {
-      setError("少なくとも1件のレシピで Day と食事を指定してください");
-      return;
-    }
-    setBusy(
-      fromCandidateIndex !== undefined ? `res-${fromCandidateIndex}` : "resolution",
+    if (ci < 0 || ci >= n) return;
+
+    const prevAssignments = topic.recipePollResolution?.assignments ?? [];
+    const byIdx = new Map(
+      prevAssignments.map((a) => [a.candidateIndex, a]),
     );
+    const slot = resolutionPerCandidate[ci];
+    if (slot && slot.dayNumber >= 1) {
+      byIdx.set(ci, {
+        candidateIndex: ci,
+        dayNumber: slot.dayNumber,
+        meal: slot.meal,
+      });
+    } else {
+      byIdx.delete(ci);
+    }
+    const assignments = Array.from(byIdx.values()).sort(
+      (a, b) => a.candidateIndex - b.candidateIndex,
+    );
+
+    setBusy(`res-${ci}`);
     setError(null);
     try {
-      await updateRecipePollResolution(groupId, topicId, {
-        confirmedByUserId: user.uid,
-        confirmedAt: serverTimestamp(),
-        assignments,
-      });
+      if (assignments.length === 0) {
+        await updateRecipePollResolution(groupId, topicId, null);
+      } else {
+        await updateRecipePollResolution(groupId, topicId, {
+          confirmedByUserId: user.uid,
+          confirmedAt: serverTimestamp(),
+          assignments,
+        });
+      }
+      setReflectButtonHidden((prev) => ({ ...prev, [ci]: true }));
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "確定の保存に失敗しました");
@@ -944,8 +969,8 @@ export function BulletinTopicClient() {
                       下の一覧は<strong className="font-semibold">皆の投票の合計点が高い順</strong>
                       です。レシピ候補ごとに Day と食事を指定し、
                       <strong className="font-semibold">各カードの茶色のボタン</strong>
-                      で旅程に保存します。ドロップダウンを変えただけでは保存されません。
-                      保存時は画面上の候補の設定がすべてまとめて反映されます。
+                      で<strong>その候補だけ</strong>旅程に保存します。ドロップダウンを変えただけでは保存されません。
+                      保存後は同じカードのボタンは隠れます。設定し直すときは「旅程に表示しない」のあと「Day・食事を指定する」でボタンが戻ります。
                     </p>
                     <div className="mt-4 space-y-4">
                       {recipeJourneyOrderIndices.map((ci, rankIdx) => {
@@ -1071,23 +1096,31 @@ export function BulletinTopicClient() {
                                 </button>
                               </div>
                             )}
-                            <div className="mt-4 border-t border-zinc-100 pt-4 dark:border-zinc-700">
-                              <button
-                                type="button"
-                                onClick={() => void handleConfirmResolution(ci)}
-                                disabled={busy !== null}
-                                className="w-full rounded-lg bg-amber-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
-                              >
-                                {busy === `res-${ci}`
-                                  ? "保存中…"
-                                  : slot
-                                    ? "このレシピを旅程に反映"
-                                    : "この設定を旅程に保存"}
-                              </button>
-                              <p className="mt-1.5 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
-                                ほかのレシピの設定もまとめて保存されます
+                            {!(reflectButtonHidden[ci] && slot) ? (
+                              <div className="mt-4 border-t border-zinc-100 pt-4 dark:border-zinc-700">
+                                <button
+                                  type="button"
+                                  onClick={() => void handleConfirmResolution(ci)}
+                                  disabled={busy !== null}
+                                  className="w-full rounded-lg bg-amber-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
+                                >
+                                  {busy === `res-${ci}`
+                                    ? "保存中…"
+                                    : slot
+                                      ? "このレシピを旅程に反映"
+                                      : "この設定を旅程に保存"}
+                                </button>
+                                <p className="mt-1.5 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                                  {slot
+                                    ? "この候補の Day・食事の設定だけが旅程に保存されます（他の候補の確定は変わりません）。"
+                                    : "この候補を旅程から外す内容を保存します。"}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="mt-4 border-t border-zinc-100 pt-4 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                                旅程に反映済みです。Day や食事を変える場合は「旅程に表示しない」からやり直してください。
                               </p>
-                            </div>
+                            )}
                           </div>
                         );
                       })}
