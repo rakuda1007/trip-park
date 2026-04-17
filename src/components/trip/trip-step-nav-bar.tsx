@@ -67,11 +67,12 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
     return Math.max(fromDates, maxRoute, 1);
   }, [group, tripRoutes]);
 
-  /** Day1〜Day(numTripDays) それぞれに旅程が1件以上あるときのみ完了 */
+  /** Day1〜Day(numTripDays): 各日に旅程があり、かつその日の全旅程ブロックが完了(isDone)のときのみ完了 */
   const itinDone = useMemo(() => {
-    const covered = new Set(tripRoutes.map((r) => r.data.dayNumber));
     for (let d = 1; d <= numTripDays; d++) {
-      if (!covered.has(d)) return false;
+      const forDay = tripRoutes.filter((r) => r.data.dayNumber === d);
+      if (forDay.length === 0) return false;
+      if (forDay.some((r) => !r.data.isDone)) return false;
     }
     return true;
   }, [tripRoutes, numTripDays]);
