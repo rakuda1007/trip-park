@@ -99,6 +99,16 @@ function canManageBulletin(
   return m?.data.role === "admin";
 }
 
+function memberDisplayName(
+  userId: string,
+  members: { userId: string; data: MemberDoc }[],
+): string {
+  const m = members.find((x) => x.userId === userId);
+  const d = m?.data.displayName?.trim();
+  if (d) return d;
+  return `${userId.slice(0, 6)}…`;
+}
+
 export function BulletinTopicClient() {
   const params = useParams();
   const groupId = useGroupRouteId();
@@ -236,6 +246,39 @@ export function BulletinTopicClient() {
   }, [topic?.recipePoll?.candidates.length, recipeScoreTotals]);
 
   const nCandidates = topic?.recipePoll?.candidates.length ?? 0;
+
+  /** 管理者向け: 1点以上付けて保存した人・未投票メンバー */
+  const recipeVoteAdminSummary = useMemo(() => {
+    if (!topic || topic.category !== "recipe_vote" || nCandidates === 0) {
+      return null;
+    }
+    type VotedRow = { userId: string; ratedCount: number };
+    const voted: VotedRow[] = [];
+    for (const { userId, data } of recipeVotes) {
+      const r = normalizeRecipeRatings(data, nCandidates);
+      const cnt = countRatedCandidates(r);
+      if (cnt > 0) voted.push({ userId, ratedCount: cnt });
+    }
+    voted.sort((a, b) =>
+      memberDisplayName(a.userId, members).localeCompare(
+        memberDisplayName(b.userId, members),
+        "ja",
+      ),
+    );
+    const votedIds = new Set(voted.map((v) => v.userId));
+    const memberUidSet = new Set(members.map((m) => m.userId));
+    const notVoted = members
+      .filter((m) => !votedIds.has(m.userId))
+      .map((m) => m.userId)
+      .sort((a, b) =>
+        memberDisplayName(a, members).localeCompare(
+          memberDisplayName(b, members),
+          "ja",
+        ),
+      );
+    const extraVoters = voted.filter((v) => !memberUidSet.has(v.userId));
+    return { voted, notVoted, extraVoters };
+  }, [topic, recipeVotes, members, nCandidates]);
 
   useEffect(() => {
     if (!user || !topic || topic.category !== "recipe_vote" || nCandidates === 0) {
@@ -833,6 +876,64 @@ export function BulletinTopicClient() {
                       </span>
                       / 5 候補
                     </p>
+                  ) : null}
+                  {canManage && recipeVoteAdminSummary ? (
+                    <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50/90 p-3 dark:border-violet-900/50 dark:bg-violet-950/25">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-200">
+                        投票の進捗（管理者向け）
+                      </h3>
+                      <p className="mt-1 text-xs text-violet-900/85 dark:text-violet-200/90">
+                        メンバーのうち、1点以上付けて「評価を保存」した人:{" "}
+                        <span className="font-semibold">
+                          {recipeVoteAdminSummary.voted.length -
+                            recipeVoteAdminSummary.extraVoters.length}
+                        </span>
+                        {" / "}
+                        {members.length} 名
+                      </p>
+                      {recipeVoteAdminSummary.voted.length > 0 ? (
+                        <ul className="mt-2 space-y-1 text-xs text-violet-950 dark:text-violet-100">
+                          {recipeVoteAdminSummary.voted.map((v) => (
+                            <li key={v.userId} className="flex flex-wrap gap-x-2 gap-y-0.5">
+                              <span className="font-medium">
+                                {memberDisplayName(v.userId, members)}
+                              </span>
+                              {!members.some((m) => m.userId === v.userId) ? (
+                                <span className="text-violet-600/90 dark:text-violet-300/90">
+                                  （現在メンバー外）
+                                </span>
+                              ) : null}
+                              <span className="text-violet-700/80 dark:text-violet-300/80">
+                                評価 {v.ratedCount} / 5 候補
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-2 text-xs text-violet-800/80 dark:text-violet-200/80">
+                          まだ投票済みのメンバーはいません。
+                        </p>
+                      )}
+                      {recipeVoteAdminSummary.notVoted.length > 0 ? (
+                        <div className="mt-3 border-t border-violet-200/80 pt-2 dark:border-violet-800/60">
+                          <p className="text-[11px] font-medium text-violet-800 dark:text-violet-200">
+                            未投票のメンバー
+                          </p>
+                          <ul className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-xs text-violet-900/90 dark:text-violet-100/90">
+                            {recipeVoteAdminSummary.notVoted.map((uid) => (
+                              <li key={uid}>
+                                {memberDisplayName(uid, members)}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : recipeVoteAdminSummary.notVoted.length === 0 &&
+                        members.length > 0 ? (
+                        <p className="mt-2 text-[11px] text-violet-800/75 dark:text-violet-200/75">
+                          全員が投票済みです。
+                        </p>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
