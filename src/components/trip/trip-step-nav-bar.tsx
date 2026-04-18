@@ -154,7 +154,7 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
   ];
 
   return (
-    <div className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="shrink-0 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <div className="mx-auto max-w-3xl px-4">
         <div className="flex items-center gap-0.5 overflow-x-auto py-2">
           {/* ステップ */}

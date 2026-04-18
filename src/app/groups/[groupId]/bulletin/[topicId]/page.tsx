@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export default function BulletinTopicPage() {
   return (
     <AuthGuard>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <BulletinTopicClient />
       </div>
     </AuthGuard>

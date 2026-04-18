@@ -54,7 +54,14 @@ import {
 import { serverTimestamp, Timestamp } from "firebase/firestore";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 function formatTs(v: unknown): string {
   if (!v) return "—";
@@ -339,15 +346,12 @@ export function BulletinTopicClient() {
     setReflectButtonHidden(next);
   }, [topicId, topic?.recipePollResolution, topic?.recipePoll?.candidates.length]);
 
-  /** レシピ投票以外の表示時: 最新返信が見えるよう末尾へスクロール */
-  useEffect(() => {
+  /** レシピ投票以外: スクロール領域の末尾（最新返信・入力の直前）へ。多い返信でも確実に寄せる */
+  useLayoutEffect(() => {
     if (!topic || editingTopic || topic.category === "recipe_vote") return;
-    const id = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
-      });
-    });
-    return () => cancelAnimationFrame(id);
+    const el = chatScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
   }, [topicId, topic?.category, replies.length, editingTopic]);
 
   const lastReplyId = replies.length > 0 ? replies[replies.length - 1]!.id : null;
@@ -739,7 +743,7 @@ export function BulletinTopicClient() {
 
   if (chatLayout) {
     return (
-      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 pb-0 pt-2 sm:pt-3">
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden px-4 pb-0 pt-2 sm:pt-3">
         <Link
           href={`/groups/${groupId}/bulletin`}
           className="shrink-0 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
@@ -757,10 +761,10 @@ export function BulletinTopicClient() {
         ) : null}
 
         <header
-          className={`sticky top-0 z-20 mt-3 shrink-0 border-b px-3 py-2.5 sm:px-4 ${
+          className={`mt-3 shrink-0 border-b px-3 py-2.5 sm:px-4 ${
             showImportant
-              ? "border-amber-200 bg-amber-50/95 backdrop-blur dark:border-amber-900/60 dark:bg-amber-950/90"
-              : "border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95"
+              ? "border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/90"
+              : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
           }`}
         >
           {topic.pinned ? (
@@ -795,7 +799,7 @@ export function BulletinTopicClient() {
 
         <div
           ref={chatScrollRef}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-0.5 py-2"
+          className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain px-0.5 py-2 [-webkit-overflow-scrolling:touch]"
         >
           <div
             className={`rounded-xl border p-3 sm:p-4 ${
