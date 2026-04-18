@@ -170,6 +170,7 @@ export function BulletinTopicClient() {
   >({});
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const chatInnerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -346,13 +347,45 @@ export function BulletinTopicClient() {
     setReflectButtonHidden(next);
   }, [topicId, topic?.recipePollResolution, topic?.recipePoll?.candidates.length]);
 
-  /** レシピ投票以外: スクロール領域の末尾（最新返信・入力の直前）へ。多い返信でも確実に寄せる */
-  useLayoutEffect(() => {
-    if (!topic || editingTopic || topic.category === "recipe_vote") return;
+  const scrollChatToBottom = useCallback(() => {
     const el = chatScrollRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
-  }, [topicId, topic?.category, replies.length, editingTopic]);
+    el.scrollTop = el.scrollHeight;
+  }, []);
+
+  /** レシピ投票以外: 末尾（最新返信）へ。描画直後と返信変化のたびに実行 */
+  useLayoutEffect(() => {
+    if (!topic || editingTopic || topic.category === "recipe_vote") return;
+    scrollChatToBottom();
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollChatToBottom();
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [topicId, topic?.category, replies.length, editingTopic, scrollChatToBottom]);
+
+  /** 返信DOMの高さ変化（長文・折り返し）でも末尾に追従 */
+  useEffect(() => {
+    if (!topic || editingTopic || topic.category === "recipe_vote") return;
+    const inner = chatInnerRef.current;
+    if (!inner) return;
+    const ro = new ResizeObserver(() => {
+      scrollChatToBottom();
+    });
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, [topicId, topic?.category, replies.length, editingTopic, topic, scrollChatToBottom]);
+
+  /** fixed チャット表示時は背面のページスクロールを止める（モバイルでタイトル・入力が流れないように） */
+  useEffect(() => {
+    if (!topic || editingTopic || topic.category === "recipe_vote") return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [topic, editingTopic, topic?.category]);
 
   const lastReplyId = replies.length > 0 ? replies[replies.length - 1]!.id : null;
 
@@ -743,7 +776,13 @@ export function BulletinTopicClient() {
 
   if (chatLayout) {
     return (
-      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden px-4 pb-0 pt-2 sm:pt-3">
+      <div
+        className="fixed inset-x-0 bottom-0 z-20 flex flex-col overflow-hidden overscroll-y-contain bg-white pb-0 pt-2 dark:bg-zinc-950 sm:pt-3"
+        style={{
+          top: "calc(env(safe-area-inset-top, 0px) + 3.5rem + 2.75rem)",
+        }}
+      >
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden px-4">
         <Link
           href={`/groups/${groupId}/bulletin`}
           className="shrink-0 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
@@ -801,6 +840,7 @@ export function BulletinTopicClient() {
           ref={chatScrollRef}
           className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain px-0.5 py-2 [-webkit-overflow-scrolling:touch]"
         >
+          <div ref={chatInnerRef}>
           <div
             className={`rounded-xl border p-3 sm:p-4 ${
               showImportant
@@ -1018,6 +1058,7 @@ export function BulletinTopicClient() {
             </ul>
             <div ref={chatEndRef} className="h-1 shrink-0" aria-hidden />
           </section>
+          </div>
         </div>
 
         {user && isMember ? (
@@ -1051,6 +1092,7 @@ export function BulletinTopicClient() {
             </div>
           </div>
         ) : null}
+        </div>
       </div>
     );
   }
