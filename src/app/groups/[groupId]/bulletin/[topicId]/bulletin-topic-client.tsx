@@ -54,7 +54,7 @@ import {
 import { serverTimestamp, Timestamp } from "firebase/firestore";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function formatTs(v: unknown): string {
   if (!v) return "—";
@@ -161,6 +161,9 @@ export function BulletinTopicClient() {
   const [reflectButtonHidden, setReflectButtonHidden] = useState<
     Record<number, boolean>
   >({});
+
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     if (!groupId || !topicId) return;
@@ -335,6 +338,17 @@ export function BulletinTopicClient() {
     }
     setReflectButtonHidden(next);
   }, [topicId, topic?.recipePollResolution, topic?.recipePoll?.candidates.length]);
+
+  /** レシピ投票以外の表示時: 最新返信が見えるよう末尾へスクロール */
+  useEffect(() => {
+    if (!topic || editingTopic || topic.category === "recipe_vote") return;
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [topicId, topic?.category, replies.length, editingTopic]);
 
   const lastReplyId = replies.length > 0 ? replies[replies.length - 1]!.id : null;
 
@@ -720,6 +734,322 @@ export function BulletinTopicClient() {
 
   const isTopicAuthor = user?.uid === topic.authorUserId;
   const showImportant = topic.importance === "important" || topic.pinned;
+  /** レシピ投票以外: タイトル固定・本文はスクロール・下部に入力 */
+  const chatLayout = !editingTopic && topic.category !== "recipe_vote";
+
+  if (chatLayout) {
+    return (
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 pb-0 pt-2 sm:pt-3">
+        <Link
+          href={`/groups/${groupId}/bulletin`}
+          className="shrink-0 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+        >
+          ← トピック一覧
+        </Link>
+
+        {error ? (
+          <p
+            className="mt-2 shrink-0 text-sm text-red-600 dark:text-red-400"
+            role="alert"
+          >
+            {error}
+          </p>
+        ) : null}
+
+        <header
+          className={`sticky top-0 z-20 mt-3 shrink-0 border-b px-3 py-2.5 sm:px-4 ${
+            showImportant
+              ? "border-amber-200 bg-amber-50/95 backdrop-blur dark:border-amber-900/60 dark:bg-amber-950/90"
+              : "border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95"
+          }`}
+        >
+          {topic.pinned ? (
+            <p className="mb-1 text-[11px] font-medium text-amber-800 dark:text-amber-200">
+              📌 ピン留め
+            </p>
+          ) : null}
+          <h1 className="text-lg font-semibold leading-snug text-zinc-900 dark:text-zinc-50 sm:text-xl">
+            {topic.title}
+          </h1>
+          <div className="mt-1.5 flex flex-wrap gap-2 text-xs text-zinc-500">
+            <span className="rounded bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800">
+              {BULLETIN_CATEGORY_LABELS[topic.category]}
+            </span>
+            {normalizeBulletinTopicTags(topic).map((t) => (
+              <span
+                key={t}
+                className={`rounded px-2 py-0.5 ${
+                  t === "priority_top"
+                    ? "bg-rose-100 font-medium text-rose-900 dark:bg-rose-950/60 dark:text-rose-200"
+                    : "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200"
+                }`}
+              >
+                {BULLETIN_TOPIC_TAG_LABELS[t]}
+              </span>
+            ))}
+            {topic.importance === "important" ? (
+              <span className="text-amber-700 dark:text-amber-300">重要</span>
+            ) : null}
+          </div>
+        </header>
+
+        <div
+          ref={chatScrollRef}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-0.5 py-2"
+        >
+          <div
+            className={`rounded-xl border p-3 sm:p-4 ${
+              showImportant
+                ? "border-amber-200 bg-amber-50/80 dark:border-amber-900/60 dark:bg-amber-950/25"
+                : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
+            }`}
+          >
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
+              {topic.body}
+            </p>
+            <p className="mt-2 text-[11px] text-zinc-500">
+              {topic.authorDisplayName ||
+                topic.authorUserId.slice(0, 8) + "…"}{" "}
+              · {formatTs(topic.createdAt)}
+              {isUpdatedTopic(topic) ? (
+                <span>（更新: {formatTs(topic.updatedAt)}）</span>
+              ) : null}
+            </p>
+
+            {user && isMember ? (
+              <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50/80 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
+                <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
+                  共有・再通知
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-sky-800/90 dark:text-sky-300/90">
+                  一言を添えて LINE で共有するか、投稿者・管理者はメンバーへプッシュで再通知できます。
+                </p>
+                <label className="mt-2 block text-[11px] text-zinc-600 dark:text-zinc-400">
+                  一言メッセージ（任意・300文字まで）
+                  <textarea
+                    value={remindComment}
+                    onChange={(e) =>
+                      setRemindComment(e.target.value.slice(0, 300))
+                    }
+                    rows={2}
+                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                    placeholder="例: 締切は金曜までです"
+                    disabled={busy !== null}
+                  />
+                </label>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleShareLine()}
+                    disabled={busy !== null}
+                    className="rounded-md bg-[#06C755] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {busy === "share-line" ? "開いています…" : "LINEで共有"}
+                  </button>
+                  {isTopicAuthor || canManage ? (
+                    <>
+                      <VisibilityBadge kind="authorOrAdmin" />
+                      <button
+                        type="button"
+                        onClick={() => void handleRemindPush()}
+                        disabled={busy !== null}
+                        className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                      >
+                        {busy === "remind-push" ? "送信中…" : "プッシュで再通知"}
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {isTopicAuthor ? (
+                <button
+                  type="button"
+                  onClick={() => setEditingTopic(true)}
+                  disabled={busy !== null}
+                  className="text-xs text-zinc-700 underline dark:text-zinc-300"
+                >
+                  編集
+                </button>
+              ) : null}
+              {canManage ? (
+                <>
+                  <VisibilityBadge kind="admin" />
+                  <button
+                    type="button"
+                    onClick={handleTogglePin}
+                    disabled={busy !== null}
+                    className="text-xs text-amber-800 underline dark:text-amber-200"
+                  >
+                    {topic.pinned ? "ピンを外す" : "ピン留め"}
+                  </button>
+                </>
+              ) : null}
+              {(isTopicAuthor || canManage) && (
+                <>
+                  <VisibilityBadge kind="authorOrAdmin" />
+                  <button
+                    type="button"
+                    onClick={handleDeleteTopic}
+                    disabled={busy !== null}
+                    className="text-xs text-red-600 underline"
+                  >
+                    話題を削除
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <section className="mt-4" aria-label="返信スレッド">
+            <p className="mb-2 text-center text-[11px] text-zinc-400">
+              返信 {replies.length} 件
+            </p>
+            <ul className="space-y-3">
+              {replies.map(({ id, data }, idx) => {
+                const isOwn = user?.uid === data.authorUserId;
+                const label =
+                  data.authorDisplayName ||
+                  data.authorUserId.slice(0, 8) + "…";
+                const readCount = replyReadCounts[idx] ?? 0;
+                return (
+                  <li
+                    key={id}
+                    className={
+                      isOwn ? "flex justify-end" : "flex justify-start"
+                    }
+                  >
+                    <div className="max-w-[min(85%,22rem)]">
+                      {editingReplyId === id ? (
+                        <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-2 dark:border-zinc-600 dark:bg-zinc-900/80">
+                          <textarea
+                            value={editReplyBody}
+                            onChange={(e) => setEditReplyBody(e.target.value)}
+                            rows={3}
+                            className="w-full resize-none rounded-xl border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                          />
+                          <div className="mt-1.5 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSaveReply(id)}
+                              disabled={busy !== null}
+                              className="text-xs font-medium text-zinc-900 underline dark:text-zinc-100"
+                            >
+                              保存
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingReplyId(null)}
+                              disabled={busy !== null}
+                              className="text-xs text-zinc-500"
+                            >
+                              キャンセル
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div
+                            className={`rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm ${
+                              isOwn
+                                ? "rounded-br-sm bg-emerald-600 text-white dark:bg-emerald-700"
+                                : "rounded-bl-sm bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+                            }`}
+                          >
+                            <p className="whitespace-pre-wrap break-words">
+                              {data.body}
+                            </p>
+                          </div>
+                          <p
+                            className={`mt-1 text-[10px] leading-tight text-zinc-400 ${
+                              isOwn ? "text-right" : "text-left"
+                            }`}
+                          >
+                            {label} · {formatTs(data.createdAt)}
+                            {isUpdatedReply(data) ? (
+                              <span>（更新 {formatTs(data.updatedAt)}）</span>
+                            ) : null}
+                            <span className="text-zinc-500">
+                              {" "}
+                              · 既読 {readCount}
+                            </span>
+                          </p>
+                          <div
+                            className={`mt-0.5 flex gap-2 ${
+                              isOwn ? "justify-end" : "justify-start"
+                            }`}
+                          >
+                            {isOwn ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingReplyId(id);
+                                  setEditReplyBody(data.body);
+                                }}
+                                disabled={busy !== null}
+                                className="text-[11px] text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
+                              >
+                                編集
+                              </button>
+                            ) : null}
+                            {(isOwn || canManage) && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteReply(id)}
+                                disabled={busy !== null}
+                                className="text-[11px] text-red-500 underline hover:text-red-700"
+                              >
+                                削除
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <div ref={chatEndRef} className="h-1 shrink-0" aria-hidden />
+          </section>
+        </div>
+
+        {user && isMember ? (
+          <div className="shrink-0 border-t border-zinc-200 bg-white px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] dark:border-zinc-700 dark:bg-zinc-950">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newReplyBody}
+                onChange={(e) => setNewReplyBody(e.target.value)}
+                className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+                placeholder="メッセージを入力"
+                disabled={busy !== null}
+                onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing) return;
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (newReplyBody.trim() && busy === null) {
+                      void handleCreateReply();
+                    }
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleCreateReply}
+                disabled={busy !== null || !newReplyBody.trim()}
+                className="shrink-0 rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-40 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+              >
+                {busy === "reply" ? "…" : "送信"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
