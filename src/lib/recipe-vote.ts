@@ -61,6 +61,28 @@ export function countRatedCandidates(ratings: number[]): number {
   return ratings.filter((r) => r >= MIN_SCORE && r <= MAX_SCORE).length;
 }
 
+/** Competition ranking (1,1,3,…): `order` = candidate indices by total score desc (ties keep registration order). */
+export function competitionRanksForTotals(
+  order: number[],
+  totals: number[],
+): number[] {
+  const n = totals.length;
+  if (n === 0 || order.length === 0) return [];
+  const ranks = Array<number>(n).fill(0);
+  let rank = 1;
+  for (let i = 0; i < order.length; i++) {
+    const ci = order[i]!;
+    if (i > 0) {
+      const prevCi = order[i - 1]!;
+      if ((totals[ci] ?? 0) !== (totals[prevCi] ?? 0)) {
+        rank = i + 1;
+      }
+    }
+    ranks[ci] = rank;
+  }
+  return ranks;
+}
+
 export function validateRecipeRatings(ratings: number[]): string | null {
   const used = new Set<number>();
   for (const r of ratings) {

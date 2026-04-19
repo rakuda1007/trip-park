@@ -21,6 +21,7 @@ import {
 } from "@/lib/firestore/bulletin";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
 import {
+  competitionRanksForTotals,
   countRatedCandidates,
   normalizeRecipeRatings,
   validateRecipeRatings,
@@ -256,6 +257,13 @@ export function BulletinTopicClient() {
     });
     return order;
   }, [topic?.recipePoll?.candidates.length, recipeScoreTotals]);
+
+  /** 合計点が同じ候補は同じ順位（1位が2件なら次は3位） */
+  const recipePollCompetitionRanks = useMemo(
+    () =>
+      competitionRanksForTotals(recipeJourneyOrderIndices, recipeScoreTotals),
+    [recipeJourneyOrderIndices, recipeScoreTotals],
+  );
 
   const nCandidates = topic?.recipePoll?.candidates.length ?? 0;
 
@@ -1450,13 +1458,14 @@ export function BulletinTopicClient() {
                     投票結果の集計（合計点の高い順）
                   </h3>
                   <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    皆の投票の点数を合計し、多い順に並べています。
+                    皆の投票の点数を合計し、多い順に並べています。合計点が同じ候補は同じ順位とし、次の順位は飛ばします（例: 1位が2件なら次は3位）。
                   </p>
                   <ul className="mt-4 space-y-3">
-                    {recipeJourneyOrderIndices.map((ci, rankIdx) => {
+                    {recipeJourneyOrderIndices.map((ci) => {
                       const cand = topic.recipePoll!.candidates[ci]!;
                       const title = cand.sourceTitle || cand.url;
                       const totalPts = recipeScoreTotals[ci] ?? 0;
+                      const displayRank = recipePollCompetitionRanks[ci] ?? 0;
                       return (
                         <li
                           key={`rank-${cand.url}-${ci}`}
@@ -1479,7 +1488,7 @@ export function BulletinTopicClient() {
                           <div className="min-w-0 flex-1">
                             <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
                               <span className="text-zinc-800 dark:text-zinc-200">
-                                {rankIdx + 1}位
+                                {displayRank}位
                               </span>
                               {" · 合計点 "}
                               <span className="font-semibold text-zinc-900 dark:text-zinc-100">
@@ -1520,20 +1529,21 @@ export function BulletinTopicClient() {
                       保存後は同じカードのボタンは隠れます。設定し直すときは「旅程に表示しない」のあと「Day・食事を指定する」でボタンが戻ります。
                     </p>
                     <div className="mt-4 space-y-4">
-                      {recipeJourneyOrderIndices.map((ci, rankIdx) => {
+                      {recipeJourneyOrderIndices.map((ci) => {
                         const cand = topic.recipePoll!.candidates[ci]!;
                         const slot =
                           ci < resolutionPerCandidate.length
                             ? resolutionPerCandidate[ci]
                             : null;
                         const title = cand.sourceTitle || cand.url;
+                        const displayRank = recipePollCompetitionRanks[ci] ?? 0;
                         return (
                           <div
                             key={`res-${cand.url}-${ci}`}
                             className="rounded-xl border border-amber-100/80 bg-white/95 p-4 shadow-sm dark:border-zinc-600 dark:bg-zinc-900/80"
                           >
                             <p className="text-sm font-semibold text-amber-950 dark:text-amber-50">
-                              第{rankIdx + 1}位
+                              第{displayRank}位
                               <span className="ml-2 font-normal text-zinc-700 dark:text-zinc-300">
                                 {title}
                               </span>
