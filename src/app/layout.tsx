@@ -32,6 +32,9 @@ export const metadata: Metadata = {
     telephone: false,
   },
   applicationName: "Trip Park",
+  icons: {
+    apple: "/icons/icon.png",
+  },
 };
 
 export const viewport: Viewport = {
