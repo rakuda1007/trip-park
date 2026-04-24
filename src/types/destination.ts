@@ -33,7 +33,7 @@ export type DestinationCandidateDoc = {
   createdAt: unknown;
 };
 
-/** 投票の回答 */
+/** 旧3段階の投票。移行中データ・読み取り用 */
 export type DestinationAnswer = "first" | "want" | "reserve";
 
 /**
@@ -44,6 +44,15 @@ export type DestinationAnswer = "first" | "want" | "reserve";
 export type DestinationVoteDoc = {
   candidateId: string;
   userId: string;
-  answer: DestinationAnswer;
+  /**
+   * 「行きたい」票の数。1 人あたり全候補で合計 3 まで（同一候補に 1〜3）。
+   * 新形式。未設定のときは旧 `answer` から正規化。
+   */
+  count?: number;
+  /** 旧3段階。count が無い場合の表示に使用 */
+  answer?: DestinationAnswer;
   updatedAt: unknown;
 };
+
+/** 1 人あたり1投票ブロック内に使える「行きたい」票の上限 */
+export const DESTINATION_WANT_VOTES_MAX_PER_USER = 3;

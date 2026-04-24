@@ -23,6 +23,24 @@ service cloud.firestore {
         memberRole(groupId) == 'owner';
     }
 
+    // 投票ブロック配下: 「行きたい」件数 1–3
+    function validDestinationPollWantVoteNew(data) {
+      return data.keys().hasAll(['candidateId', 'userId', 'count', 'updatedAt']) &&
+        data.userId == request.auth.uid &&
+        data.candidateId is string &&
+        data.count is int &&
+        data.count >= 1 &&
+        data.count <= 3;
+    }
+
+    // 移行前の 3 段階
+    function validDestinationPollVoteLegacy(data) {
+      return data.keys().hasAll(['candidateId', 'userId', 'answer', 'updatedAt']) &&
+        data.userId == request.auth.uid &&
+        data.candidateId is string &&
+        data.answer in ['first', 'want', 'reserve'];
+    }
+
     function sharingLabelValid(data) {
       return data.label is string &&
         data.label.size() > 0 &&
@@ -453,10 +471,20 @@ service cloud.firestore {
         match /destinationVotes/{voteId} {
           allow read: if request.auth != null && isGroupMember(groupId);
           allow create: if request.auth != null && isGroupMember(groupId) &&
-            (request.resource.data.userId == request.auth.uid || isOwnerOrAdmin(groupId));
+            (isOwnerOrAdmin(groupId) || request.resource.data.userId == request.auth.uid) && (
+            validDestinationPollWantVoteNew(request.resource.data) ||
+            validDestinationPollVoteLegacy(request.resource.data)
+          );
           allow update: if request.auth != null && isGroupMember(groupId) &&
             resource.data.userId == request.auth.uid &&
-            request.resource.data.userId == request.auth.uid;
+            request.resource.data.userId == request.auth.uid &&
+            request.resource.data.candidateId == resource.data.candidateId && (
+            (request.resource.data.count is int &&
+              request.resource.data.count >= 1 &&
+              request.resource.data.count <= 3) ||
+            (request.resource.data.keys().hasAny(['answer']) &&
+              request.resource.data.answer in ['first', 'want', 'reserve'])
+          );
           allow delete: if request.auth != null && isGroupMember(groupId) &&
             (resource.data.userId == request.auth.uid || isOwnerOrAdmin(groupId));
         }

@@ -2,15 +2,16 @@ import { getFirebaseFirestore } from "@/lib/firebase/client";
 import { COLLECTIONS, SUB } from "@/lib/firestore/collections";
 import { updateDestination } from "@/lib/firestore/groups";
 import type {
-  DestinationAnswer,
   DestinationCandidateDoc,
   DestinationPollDoc,
   DestinationVoteDoc,
 } from "@/types/destination";
+import { DESTINATION_WANT_VOTES_MAX_PER_USER } from "@/types/destination";
 import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -417,31 +418,94 @@ export async function listDestinationVotes(
   }));
 }
 
-export async function castDestinationVote(
+/**
+ * 旧 answer 付き or 新 count から「行きたい」相当の票の数（0〜3）を得る
+ */
+export function wantVoteWeightFromDoc(data: DestinationVoteDoc): number {
+  if (typeof data.count === "number" && !Number.isNaN(data.count)) {
+    return Math.max(
+      0,
+      Math.min(3, Math.floor(data.count)),
+    );
+  }
+  if (data.answer === "first" || data.answer === "want") return 1;
+  if (data.answer === "reserve") return 0;
+  return 0;
+}
+
+/**
+ * 同一投票ブロック内で、1 ユーザーが既に他候補に入れた合計
+ */
+function sumMyWantVotesOnOtherCandidates(
+  uid: string,
+  candidateId: string,
+  votes: VoteItem[],
+): number {
+  return votes
+    .filter(
+      (v) => v.data.userId === uid && v.data.candidateId !== candidateId,
+    )
+    .reduce((s, v) => s + wantVoteWeightFromDoc(v.data), 0);
+}
+
+/**
+ * 当該候補の「行きたい」票（0 削除 / 1〜3）。ブロック内で 1 人合計 3 票まで。
+ */
+export async function setDestinationWantCount(
   groupId: string,
   pollId: string,
   uid: string,
   candidateId: string,
-  answer: DestinationAnswer,
+  count: number,
+  currentPollVotes: VoteItem[],
 ): Promise<void> {
+  const c = Math.floor(count);
+  if (c < 0 || c > DESTINATION_WANT_VOTES_MAX_PER_USER) {
+    throw new Error(
+      `1候補あたり0〜${String(DESTINATION_WANT_VOTES_MAX_PER_USER)}票です`,
+    );
+  }
+  const otherSum = sumMyWantVotesOnOtherCandidates(
+    uid,
+    candidateId,
+    currentPollVotes,
+  );
+  if (otherSum + c > DESTINATION_WANT_VOTES_MAX_PER_USER) {
+    throw new Error(
+      `1人あたりこのブロックで「行きたい」は合計${String(DESTINATION_WANT_VOTES_MAX_PER_USER)}票までです`,
+    );
+  }
+
   const db = getFirebaseFirestore();
   const docId = `${uid}_${candidateId}`;
+  const ref = doc(
+    db,
+    COLLECTIONS.groups,
+    groupId,
+    SUB.destinationPolls,
+    pollId,
+    SUB.destinationVotes,
+    docId,
+  );
+
+  if (c === 0) {
+    const exist = currentPollVotes.find(
+      (v) => v.data.userId === uid && v.data.candidateId === candidateId,
+    );
+    if (exist) await deleteDoc(ref);
+    return;
+  }
+
   await setDoc(
-    doc(
-      db,
-      COLLECTIONS.groups,
-      groupId,
-      SUB.destinationPolls,
-      pollId,
-      SUB.destinationVotes,
-      docId,
-    ),
+    ref,
     {
       candidateId,
       userId: uid,
-      answer,
+      count: c,
       updatedAt: serverTimestamp(),
+      answer: deleteField(),
     },
+    { merge: true },
   );
 }
 

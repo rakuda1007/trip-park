@@ -5,16 +5,16 @@ import { useGroupRouteId } from "@/contexts/group-route-context";
 import {
   addDestinationCandidate,
   addDestinationPoll,
-  castDestinationVote,
   deleteDestinationCandidate,
   deleteDestinationPoll,
-  deleteDestinationVote,
   listDestinationCandidates,
   listDestinationPolls,
   listDestinationVotes,
   listLegacyDestinationCandidates,
   migrateLegacyDestinationPollIfNeeded,
+  setDestinationWantCount,
   setPollDecidedDestination,
+  wantVoteWeightFromDoc,
   updateDestinationCandidate,
   updateDestinationPollMeta,
   type CandidateItem,
@@ -22,23 +22,13 @@ import {
   type VoteItem,
 } from "@/lib/firestore/destination-votes";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
-import type { DestinationAnswer } from "@/types/destination";
+import { DESTINATION_WANT_VOTES_MAX_PER_USER } from "@/types/destination";
 import type { GroupDoc } from "@/types/group";
 import { VisibilityBadge } from "@/components/visibility-badge";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
-const ANSWER_LABELS: Record<DestinationAnswer, string> = {
-  first: "ここに行きたい 🙋",
-  want: "行きたい 👍",
-  reserve: "抑え 🤏",
-};
-
-const ANSWER_BAR_COLORS: Record<DestinationAnswer, string> = {
-  first: "bg-emerald-400",
-  want: "bg-blue-400",
-  reserve: "bg-amber-400",
-};
+const WANT_BAR_CLASS = "bg-blue-500";
 
 function formatCost(n: number): string {
   return `¥${n.toLocaleString()}`;
@@ -162,6 +152,8 @@ export function DestinationVotesClient() {
   const [bundles, setBundles] = useState<PollBundle[]>([]);
   const [memberMap, setMemberMap] = useState<Map<string, string>>(new Map());
   const [openVoters, setOpenVoters] = useState<Set<string>>(new Set());
+  /** 合計数クリックで「誰が何票」開示（オーナー・管理者） */
+  const [canViewVoteBreakdown, setCanViewVoteBreakdown] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [showAddFormByPoll, setShowAddFormByPoll] = useState<Set<string>>(
@@ -232,8 +224,19 @@ export function DestinationVotesClient() {
           ]),
         ),
       );
+      if (user) {
+        const isGroupOwner = user.uid === g.ownerId;
+        const me = m.find((x) => x.userId === user.uid);
+        const r = me?.data.role;
+        setCanViewVoteBreakdown(
+          isGroupOwner || r === "admin" || r === "owner",
+        );
+      } else {
+        setCanViewVoteBreakdown(false);
+      }
     } catch (e) {
       setMemberMap(new Map());
+      setCanViewVoteBreakdown(false);
       setError(
         e instanceof Error ? e.message : "メンバー一覧の取得に失敗しました",
       );
@@ -346,40 +349,24 @@ export function DestinationVotesClient() {
     }
   }
 
-  async function handleVote(
+  async function handleSetWant(
     pollId: string,
     candidateId: string,
-    answer: DestinationAnswer,
+    nextCount: number,
     votes: VoteItem[],
   ) {
     if (!user || !groupId) return;
-    setBusy(`vote-${pollId}-${candidateId}-${answer}`);
+    setBusy(`vote-${pollId}-${candidateId}`);
     setError(null);
     try {
-      const myOnThis = votes.find(
-        (v) =>
-          v.data.userId === user.uid && v.data.candidateId === candidateId,
+      await setDestinationWantCount(
+        groupId,
+        pollId,
+        user.uid,
+        candidateId,
+        nextCount,
+        votes,
       );
-
-      if (myOnThis?.data.answer === answer) {
-        await deleteDestinationVote(groupId, pollId, user.uid, candidateId);
-        await load();
-        return;
-      }
-
-      if (answer === "first" || answer === "want") {
-        const othersSameAnswer = votes.filter(
-          (v) =>
-            v.data.userId === user.uid &&
-            v.data.answer === answer &&
-            v.data.candidateId !== candidateId,
-        );
-        for (const v of othersSameAnswer) {
-          await deleteDestinationVote(groupId, pollId, user.uid, v.data.candidateId);
-        }
-      }
-
-      await castDestinationVote(groupId, pollId, user.uid, candidateId, answer);
       await load();
     } catch (ex) {
       setError(ex instanceof Error ? ex.message : "投票に失敗しました");
@@ -502,22 +489,25 @@ export function DestinationVotesClient() {
     }
   }
 
-  const voterNames = useCallback(
-    (
-      pollId: string,
-      candidateId: string,
-      answer: DestinationAnswer,
-      votes: VoteItem[],
-    ): string[] =>
-      votes
+  const wantVoterDetailsForAdmin = useCallback(
+    (candidateId: string, pollVotes: VoteItem[]) => {
+      return pollVotes
+        .filter((v) => v.data.candidateId === candidateId)
+        .map((v) => {
+          const w = wantVoteWeightFromDoc(v.data);
+          if (w <= 0) return null;
+          const name =
+            memberMap.get(v.data.userId) ?? v.data.userId.slice(0, 6) + "…";
+          return {
+            key: v.data.userId,
+            label: `${name}（${String(w)}票）`,
+          };
+        })
         .filter(
-          (v) =>
-            v.data.candidateId === candidateId && v.data.answer === answer,
+          (x): x is { key: string; label: string } => x !== null,
         )
-        .map(
-          (v) =>
-            memberMap.get(v.data.userId) ?? v.data.userId.slice(0, 6) + "…",
-        ),
+        .sort((a, b) => a.label.localeCompare(b.label, "ja"));
+    },
     [memberMap],
   );
 
@@ -598,7 +588,7 @@ export function DestinationVotesClient() {
       </h1>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
         投票ブロックごとにタイトル（例:「1日目の目的地」）を付けられます。日ごとに別の候補で投票・確定できます。オーナーは確定後も解除してやり直せます。
-        「ここに行きたい」「行きたい」はそれぞれ1候補だけ選べます。選んだ状態でもう一度タップすると取り消せます。
+        各投票ブロックで、メンバー1人あたり「行きたい」合計3票までを候補に分けて入れられます。あなたの行の「−」「＋」で票を調整してください（0にするとその候補分は取り消し）。オーナーと管理者は、合計票の数字を押すと誰が何票入れたかを確認できます。
       </p>
 
       <div className="mt-3">
@@ -745,11 +735,12 @@ export function DestinationVotesClient() {
           }
           onAddCandidate={handleAddCandidate}
           onUpdateCandidate={handleUpdateCandidate}
-          onVote={handleVote}
+          onSetWant={handleSetWant}
           onDecide={handleDecide}
           onUndecide={handleUndecide}
           onDeleteCandidate={handleDeleteCandidate}
-          voterNames={voterNames}
+          canViewVoteBreakdown={canViewVoteBreakdown}
+          wantVoterDetailsForAdmin={wantVoterDetailsForAdmin}
           openVoters={openVoters}
           toggleVoters={toggleVoters}
         />
@@ -777,11 +768,12 @@ function PollSection({
   setEditingCandidateId,
   onAddCandidate,
   onUpdateCandidate,
-  onVote,
+  onSetWant,
   onDecide,
   onUndecide,
   onDeleteCandidate,
-  voterNames,
+  canViewVoteBreakdown,
+  wantVoterDetailsForAdmin,
   openVoters,
   toggleVoters,
 }: {
@@ -807,21 +799,20 @@ function PollSection({
     candidateId: string,
     draft: EditDraft,
   ) => void;
-  onVote: (
+  onSetWant: (
     pollId: string,
     candidateId: string,
-    answer: DestinationAnswer,
+    nextCount: number,
     votes: VoteItem[],
   ) => void;
   onDecide: (pollId: string, candidateId: string) => void;
   onUndecide: (pollId: string) => void;
   onDeleteCandidate: (pollId: string, candidateId: string) => void;
-  voterNames: (
-    pollId: string,
+  canViewVoteBreakdown: boolean;
+  wantVoterDetailsForAdmin: (
     candidateId: string,
-    answer: DestinationAnswer,
     votes: VoteItem[],
-  ) => string[];
+  ) => { key: string; label: string }[];
   openVoters: Set<string>;
   toggleVoters: (key: string) => void;
 }) {
@@ -830,30 +821,37 @@ function PollSection({
   const decided = poll.data.decidedDestinationName?.trim() ?? "";
   const decidedLocked = decided.length > 0;
 
+  const myWantPoolInPoll = useMemo(() => {
+    if (!user) return 0;
+    return votes
+      .filter((v) => v.data.userId === user.uid)
+      .reduce((s, v) => s + wantVoteWeightFromDoc(v.data), 0);
+  }, [votes, user]);
+
   const stats = useMemo(() => {
     return candidates.map((c) => {
       const cvotes = votes.filter((v) => v.data.candidateId === c.id);
-      const first = cvotes.filter((v) => v.data.answer === "first").length;
-      const want = cvotes.filter((v) => v.data.answer === "want").length;
-      const reserve = cvotes.filter((v) => v.data.answer === "reserve").length;
-      return { id: c.id, first, want, reserve, total: cvotes.length };
+      const wantTotal = cvotes.reduce(
+        (s, v) => s + wantVoteWeightFromDoc(v.data),
+        0,
+      );
+      return { id: c.id, wantTotal };
     });
   }, [candidates, votes]);
+
+  const maxWantBar = useMemo(
+    () => (stats.length ? Math.max(1, ...stats.map((s) => s.wantTotal)) : 1),
+    [stats],
+  );
 
   const orderedCandidates = useMemo(() => {
     const statById = new Map(stats.map((s) => [s.id, s]));
     return [...candidates].sort((a, b) => {
       const sa = statById.get(a.id);
       const sb = statById.get(b.id);
-      const fa = sa?.first ?? 0;
-      const fb = sb?.first ?? 0;
-      if (fb !== fa) return fb - fa;
-      const wa = sa?.want ?? 0;
-      const wb = sb?.want ?? 0;
+      const wa = sa?.wantTotal ?? 0;
+      const wb = sb?.wantTotal ?? 0;
       if (wb !== wa) return wb - wa;
-      const ra = sa?.reserve ?? 0;
-      const rb = sb?.reserve ?? 0;
-      if (rb !== ra) return rb - ra;
       const ta = a.data.createdAt;
       const tb = b.data.createdAt;
       const sec = (x: unknown) =>
@@ -975,6 +973,14 @@ function PollSection({
         </div>
       ) : null}
 
+      {!decidedLocked && user ? (
+        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+          あなた: 「行きたい」残り{" "}
+          {DESTINATION_WANT_VOTES_MAX_PER_USER - myWantPoolInPoll} /{" "}
+          {DESTINATION_WANT_VOTES_MAX_PER_USER} 票
+        </p>
+      ) : null}
+
       {candidates.length > 0 ? (
         <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
           <table className="w-full table-fixed text-sm">
@@ -993,10 +999,13 @@ function PollSection({
             <tbody>
               {orderedCandidates.map((c) => {
                 const s = stats.find((x) => x.id === c.id)!;
-                const myVote = votes.find(
+                const myRowVote = votes.find(
                   (v) =>
                     v.data.candidateId === c.id && v.data.userId === user?.uid,
                 );
+                const myCount = myRowVote
+                  ? wantVoteWeightFromDoc(myRowVote.data)
+                  : 0;
                 const isDecidedRow =
                   decidedLocked &&
                   poll.data.decidedDestinationName === c.data.name;
@@ -1033,6 +1042,18 @@ function PollSection({
                 const rowBg = isDecidedRow
                   ? "bg-emerald-50 dark:bg-emerald-950/20"
                   : "bg-white dark:bg-zinc-900/40";
+                const wantTotal = s.wantTotal;
+                const wantBarPct =
+                  wantTotal > 0
+                    ? Math.round((wantTotal / maxWantBar) * 100)
+                    : 0;
+                const voterKeyWant = `want_${pollId}_${c.id}`;
+                const adminWantDetails = wantVoterDetailsForAdmin(c.id, votes);
+                const wantBreakdownOpen = openVoters.has(voterKeyWant);
+                const canPlusWant =
+                  !decidedLocked &&
+                  myCount < DESTINATION_WANT_VOTES_MAX_PER_USER &&
+                  myWantPoolInPoll < DESTINATION_WANT_VOTES_MAX_PER_USER;
                 return (
                   <Fragment key={c.id}>
                     <tr className={rowBg}>
@@ -1084,87 +1105,98 @@ function PollSection({
                     >
                       <td colSpan={3} className="px-4 pb-3 pt-1">
                         <div className="space-y-1">
-                          {(["first", "want", "reserve"] as DestinationAnswer[]).map(
-                            (a) => {
-                              const count =
-                                a === "first"
-                                  ? s.first
-                                  : a === "want"
-                                    ? s.want
-                                    : s.reserve;
-                              const pct =
-                                s.total > 0
-                                  ? Math.round((count / s.total) * 100)
-                                  : 0;
-                              const isSelected = myVote?.data.answer === a;
-                              const ICONS: Record<DestinationAnswer, string> = {
-                                first: "🙋",
-                                want: "👍",
-                                reserve: "🤏",
-                              };
-                              const voterKey = `${pollId}_${c.id}_${a}`;
-                              const names = voterNames(pollId, c.id, a, votes);
-                              const isOpen = openVoters.has(voterKey);
-                              return (
-                                <div key={a} className="flex flex-col gap-0.5">
-                                  <div className="flex items-center gap-1.5 text-xs">
-                                    <span className="w-28 shrink-0 truncate text-zinc-500">
-                                      {ANSWER_LABELS[a]}
-                                    </span>
-                                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-700">
-                                      <div
-                                        className={`h-full ${ANSWER_BAR_COLORS[a]} transition-all`}
-                                        style={{ width: `${pct}%` }}
-                                      />
-                                    </div>
-                                    <button
-                                      type="button"
-                                      title={
-                                        names.length > 0
-                                          ? names.join("・")
-                                          : undefined
-                                      }
-                                      onClick={() =>
-                                        count > 0 && toggleVoters(voterKey)
-                                      }
-                                      disabled={count === 0}
-                                      className={`w-4 shrink-0 text-right text-[10px] transition-colors disabled:cursor-default ${isOpen ? "font-semibold text-zinc-700 dark:text-zinc-200" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"}`}
-                                    >
-                                      {count}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        !decidedLocked &&
-                                        onVote(pollId, c.id, a, votes)
-                                      }
-                                      disabled={busy !== null || decidedLocked}
-                                      title={
-                                        isSelected
-                                          ? `${ANSWER_LABELS[a]}（もう一度タップで取り消し）`
-                                          : `${ANSWER_LABELS[a]}${a === "first" || a === "want" ? "（他候補では同じ種別は1つだけ）" : ""}`
-                                      }
-                                      className={`shrink-0 rounded-full p-0.5 text-base leading-none transition hover:scale-110 disabled:opacity-40 ${isSelected ? "ring-2 ring-offset-1 ring-zinc-400" : "opacity-50 hover:opacity-100"}`}
-                                    >
-                                      {ICONS[a]}
-                                    </button>
-                                  </div>
-                                  {isOpen && names.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 pl-[calc(7rem+6px)]">
-                                      {names.map((n) => (
-                                        <span
-                                          key={n}
-                                          className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-                                        >
-                                          {n}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            },
-                          )}
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <span className="w-24 shrink-0 text-zinc-500">
+                                行きたい
+                              </span>
+                              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-700">
+                                <div
+                                  className={`h-full ${WANT_BAR_CLASS} transition-all`}
+                                  style={{ width: `${wantBarPct}%` }}
+                                />
+                              </div>
+                              {canViewVoteBreakdown ? (
+                                <button
+                                  type="button"
+                                  title={
+                                    adminWantDetails.length > 0
+                                      ? adminWantDetails
+                                          .map((d) => d.label)
+                                          .join("・")
+                                      : undefined
+                                  }
+                                  onClick={() =>
+                                    wantTotal > 0 &&
+                                    toggleVoters(voterKeyWant)
+                                  }
+                                  disabled={wantTotal === 0}
+                                  className={`min-w-[1.5rem] shrink-0 text-right text-[10px] transition-colors disabled:cursor-default ${wantBreakdownOpen ? "font-semibold text-zinc-700 dark:text-zinc-200" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"}`}
+                                >
+                                  {wantTotal}
+                                </button>
+                              ) : (
+                                <span className="min-w-[1.5rem] shrink-0 text-right text-[10px] text-zinc-400">
+                                  {wantTotal}
+                                </span>
+                              )}
+                              {user && !decidedLocked ? (
+                                <span className="flex shrink-0 items-center gap-0.5">
+                                  <button
+                                    type="button"
+                                    aria-label="行きたいの票を1減らす"
+                                    onClick={() =>
+                                      onSetWant(
+                                        pollId,
+                                        c.id,
+                                        myCount - 1,
+                                        votes,
+                                      )
+                                    }
+                                    disabled={
+                                      busy !== null || myCount <= 0
+                                    }
+                                    className="rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                                  >
+                                    −
+                                  </button>
+                                  <span className="min-w-[1.25rem] text-center text-[10px] font-medium text-zinc-600 dark:text-zinc-300">
+                                    {myCount}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    aria-label="行きたいの票を1増やす"
+                                    onClick={() =>
+                                      onSetWant(
+                                        pollId,
+                                        c.id,
+                                        myCount + 1,
+                                        votes,
+                                      )
+                                    }
+                                    disabled={busy !== null || !canPlusWant}
+                                    className="rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                                  >
+                                    ＋
+                                  </button>
+                                </span>
+                              ) : null}
+                            </div>
+                            {canViewVoteBreakdown &&
+                            wantBreakdownOpen &&
+                            adminWantDetails.length > 0 ? (
+                              <div className="flex flex-wrap gap-1 pl-[calc(6rem+6px)]">
+                                {adminWantDetails.map((d) => (
+                                  <span
+                                    key={d.key}
+                                    className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                                  >
+                                    {d.label}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
                         {(isOwner ||
                           (user && c.data.proposedByUserId === user.uid)) &&
