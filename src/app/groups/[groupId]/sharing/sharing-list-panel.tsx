@@ -131,7 +131,7 @@ export function SharingListPanel({
     return (
       <li
         key={entry.id}
-        className="flex list-none items-start gap-2 text-xs sm:flex-nowrap"
+        className="flex list-none items-center gap-2.5 text-base leading-snug text-zinc-800 dark:text-zinc-100"
       >
         <button
           type="button"
@@ -140,15 +140,17 @@ export function SharingListPanel({
             canClick ? handleTogglePurchased(entry.id, !entry.purchased) : undefined
           }
           disabled={busy !== null || !canClick}
-          className="flex size-11 shrink-0 touch-manipulation select-none items-center justify-center self-start rounded-md text-2xl leading-none text-zinc-800 transition-colors hover:bg-zinc-200/70 active:bg-zinc-300/60 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-100 dark:hover:bg-zinc-700/50 dark:active:bg-zinc-600/50"
+          className="flex size-11 shrink-0 touch-manipulation select-none items-center justify-center rounded-md text-2xl leading-none text-zinc-800 transition-colors hover:bg-zinc-200/70 active:bg-zinc-300/60 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-100 dark:hover:bg-zinc-700/50 dark:active:bg-zinc-600/50"
           aria-checked={entry.purchased}
           aria-label={entry.purchased ? "購入済み（タップで未購入に戻す）" : "購入済みにする"}
           title={entry.purchased ? "購入済み（戻す）" : "購入済みにする"}
         >
           {entry.purchased ? "☑" : "□"}
         </button>
-        <span className="min-w-0 flex-1 break-words pt-1.5">{entry.label}</span>
-        {extraAfterLabel}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="min-w-0 break-words">{entry.label}</span>
+          {extraAfterLabel}
+        </div>
       </li>
     );
   }
@@ -342,11 +344,11 @@ export function SharingListPanel({
       >
         <h3
           id="sharing-assignment-heading"
-          className="text-xs font-semibold tracking-tight text-amber-950 dark:text-amber-100"
+          className="text-sm font-semibold tracking-tight text-amber-950 dark:text-amber-100"
         >
           世帯ごとの担当（集計）
         </h3>
-        <p className="mt-1 text-[11px] leading-relaxed text-amber-900/85 dark:text-amber-200/75">
+        <p className="mt-1 text-xs leading-relaxed text-amber-900/85 sm:text-sm dark:text-amber-200/75">
           下の「買い出し項目一覧」は行ごとの編集用です。ここでは世帯単位でまとめて確認できます。購入が済んだら左の
           <span className="px-0.5 font-medium">□</span>
           を押して
@@ -359,26 +361,26 @@ export function SharingListPanel({
               key={row.familyId}
               className="rounded-md border border-amber-200/70 bg-white/90 px-2.5 py-2 dark:border-amber-800/50 dark:bg-zinc-900/50"
             >
-              <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
+              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                 {row.familyName}
                 <span className="ml-1.5 font-normal text-zinc-500 dark:text-zinc-400">
                   （{row.itemEntries.length}件）
                 </span>
               </p>
-              <ul className="mt-1 space-y-0.5 text-zinc-700 dark:text-zinc-300">
+              <ul className="mt-1.5 space-y-1 text-zinc-700 dark:text-zinc-300">
                 {row.itemEntries.map((ent) => renderSummaryEntryLine(ent))}
               </ul>
             </div>
           ))}
           {assignmentSummary.unassignedEntries.length > 0 ? (
             <div className="rounded-md border border-dashed border-zinc-300 bg-white/60 px-2.5 py-2 dark:border-zinc-600 dark:bg-zinc-900/30">
-              <p className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+              <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
                 未割当（世帯）
                 <span className="ml-1.5 font-normal text-zinc-500">
                   （{assignmentSummary.unassignedEntries.length}件）
                 </span>
               </p>
-              <ul className="mt-1 space-y-0.5 text-zinc-600 dark:text-zinc-400">
+              <ul className="mt-1.5 space-y-1 text-zinc-600 dark:text-zinc-400">
                 {assignmentSummary.unassignedEntries.map((ent) =>
                   renderSummaryEntryLine(ent),
                 )}
@@ -387,10 +389,10 @@ export function SharingListPanel({
           ) : null}
           {assignmentSummary.legacyMemberRows.length > 0 ? (
             <div className="rounded-md border border-dashed border-violet-200 bg-violet-50/50 px-2.5 py-2 dark:border-violet-800/60 dark:bg-violet-950/20">
-              <p className="text-xs font-medium text-violet-900 dark:text-violet-100">
+              <p className="text-sm font-medium text-violet-900 dark:text-violet-100">
                 旧データ（メンバー割当）
               </p>
-              <ul className="mt-1 space-y-0.5 text-violet-800/90 dark:text-violet-200/80">
+              <ul className="mt-1.5 space-y-1 text-violet-800/90 dark:text-violet-200/80">
                 {assignmentSummary.legacyMemberRows.map((row) => {
                   const { displayName, ...entry } = row;
                   return renderSummaryEntryLine(
