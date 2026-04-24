@@ -210,6 +210,37 @@ export function SharingListPanel({
     }
   }
 
+  async function handleMoveToEdge(
+    fromIndex: number,
+    edge: "top" | "bottom",
+  ) {
+    if (!groupId || busy !== null) return;
+    if (items.length <= 1) return;
+    if (edge === "top" && fromIndex === 0) return;
+    if (edge === "bottom" && fromIndex === items.length - 1) return;
+    setBusy("reorder");
+    setError(null);
+    try {
+      const next = [...items];
+      const [moved] = next.splice(fromIndex, 1);
+      if (edge === "top") {
+        next.unshift(moved!);
+      } else {
+        next.push(moved!);
+      }
+      await reorderSharingItemsOrder(
+        groupId,
+        next.map((r) => r.id),
+      );
+      await load();
+      onDataChanged?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "並び替えに失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const formBlock =
     user && isMember ? (
       <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
@@ -475,6 +506,20 @@ export function SharingListPanel({
                         <>
                           <button
                             type="button"
+                            onClick={() => handleMoveToEdge(rowIndex, "top")}
+                            disabled={
+                              busy !== null ||
+                              items.length <= 1 ||
+                              rowIndex === 0
+                            }
+                            className="text-xs text-zinc-500 underline disabled:opacity-40 disabled:no-underline"
+                            aria-label="いちばん上へ"
+                            title="いちばん上へ"
+                          >
+                            最上
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleMoveItem(rowIndex, "up")}
                             disabled={
                               busy !== null || rowIndex === 0
@@ -497,6 +542,20 @@ export function SharingListPanel({
                             title="下へ移動"
                           >
                             下へ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveToEdge(rowIndex, "bottom")}
+                            disabled={
+                              busy !== null ||
+                              items.length <= 1 ||
+                              rowIndex >= items.length - 1
+                            }
+                            className="text-xs text-zinc-500 underline disabled:opacity-40 disabled:no-underline"
+                            aria-label="いちばん下へ"
+                            title="いちばん下へ"
+                          >
+                            最下
                           </button>
                           <button
                             type="button"

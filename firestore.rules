@@ -28,16 +28,21 @@ service cloud.firestore {
         data.label.size() > 0 &&
         data.label.size() <= 200 &&
         (data.sortOrder is int || data.sortOrder is float) &&
-        (data.memo is string || data.memo == null);
+        (!data.keys().hasAny(['memo']) ||
+          data.memo is string ||
+          data.memo == null);
     }
 
-    // memo はキー欠けがあり得る（アクセスは null 相当）。createdByDisplayName も同様。
+    // memo はキー欠けがあり得る。未存在キーを直接参照するとルール全体が偽/エラー扱いになる。
+    // createdByDisplayName も同様（hasAny で分岐してから参照）。
     function sharingItemCoreKeys(data) {
       return data.keys().hasAll([
         'label', 'sortOrder',
         'createdByUserId', 'createdAt', 'updatedAt'
       ]) &&
-        (data.memo is string || data.memo == null) &&
+        (!data.keys().hasAny(['memo']) ||
+          data.memo is string ||
+          data.memo == null) &&
         (!data.keys().hasAny(['createdByDisplayName']) ||
           data.createdByDisplayName is string ||
           data.createdByDisplayName == null);
@@ -49,13 +54,27 @@ service cloud.firestore {
 
     // 世帯フィールドと旧メンバー割当（実値があるとき）を同時に許可しない。
     // keys().hasAny だと null のキーだけでもレガシー扱いになり誤拒否するため、文字列の有無で見る。
+    // 新規未割当は null で both を書き込むが、null は keys() に出ないと hasFam になり損なう。
+    // 世帯キーがどちらも「無い」＝新スタイル未割当として許可（レガシー濃度は従来どおり下で判定）。
+    // 制御構文 if は使えない（単一 return の式にまとめる）
     function sharingAssignmentOk(data) {
       let hasFam = data.keys().hasAll(['assignedFamilyId', 'assignedFamilyName']);
+      let hasAnyFam = data.keys().hasAny(['assignedFamilyId', 'assignedFamilyName']);
+      let hasAnyLegacy = data.keys().hasAny(['assignedUserId', 'assignedDisplayName']);
+      let hasPartialFam = hasAnyFam && !hasFam;
+      // キー未存在のとき assignedUserId を参照すると拒否/評価失敗に繋がる。hasAny の後にだけ参照する。
       let hasLegacyStrings =
-        (data.assignedUserId is string && data.assignedUserId.size() > 0) ||
-        (data.assignedDisplayName is string && data.assignedDisplayName.size() > 0);
-      return (hasFam && !hasLegacyStrings) ||
-        (sharingAssignmentLegacy(data) && !hasFam);
+        (data.keys().hasAny(['assignedUserId']) &&
+          data.assignedUserId is string &&
+          data.assignedUserId.size() > 0) ||
+        (data.keys().hasAny(['assignedDisplayName']) &&
+          data.assignedDisplayName is string &&
+          data.assignedDisplayName.size() > 0);
+      return !hasPartialFam && (
+        (hasFam && !hasLegacyStrings) ||
+        (!hasAnyFam && !hasAnyLegacy && !hasLegacyStrings) ||
+        (sharingAssignmentLegacy(data) && !hasFam)
+      );
     }
 
     // レシピ投票のプレビュー（厳密な要素検証はクライアント任せ、サイズのみ制限）
@@ -448,9 +467,12 @@ service cloud.firestore {
           sharingItemCoreKeys(request.resource.data) &&
           sharingAssignmentOk(request.resource.data) &&
           sharingLabelValid(request.resource.data) &&
-          (request.resource.data.assignedFamilyId == null ||
+          // 未割当の null はキーごと送られないことがある。存在しない参照はルール上エラー/偽になるため hasAny で分岐
+          (!request.resource.data.keys().hasAny(['assignedFamilyId']) ||
+            request.resource.data.assignedFamilyId == null ||
             request.resource.data.assignedFamilyId is string) &&
-          (request.resource.data.assignedFamilyName == null ||
+          (!request.resource.data.keys().hasAny(['assignedFamilyName']) ||
+            request.resource.data.assignedFamilyName == null ||
             request.resource.data.assignedFamilyName is string);
         // 更新: 型混在の既存データで (x==null || x is string) が偽になり全拒否するのを避ける。
         // 作成者の変更だけ防ぐ（メンバー同士の不正編集リスクは許容しやすい形）。
