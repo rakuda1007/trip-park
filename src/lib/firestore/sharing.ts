@@ -101,6 +101,15 @@ export async function listSharingItems(groupId: string): Promise<SharingItemRow[
   return out;
 }
 
+/** 項目名の文字列順（UTF-16 コードユニット順＝一般的な「文字コード昇順」） */
+function sortSummaryByLabel<T extends { label: string }>(entries: T[]): T[] {
+  return [...entries].sort((a, b) => {
+    if (a.label < b.label) return -1;
+    if (a.label > b.label) return 1;
+    return 0;
+  });
+}
+
 /** 世帯ごとに項目名をまとめる（集計表示用） */
 export function aggregateSharingAssignmentsByFamily(
   items: SharingItemRow[],
@@ -170,7 +179,14 @@ export function aggregateSharingAssignmentsByFamily(
     }
   }
 
-  return { byFamily, unassignedEntries, legacyMemberRows };
+  return {
+    byFamily: byFamily.map((row) => ({
+      ...row,
+      itemEntries: sortSummaryByLabel(row.itemEntries),
+    })),
+    unassignedEntries: sortSummaryByLabel(unassignedEntries),
+    legacyMemberRows: sortSummaryByLabel(legacyMemberRows),
+  };
 }
 
 /** 要約用: 全件数と世帯未割当件数（旧メンバー割当は未割当に含める） */

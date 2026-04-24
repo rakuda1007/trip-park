@@ -131,7 +131,7 @@ export function SharingListPanel({
     return (
       <li
         key={entry.id}
-        className="flex list-none items-start gap-1.5 text-[11px] sm:flex-nowrap"
+        className="flex list-none items-start gap-2 text-xs sm:flex-nowrap"
       >
         <button
           type="button"
@@ -140,14 +140,14 @@ export function SharingListPanel({
             canClick ? handleTogglePurchased(entry.id, !entry.purchased) : undefined
           }
           disabled={busy !== null || !canClick}
-          className="mt-0.5 shrink-0 min-h-[1.1rem] min-w-[1.1rem] select-none text-sm leading-none text-zinc-800 tabular-nums transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-100"
+          className="flex size-11 shrink-0 touch-manipulation select-none items-center justify-center self-start rounded-md text-2xl leading-none text-zinc-800 transition-colors hover:bg-zinc-200/70 active:bg-zinc-300/60 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-100 dark:hover:bg-zinc-700/50 dark:active:bg-zinc-600/50"
           aria-checked={entry.purchased}
           aria-label={entry.purchased ? "購入済み（タップで未購入に戻す）" : "購入済みにする"}
           title={entry.purchased ? "購入済み（戻す）" : "購入済みにする"}
         >
           {entry.purchased ? "☑" : "□"}
         </button>
-        <span className="min-w-0 flex-1 break-words">{entry.label}</span>
+        <span className="min-w-0 flex-1 break-words pt-1.5">{entry.label}</span>
         {extraAfterLabel}
       </li>
     );
