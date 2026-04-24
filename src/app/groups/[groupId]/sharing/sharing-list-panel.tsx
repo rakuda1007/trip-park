@@ -28,6 +28,50 @@ type SharingListPanelProps = {
   onDataChanged?: () => void;
 };
 
+type ListSortField = "label" | "memo" | "assign";
+
+function sharingAssignSortKey(
+  item: SharingItemRow,
+  families: { id: string; data: { name: string } }[],
+): string {
+  if (item.data.assignedFamilyId) {
+    const n =
+      families.find((f) => f.id === item.data.assignedFamilyId)?.data.name ??
+      item.data.assignedFamilyName?.trim() ??
+      "";
+    return n || "世帯";
+  }
+  if (item.legacyMemberAssignee) {
+    return `（旧）${item.legacyMemberAssignee.displayName?.trim() || item.legacyMemberAssignee.userId}`;
+  }
+  return "未割当";
+}
+
+function compareSharingForListSort(
+  a: SharingItemRow,
+  b: SharingItemRow,
+  field: ListSortField,
+  families: { id: string; data: { name: string } }[],
+  dir: "asc" | "desc",
+): number {
+  const s = (n: number) => (dir === "asc" ? n : -n);
+  if (field === "label") {
+    return s(a.data.label.localeCompare(b.data.label, "ja", { numeric: true }));
+  }
+  if (field === "memo") {
+    const ma = (a.data.memo ?? "").trim();
+    const mb = (b.data.memo ?? "").trim();
+    return s(ma.localeCompare(mb, "ja", { numeric: true }));
+  }
+  return s(
+    sharingAssignSortKey(a, families).localeCompare(
+      sharingAssignSortKey(b, families),
+      "ja",
+      { numeric: true },
+    ),
+  );
+}
+
 export function SharingListPanel({
   variant,
   onDataChanged,
@@ -99,6 +143,27 @@ export function SharingListPanel({
   }, [load]);
 
   const isMember = Boolean(user && members.some((x) => x.userId === user.uid));
+
+  const [listSort, setListSort] = useState<{
+    field: ListSortField | null;
+    dir: "asc" | "desc";
+  }>({ field: null, dir: "asc" });
+
+  const displayedItems = useMemo(() => {
+    if (listSort.field === null) return items;
+    return [...items].sort((a, b) =>
+      compareSharingForListSort(a, b, listSort.field!, families, listSort.dir),
+    );
+  }, [items, listSort, families]);
+
+  function handleListSortClick(field: ListSortField) {
+    setListSort((prev) => {
+      if (prev.field === field) {
+        return { field, dir: prev.dir === "asc" ? "desc" : "asc" };
+      }
+      return { field, dir: "asc" };
+    });
+  }
 
   const assignmentSummary = useMemo(
     () => aggregateSharingAssignmentsByFamily(items, families),
@@ -242,11 +307,11 @@ export function SharingListPanel({
   async function handleMoveItem(fromIndex: number, direction: "up" | "down") {
     if (!groupId || busy !== null) return;
     const toIndex = direction === "up" ? fromIndex - 1 : fromIndex + 1;
-    if (toIndex < 0 || toIndex >= items.length) return;
+    if (toIndex < 0 || toIndex >= displayedItems.length) return;
     setBusy("reorder");
     setError(null);
     try {
-      const next = [...items];
+      const next = [...displayedItems];
       const tmp = next[fromIndex]!;
       next[fromIndex] = next[toIndex]!;
       next[toIndex] = tmp;
@@ -254,6 +319,7 @@ export function SharingListPanel({
         groupId,
         next.map((r) => r.id),
       );
+      setListSort({ field: null, dir: "asc" });
       await load();
       onDataChanged?.();
     } catch (e) {
@@ -268,13 +334,13 @@ export function SharingListPanel({
     edge: "top" | "bottom",
   ) {
     if (!groupId || busy !== null) return;
-    if (items.length <= 1) return;
+    if (displayedItems.length <= 1) return;
     if (edge === "top" && fromIndex === 0) return;
-    if (edge === "bottom" && fromIndex === items.length - 1) return;
+    if (edge === "bottom" && fromIndex === displayedItems.length - 1) return;
     setBusy("reorder");
     setError(null);
     try {
-      const next = [...items];
+      const next = [...displayedItems];
       const [moved] = next.splice(fromIndex, 1);
       if (edge === "top") {
         next.unshift(moved!);
@@ -285,6 +351,7 @@ export function SharingListPanel({
         groupId,
         next.map((r) => r.id),
       );
+      setListSort({ field: null, dir: "asc" });
       await load();
       onDataChanged?.();
     } catch (e) {
@@ -414,16 +481,82 @@ export function SharingListPanel({
       <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
         <thead>
           <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-[11px] font-semibold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 sm:text-xs">
-            <th className="w-[22%] min-w-0 px-1.5 py-2 sm:w-[24%] sm:px-3 sm:py-3">
-              項目
+            <th
+              scope="col"
+              className="w-[22%] min-w-0 px-1.5 py-1.5 sm:w-[24%] sm:px-2 sm:py-2"
+            >
+              <button
+                type="button"
+                onClick={() => handleListSortClick("label")}
+                className="flex w-full min-w-0 items-center justify-start gap-0.5 rounded px-0.5 py-1 text-left font-semibold text-zinc-600 hover:bg-zinc-200/80 dark:text-zinc-300 dark:hover:bg-zinc-700/50"
+                aria-sort={
+                  listSort.field === "label"
+                    ? listSort.dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+              >
+                <span>項目</span>
+                {listSort.field === "label" ? (
+                  <span className="shrink-0" aria-hidden>
+                    {listSort.dir === "asc" ? "↑" : "↓"}
+                  </span>
+                ) : null}
+              </button>
             </th>
-            <th className="w-[20%] min-w-0 px-1.5 py-2 sm:w-[22%] sm:px-3 sm:py-3">
-              補足
+            <th
+              scope="col"
+              className="w-[20%] min-w-0 px-1.5 py-1.5 sm:w-[22%] sm:px-2 sm:py-2"
+            >
+              <button
+                type="button"
+                onClick={() => handleListSortClick("memo")}
+                className="flex w-full min-w-0 items-center justify-start gap-0.5 rounded px-0.5 py-1 text-left font-semibold text-zinc-600 hover:bg-zinc-200/80 dark:text-zinc-300 dark:hover:bg-zinc-700/50"
+                aria-sort={
+                  listSort.field === "memo"
+                    ? listSort.dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+              >
+                <span>補足</span>
+                {listSort.field === "memo" ? (
+                  <span className="shrink-0" aria-hidden>
+                    {listSort.dir === "asc" ? "↑" : "↓"}
+                  </span>
+                ) : null}
+              </button>
             </th>
-            <th className="w-[35%] min-w-0 px-1.5 py-2 sm:w-[30%] sm:px-3 sm:py-3">
-              担当（世帯）
+            <th
+              scope="col"
+              className="w-[35%] min-w-0 px-1.5 py-1.5 sm:w-[30%] sm:px-2 sm:py-2"
+            >
+              <button
+                type="button"
+                onClick={() => handleListSortClick("assign")}
+                className="flex w-full min-w-0 items-center justify-start gap-0.5 rounded px-0.5 py-1 text-left font-semibold text-zinc-600 hover:bg-zinc-200/80 dark:text-zinc-300 dark:hover:bg-zinc-700/50"
+                aria-sort={
+                  listSort.field === "assign"
+                    ? listSort.dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+              >
+                <span>担当（世帯）</span>
+                {listSort.field === "assign" ? (
+                  <span className="shrink-0" aria-hidden>
+                    {listSort.dir === "asc" ? "↑" : "↓"}
+                  </span>
+                ) : null}
+              </button>
             </th>
-            <th className="w-[23%] min-w-0 px-1.5 py-2 sm:w-[24%] sm:px-3 sm:py-3">
+            <th
+              scope="col"
+              className="w-[23%] min-w-0 px-1.5 py-2 sm:w-[24%] sm:px-3 sm:py-3"
+            >
               操作
             </th>
           </tr>
@@ -439,7 +572,7 @@ export function SharingListPanel({
               </td>
             </tr>
           ) : (
-            items.map((item, rowIndex) => {
+            displayedItems.map((item, rowIndex) => {
               const { id, data } = item;
               return (
               <tr
@@ -564,7 +697,7 @@ export function SharingListPanel({
                             onClick={() => handleMoveToEdge(rowIndex, "top")}
                             disabled={
                               busy !== null ||
-                              items.length <= 1 ||
+                              displayedItems.length <= 1 ||
                               rowIndex === 0
                             }
                             className="text-xs text-zinc-500 underline disabled:opacity-40 disabled:no-underline"
@@ -590,7 +723,7 @@ export function SharingListPanel({
                             onClick={() => handleMoveItem(rowIndex, "down")}
                             disabled={
                               busy !== null ||
-                              rowIndex >= items.length - 1
+                              rowIndex >= displayedItems.length - 1
                             }
                             className="text-xs text-zinc-500 underline disabled:opacity-40 disabled:no-underline"
                             aria-label="下へ移動"
@@ -603,8 +736,8 @@ export function SharingListPanel({
                             onClick={() => handleMoveToEdge(rowIndex, "bottom")}
                             disabled={
                               busy !== null ||
-                              items.length <= 1 ||
-                              rowIndex >= items.length - 1
+                              displayedItems.length <= 1 ||
+                              rowIndex >= displayedItems.length - 1
                             }
                             className="text-xs text-zinc-500 underline disabled:opacity-40 disabled:no-underline"
                             aria-label="いちばん下へ"
