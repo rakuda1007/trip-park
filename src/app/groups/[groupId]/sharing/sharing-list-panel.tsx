@@ -12,11 +12,14 @@ import {
   reorderSharingItemsOrder,
   updateSharingItemFamilyAssignment,
   updateSharingItemFields,
+  updateSharingItemPurchased,
   type SharingItemRow,
+  type SharingSummaryEntry,
 } from "@/lib/firestore/sharing";
 import type { FamilyDoc } from "@/types/family";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type SharingListPanelProps = {
@@ -101,6 +104,54 @@ export function SharingListPanel({
     () => aggregateSharingAssignmentsByFamily(items, families),
     [items, families],
   );
+
+  async function handleTogglePurchased(
+    itemId: string,
+    nextPurchased: boolean,
+  ) {
+    if (!groupId) return;
+    setBusy(`chk-${itemId}`);
+    setError(null);
+    try {
+      await updateSharingItemPurchased(groupId, itemId, nextPurchased);
+      await load();
+      onDataChanged?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "チェックの更新に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function renderSummaryEntryLine(
+    entry: SharingSummaryEntry,
+    extraAfterLabel?: ReactNode,
+  ) {
+    const canClick = user && isMember;
+    return (
+      <li
+        key={entry.id}
+        className="flex list-none items-start gap-1.5 text-[11px] sm:flex-nowrap"
+      >
+        <button
+          type="button"
+          role="checkbox"
+          onClick={() =>
+            canClick ? handleTogglePurchased(entry.id, !entry.purchased) : undefined
+          }
+          disabled={busy !== null || !canClick}
+          className="mt-0.5 shrink-0 min-h-[1.1rem] min-w-[1.1rem] select-none text-sm leading-none text-zinc-800 tabular-nums transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-100"
+          aria-checked={entry.purchased}
+          aria-label={entry.purchased ? "購入済み（タップで未購入に戻す）" : "購入済みにする"}
+          title={entry.purchased ? "購入済み（戻す）" : "購入済みにする"}
+        >
+          {entry.purchased ? "☑" : "□"}
+        </button>
+        <span className="min-w-0 flex-1 break-words">{entry.label}</span>
+        {extraAfterLabel}
+      </li>
+    );
+  }
 
   async function handleAdd() {
     if (!user || !newLabel.trim()) return;
@@ -296,7 +347,11 @@ export function SharingListPanel({
           世帯ごとの担当（集計）
         </h3>
         <p className="mt-1 text-[11px] leading-relaxed text-amber-900/85 dark:text-amber-200/75">
-          下の「買い出し項目一覧」は行ごとの編集用です。ここでは世帯単位でまとめて確認できます。
+          下の「買い出し項目一覧」は行ごとの編集用です。ここでは世帯単位でまとめて確認できます。購入が済んだら左の
+          <span className="px-0.5 font-medium">□</span>
+          を押して
+          <span className="px-0.5 font-medium">☑</span>
+          にできます。
         </p>
         <div className="mt-2 space-y-2">
           {assignmentSummary.byFamily.map((row) => (
@@ -307,46 +362,44 @@ export function SharingListPanel({
               <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
                 {row.familyName}
                 <span className="ml-1.5 font-normal text-zinc-500 dark:text-zinc-400">
-                  （{row.itemLabels.length}件）
+                  （{row.itemEntries.length}件）
                 </span>
               </p>
-              <ul className="mt-1 list-inside list-disc text-[11px] text-zinc-700 dark:text-zinc-300">
-                {row.itemLabels.map((lab, i) => (
-                  <li key={`${row.familyId}-${i}-${lab}`}>{lab}</li>
-                ))}
+              <ul className="mt-1 space-y-0.5 text-zinc-700 dark:text-zinc-300">
+                {row.itemEntries.map((ent) => renderSummaryEntryLine(ent))}
               </ul>
             </div>
           ))}
-          {assignmentSummary.unassignedLabels.length > 0 ? (
+          {assignmentSummary.unassignedEntries.length > 0 ? (
             <div className="rounded-md border border-dashed border-zinc-300 bg-white/60 px-2.5 py-2 dark:border-zinc-600 dark:bg-zinc-900/30">
               <p className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
                 未割当（世帯）
                 <span className="ml-1.5 font-normal text-zinc-500">
-                  （{assignmentSummary.unassignedLabels.length}件）
+                  （{assignmentSummary.unassignedEntries.length}件）
                 </span>
               </p>
-              <ul className="mt-1 list-inside list-disc text-[11px] text-zinc-600 dark:text-zinc-400">
-                {assignmentSummary.unassignedLabels.map((lab, i) => (
-                  <li key={`un-${i}-${lab}`}>{lab}</li>
-                ))}
+              <ul className="mt-1 space-y-0.5 text-zinc-600 dark:text-zinc-400">
+                {assignmentSummary.unassignedEntries.map((ent) =>
+                  renderSummaryEntryLine(ent),
+                )}
               </ul>
             </div>
           ) : null}
-          {assignmentSummary.legacyMemberLabels.length > 0 ? (
+          {assignmentSummary.legacyMemberRows.length > 0 ? (
             <div className="rounded-md border border-dashed border-violet-200 bg-violet-50/50 px-2.5 py-2 dark:border-violet-800/60 dark:bg-violet-950/20">
               <p className="text-xs font-medium text-violet-900 dark:text-violet-100">
                 旧データ（メンバー割当）
               </p>
-              <ul className="mt-1 space-y-0.5 text-[11px] text-violet-800/90 dark:text-violet-200/80">
-                {assignmentSummary.legacyMemberLabels.map((row, i) => (
-                  <li key={`leg-${i}-${row.label}`}>
-                    {row.label}
-                    <span className="text-violet-600/90 dark:text-violet-300/80">
-                      {" "}
-                      → メンバー「{row.displayName?.trim() || "—"}」
-                    </span>
-                  </li>
-                ))}
+              <ul className="mt-1 space-y-0.5 text-violet-800/90 dark:text-violet-200/80">
+                {assignmentSummary.legacyMemberRows.map((row) => {
+                  const { displayName, ...entry } = row;
+                  return renderSummaryEntryLine(
+                    entry,
+                    <span className="shrink-0 text-violet-600/90 dark:text-violet-300/80">
+                      → メンバー「{displayName?.trim() || "—"}」
+                    </span>,
+                  );
+                })}
               </ul>
             </div>
           ) : null}

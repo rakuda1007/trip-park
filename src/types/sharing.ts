@@ -11,6 +11,8 @@ export type SharingItemDoc = {
   assignedFamilyId: string | null;
   /** 割当時の世帯名（表示用キャッシュ） */
   assignedFamilyName: string | null;
+  /** 世帯まとめでの購入チェック用（集計の□／☑） */
+  purchased: boolean;
   sortOrder: number;
   createdByUserId: string;
   createdByDisplayName: string | null;

@@ -45,7 +45,9 @@ service cloud.firestore {
           data.memo == null) &&
         (!data.keys().hasAny(['createdByDisplayName']) ||
           data.createdByDisplayName is string ||
-          data.createdByDisplayName == null);
+          data.createdByDisplayName == null) &&
+        // 新規は未購入のみ。キーなしは list 側で false 扱い
+        (!data.keys().hasAny(['purchased']) || data.purchased == false);
     }
 
     function sharingAssignmentLegacy(data) {

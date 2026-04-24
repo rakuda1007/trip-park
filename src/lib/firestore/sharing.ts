@@ -23,11 +23,18 @@ export type SharingItemRow = {
   legacyMemberAssignee?: { userId: string; displayName: string | null };
 };
 
+/** 世帯集計の1行（チェック用に id を保持） */
+export type SharingSummaryEntry = {
+  id: string;
+  label: string;
+  purchased: boolean;
+};
+
 /** 世帯ごとの担当集計（UI 用） */
 export type SharingAssignmentByFamily = {
   familyId: string;
   familyName: string;
-  itemLabels: string[];
+  itemEntries: SharingSummaryEntry[];
 };
 
 export async function listSharingItems(groupId: string): Promise<SharingItemRow[]> {
@@ -74,6 +81,7 @@ export async function listSharingItems(groupId: string): Promise<SharingItemRow[
         memo: typeof raw.memo === "string" ? raw.memo : null,
         assignedFamilyId,
         assignedFamilyName,
+        purchased: raw.purchased === true,
         sortOrder: typeof raw.sortOrder === "number" ? raw.sortOrder : 0,
         createdByUserId:
           typeof raw.createdByUserId === "string" ? raw.createdByUserId : "",
@@ -99,15 +107,24 @@ export function aggregateSharingAssignmentsByFamily(
   families: { id: string; data: { name: string } }[],
 ): {
   byFamily: SharingAssignmentByFamily[];
-  unassignedLabels: string[];
-  legacyMemberLabels: { label: string; displayName: string | null }[];
+  unassignedEntries: SharingSummaryEntry[];
+  legacyMemberRows: (SharingSummaryEntry & {
+    displayName: string | null;
+  })[];
 } {
-  const map = new Map<string, { name: string; labels: string[] }>();
-  const unassignedLabels: string[] = [];
-  const legacyMemberLabels: { label: string; displayName: string | null }[] = [];
+  const map = new Map<string, { name: string; entries: SharingSummaryEntry[] }>();
+  const unassignedEntries: SharingSummaryEntry[] = [];
+  const legacyMemberRows: (SharingSummaryEntry & {
+    displayName: string | null;
+  })[] = [];
 
   for (const row of items) {
-    const { label } = row.data;
+    const { label, purchased } = row.data;
+    const ent: SharingSummaryEntry = {
+      id: row.id,
+      label,
+      purchased,
+    };
     const fid = row.data.assignedFamilyId;
     if (fid) {
       const name =
@@ -116,17 +133,17 @@ export function aggregateSharingAssignmentsByFamily(
         "世帯";
       let bucket = map.get(fid);
       if (!bucket) {
-        bucket = { name, labels: [] };
+        bucket = { name, entries: [] };
         map.set(fid, bucket);
       }
-      bucket.labels.push(label);
+      bucket.entries.push(ent);
     } else if (row.legacyMemberAssignee) {
-      legacyMemberLabels.push({
-        label,
+      legacyMemberRows.push({
+        ...ent,
         displayName: row.legacyMemberAssignee.displayName,
       });
     } else {
-      unassignedLabels.push(label);
+      unassignedEntries.push(ent);
     }
   }
 
@@ -135,25 +152,25 @@ export function aggregateSharingAssignmentsByFamily(
 
   for (const f of families) {
     const b = map.get(f.id);
-    if (b && b.labels.length > 0) {
+    if (b && b.entries.length > 0) {
       byFamily.push({
         familyId: f.id,
         familyName: f.data.name,
-        itemLabels: b.labels,
+        itemEntries: b.entries,
       });
     }
   }
   for (const [fid, b] of map) {
-    if (!familyIds.has(fid) && b.labels.length > 0) {
+    if (!familyIds.has(fid) && b.entries.length > 0) {
       byFamily.push({
         familyId: fid,
         familyName: b.name,
-        itemLabels: b.labels,
+        itemEntries: b.entries,
       });
     }
   }
 
-  return { byFamily, unassignedLabels, legacyMemberLabels };
+  return { byFamily, unassignedEntries, legacyMemberRows };
 }
 
 /** 要約用: 全件数と世帯未割当件数（旧メンバー割当は未割当に含める） */
@@ -201,6 +218,7 @@ export async function addSharingItem(
     memo: params.memo?.trim() || null,
     assignedFamilyId: null,
     assignedFamilyName: null,
+    purchased: false,
     sortOrder: nextOrder,
     createdByUserId: uid,
     createdByDisplayName: displayName,
@@ -265,6 +283,21 @@ export async function updateSharingItemFields(
     memo,
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function updateSharingItemPurchased(
+  groupId: string,
+  itemId: string,
+  purchased: boolean,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  await updateDoc(
+    doc(db, COLLECTIONS.groups, groupId, SUB.sharingItems, itemId),
+    {
+      purchased,
+      updatedAt: serverTimestamp(),
+    },
+  );
 }
 
 export async function deleteSharingItem(
