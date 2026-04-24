@@ -30,6 +30,9 @@ type SharingListPanelProps = {
 
 type ListSortField = "label" | "memo" | "assign";
 
+/** 世帯集計ブロック: 購入チェック状況で絞り込み */
+type SummaryPurchaseFilter = "all" | "purchased" | "unpurchased";
+
 function sharingAssignSortKey(
   item: SharingItemRow,
   families: { id: string; data: { name: string } }[],
@@ -149,6 +152,9 @@ export function SharingListPanel({
     dir: "asc" | "desc";
   }>({ field: null, dir: "asc" });
 
+  const [summaryPurchaseFilter, setSummaryPurchaseFilter] =
+    useState<SummaryPurchaseFilter>("all");
+
   const displayedItems = useMemo(() => {
     if (listSort.field === null) return items;
     return [...items].sort((a, b) =>
@@ -169,6 +175,29 @@ export function SharingListPanel({
     () => aggregateSharingAssignmentsByFamily(items, families),
     [items, families],
   );
+
+  const filteredAssignmentSummary = useMemo(() => {
+    const match = (e: { purchased: boolean }) => {
+      if (summaryPurchaseFilter === "all") return true;
+      if (summaryPurchaseFilter === "purchased") return e.purchased;
+      return !e.purchased;
+    };
+    return {
+      byFamily: assignmentSummary.byFamily
+        .map((row) => ({
+          ...row,
+          itemEntries: row.itemEntries.filter(match),
+        }))
+        .filter((row) => row.itemEntries.length > 0),
+      unassignedEntries: assignmentSummary.unassignedEntries.filter(match),
+      legacyMemberRows: assignmentSummary.legacyMemberRows.filter(match),
+    };
+  }, [assignmentSummary, summaryPurchaseFilter]);
+
+  const hasFilteredSummaryContent =
+    filteredAssignmentSummary.byFamily.length > 0 ||
+    filteredAssignmentSummary.unassignedEntries.length > 0 ||
+    filteredAssignmentSummary.legacyMemberRows.length > 0;
 
   async function handleTogglePurchased(
     itemId: string,
@@ -422,8 +451,51 @@ export function SharingListPanel({
           <span className="px-0.5 font-medium">☑</span>
           にできます。
         </p>
+        <div
+          className="mt-3"
+          role="group"
+          aria-label="集計の表示"
+        >
+          <p className="text-[11px] font-medium text-amber-900/90 dark:text-amber-200/80">
+            表示の切替
+            <span className="ml-1 font-normal text-amber-800/80 dark:text-amber-200/60">
+              （未購入＝残り、購入済＝取得済）
+            </span>
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {(
+              [
+                { value: "all" as const, label: "すべて" },
+                { value: "unpurchased" as const, label: "未購入" },
+                { value: "purchased" as const, label: "購入済" },
+              ] as const
+            ).map((opt) => {
+              const active = summaryPurchaseFilter === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setSummaryPurchaseFilter(opt.value)}
+                  aria-pressed={active}
+                  className={
+                    active
+                      ? "rounded-md border border-amber-500 bg-amber-200/80 px-2.5 py-1.5 text-xs font-medium text-amber-950 shadow-sm dark:border-amber-600 dark:bg-amber-900/50 dark:text-amber-50"
+                      : "rounded-md border border-amber-300/60 bg-white/80 px-2.5 py-1.5 text-xs font-medium text-amber-900/80 hover:bg-amber-100/50 dark:border-amber-800/60 dark:bg-zinc-900/40 dark:text-amber-100/80 dark:hover:bg-amber-950/30"
+                  }
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="mt-2 space-y-2">
-          {assignmentSummary.byFamily.map((row) => (
+          {!hasFilteredSummaryContent ? (
+            <p className="rounded-md border border-dashed border-amber-300/70 bg-amber-100/30 px-3 py-3 text-sm text-amber-950/80 dark:border-amber-800/50 dark:bg-amber-950/20 dark:text-amber-100/80">
+              この条件に該当する項目はありません。
+            </p>
+          ) : null}
+          {filteredAssignmentSummary.byFamily.map((row) => (
             <div
               key={row.familyId}
               className="rounded-md border border-amber-200/70 bg-white/90 px-2.5 py-2 dark:border-amber-800/50 dark:bg-zinc-900/50"
@@ -439,28 +511,28 @@ export function SharingListPanel({
               </ul>
             </div>
           ))}
-          {assignmentSummary.unassignedEntries.length > 0 ? (
+          {filteredAssignmentSummary.unassignedEntries.length > 0 ? (
             <div className="rounded-md border border-dashed border-zinc-300 bg-white/60 px-2.5 py-2 dark:border-zinc-600 dark:bg-zinc-900/30">
               <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
                 未割当（世帯）
                 <span className="ml-1.5 font-normal text-zinc-500">
-                  （{assignmentSummary.unassignedEntries.length}件）
+                  （{filteredAssignmentSummary.unassignedEntries.length}件）
                 </span>
               </p>
               <ul className="mt-1.5 space-y-1 text-zinc-600 dark:text-zinc-400">
-                {assignmentSummary.unassignedEntries.map((ent) =>
+                {filteredAssignmentSummary.unassignedEntries.map((ent) =>
                   renderSummaryEntryLine(ent),
                 )}
               </ul>
             </div>
           ) : null}
-          {assignmentSummary.legacyMemberRows.length > 0 ? (
+          {filteredAssignmentSummary.legacyMemberRows.length > 0 ? (
             <div className="rounded-md border border-dashed border-violet-200 bg-violet-50/50 px-2.5 py-2 dark:border-violet-800/60 dark:bg-violet-950/20">
               <p className="text-sm font-medium text-violet-900 dark:text-violet-100">
                 旧データ（メンバー割当）
               </p>
               <ul className="mt-1.5 space-y-1 text-violet-800/90 dark:text-violet-200/80">
-                {assignmentSummary.legacyMemberRows.map((row) => {
+                {filteredAssignmentSummary.legacyMemberRows.map((row) => {
                   const { displayName, ...entry } = row;
                   return renderSummaryEntryLine(
                     entry,
