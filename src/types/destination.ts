@@ -7,8 +7,16 @@ export type DestinationPollDoc = {
   title: string;
   /** 並び順（小さいほど上） */
   sortOrder: number;
-  /** オーナーが確定した目的地名（候補の name と一致）。未確定は null */
+  /**
+   * オーナーが確定した目的地名（候補の name と一致）。未確定は null。
+   * レガシー単一確定用。複数確定時は先頭と同期する。
+   */
   decidedDestinationName: string | null;
+  /**
+   * 同一ブロックで複数確定（最大 DESTINATION_DECIDE_MAX_PER_POLL）。
+   * 未設定の既存データは decidedDestinationName から解釈する。
+   */
+  decidedDestinationNames?: string[] | null;
   createdByUserId: string;
   createdAt: unknown;
   updatedAt: unknown;
@@ -56,3 +64,6 @@ export type DestinationVoteDoc = {
 
 /** 1 人あたり1投票ブロック内に使える「行きたい」票の上限 */
 export const DESTINATION_WANT_VOTES_MAX_PER_USER = 3;
+
+/** 1 投票ブロックあたり確定できる目的地の上限（「行きたい」と同じく 3） */
+export const DESTINATION_DECIDE_MAX_PER_POLL = 3;

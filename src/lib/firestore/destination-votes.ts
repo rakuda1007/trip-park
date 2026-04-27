@@ -6,7 +6,10 @@ import type {
   DestinationPollDoc,
   DestinationVoteDoc,
 } from "@/types/destination";
-import { DESTINATION_WANT_VOTES_MAX_PER_USER } from "@/types/destination";
+import {
+  DESTINATION_DECIDE_MAX_PER_POLL,
+  DESTINATION_WANT_VOTES_MAX_PER_USER,
+} from "@/types/destination";
 import {
   addDoc,
   collection,
@@ -24,6 +27,27 @@ import {
 } from "firebase/firestore";
 
 export type PollItem = { id: string; data: DestinationPollDoc };
+
+/** 投票ブロック doc から確定済み目的地名の配列（重複除去・最大件数まで） */
+export function normalizeDecidedNamesFromPollDoc(
+  data: DestinationPollDoc,
+): string[] {
+  const raw = data.decidedDestinationNames;
+  if (Array.isArray(raw) && raw.length > 0) {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const s of raw) {
+      const t = typeof s === "string" ? s.trim() : "";
+      if (!t || seen.has(t)) continue;
+      seen.add(t);
+      out.push(t);
+      if (out.length >= DESTINATION_DECIDE_MAX_PER_POLL) break;
+    }
+    return out;
+  }
+  const single = data.decidedDestinationName?.trim();
+  return single ? [single] : [];
+}
 export type CandidateItem = { id: string; data: DestinationCandidateDoc };
 export type VoteItem = { id: string; data: DestinationVoteDoc };
 
@@ -63,15 +87,11 @@ function votesCollection(groupId: string, pollId: string) {
 
 /** グループ doc の destination に書き込む要約文（旅程ナビ・一覧用） */
 export function formatDestinationSummaryFromPolls(
-  polls: { title: string; decidedDestinationName: string | null }[],
+  polls: { title: string; decidedNames: string[] }[],
 ): string | null {
   const parts = polls
-    .filter(
-      (p) =>
-        typeof p.decidedDestinationName === "string" &&
-        p.decidedDestinationName.trim() !== "",
-    )
-    .map((p) => `${p.title.trim()}: ${p.decidedDestinationName!.trim()}`);
+    .filter((p) => p.decidedNames.length > 0)
+    .map((p) => `${p.title.trim()}: ${p.decidedNames.join("、")}`);
   if (parts.length === 0) return null;
   return parts.join(" / ");
 }
@@ -81,7 +101,7 @@ export async function syncGroupDestinationSummary(groupId: string): Promise<void
   const summary = formatDestinationSummaryFromPolls(
     polls.map((p) => ({
       title: p.data.title,
-      decidedDestinationName: p.data.decidedDestinationName,
+      decidedNames: normalizeDecidedNamesFromPollDoc(p.data),
     })),
   );
   await updateDestination(groupId, summary);
@@ -99,11 +119,7 @@ export async function isDestinationStepComplete(
   if (polls.length === 0) {
     return !!legacyDestination?.trim();
   }
-  return polls.every(
-    (p) =>
-      typeof p.data.decidedDestinationName === "string" &&
-      p.data.decidedDestinationName.trim() !== "",
-  );
+  return polls.every((p) => normalizeDecidedNamesFromPollDoc(p.data).length > 0);
 }
 
 // ── レガシー（ルート直下）読み取り ─────────────────────────────
@@ -177,10 +193,15 @@ export async function migrateLegacyDestinationPollIfNeeded(
 
   const pollRef = doc(pollsCollection(groupId));
   const batch = writeBatch(db);
+  const legacyNames =
+    legacyDest?.trim() && legacyDest.trim().length > 0
+      ? [legacyDest.trim()]
+      : [];
   batch.set(pollRef, {
     title: "目的地",
     sortOrder: 0,
-    decidedDestinationName: legacyDest?.trim() ? legacyDest.trim() : null,
+    decidedDestinationName: legacyNames[0] ?? null,
+    decidedDestinationNames: legacyNames,
     createdByUserId: uid,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -258,6 +279,7 @@ export async function addDestinationPoll(
     title: params.title.trim(),
     sortOrder: params.sortOrder,
     decidedDestinationName: null,
+    decidedDestinationNames: [],
     createdByUserId: uid,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -283,17 +305,28 @@ export async function updateDestinationPollMeta(
   await syncGroupDestinationSummary(groupId);
 }
 
-/** オーナー／管理者が確定する。null で確定解除 */
-export async function setPollDecidedDestination(
+/**
+ * オーナー／管理者が確定リストを保存する。
+ * null または空配列で確定解除。名前は最大 DESTINATION_DECIDE_MAX_PER_POLL 件。
+ */
+export async function setPollDecidedDestinationNames(
   groupId: string,
   pollId: string,
-  destinationName: string | null,
+  names: string[] | null,
 ): Promise<void> {
+  const normalized =
+    names == null
+      ? []
+      : [...new Set(names.map((n) => n.trim()).filter(Boolean))].slice(
+          0,
+          DESTINATION_DECIDE_MAX_PER_POLL,
+        );
   const db = getFirebaseFirestore();
   await updateDoc(
     doc(db, COLLECTIONS.groups, groupId, SUB.destinationPolls, pollId),
     {
-      decidedDestinationName: destinationName?.trim() || null,
+      decidedDestinationNames: normalized,
+      decidedDestinationName: normalized.length > 0 ? normalized[0]! : null,
       updatedAt: serverTimestamp(),
     },
   );

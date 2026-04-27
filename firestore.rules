@@ -41,6 +41,23 @@ service cloud.firestore {
         data.answer in ['first', 'want', 'reserve'];
     }
 
+    function destinationPollDecidedNameAtIndexOk(list, index) {
+      return list.size() <= index || (
+        list[index] is string &&
+        list[index].size() > 0 &&
+        list[index].size() <= 200
+      );
+    }
+
+    function destinationPollDecidedDestinationNamesOk(data) {
+      return !data.keys().hasAny(['decidedDestinationNames']) ||
+        (data.decidedDestinationNames is list &&
+          data.decidedDestinationNames.size() <= 3 &&
+          destinationPollDecidedNameAtIndexOk(data.decidedDestinationNames, 0) &&
+          destinationPollDecidedNameAtIndexOk(data.decidedDestinationNames, 1) &&
+          destinationPollDecidedNameAtIndexOk(data.decidedDestinationNames, 2));
+    }
+
     function sharingLabelValid(data) {
       return data.label is string &&
         data.label.size() > 0 &&
@@ -433,7 +450,7 @@ service cloud.firestore {
         allow read: if request.auth != null && isGroupMember(groupId);
         allow create: if request.auth != null && isGroupMember(groupId) &&
           request.resource.data.keys().hasAll([
-            'title', 'sortOrder', 'decidedDestinationName',
+            'title', 'sortOrder', 'decidedDestinationName', 'decidedDestinationNames',
             'createdByUserId', 'createdAt', 'updatedAt'
           ]) &&
           request.resource.data.createdByUserId == request.auth.uid &&
@@ -442,13 +459,23 @@ service cloud.firestore {
           request.resource.data.title.size() <= 200 &&
           (request.resource.data.sortOrder is int || request.resource.data.sortOrder is float) &&
           (request.resource.data.decidedDestinationName == null ||
-            request.resource.data.decidedDestinationName is string);
+            request.resource.data.decidedDestinationName is string) &&
+          request.resource.data.decidedDestinationNames is list &&
+          destinationPollDecidedDestinationNamesOk(request.resource.data);
         allow update: if request.auth != null && isGroupMember(groupId) && (
-          isOwnerOrAdmin(groupId) ||
+          (
+            isOwnerOrAdmin(groupId) &&
+            destinationPollDecidedDestinationNamesOk(request.resource.data) &&
+            (request.resource.data.decidedDestinationName == null ||
+              (request.resource.data.decidedDestinationName is string &&
+                request.resource.data.decidedDestinationName.size() <= 200))
+          ) ||
           (
             resource.data.createdByUserId == request.auth.uid &&
-            request.resource.data.decidedDestinationName == resource.data.decidedDestinationName &&
-            request.resource.data.createdByUserId == resource.data.createdByUserId
+            request.resource.data.createdByUserId == resource.data.createdByUserId &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'title', 'sortOrder', 'updatedAt'
+            ])
           )
         );
         allow delete: if request.auth != null && isGroupMember(groupId) && isOwnerOrAdmin(groupId);

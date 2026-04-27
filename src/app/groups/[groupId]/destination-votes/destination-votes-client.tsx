@@ -12,8 +12,9 @@ import {
   listDestinationVotes,
   listLegacyDestinationCandidates,
   migrateLegacyDestinationPollIfNeeded,
+  normalizeDecidedNamesFromPollDoc,
   setDestinationWantCount,
-  setPollDecidedDestination,
+  setPollDecidedDestinationNames,
   wantVoteWeightFromDoc,
   updateDestinationCandidate,
   updateDestinationPollMeta,
@@ -22,7 +23,10 @@ import {
   type VoteItem,
 } from "@/lib/firestore/destination-votes";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
-import { DESTINATION_WANT_VOTES_MAX_PER_USER } from "@/types/destination";
+import {
+  DESTINATION_DECIDE_MAX_PER_POLL,
+  DESTINATION_WANT_VOTES_MAX_PER_USER,
+} from "@/types/destination";
 import type { GroupDoc } from "@/types/group";
 import { VisibilityBadge } from "@/components/visibility-badge";
 import Link from "next/link";
@@ -380,11 +384,26 @@ export function DestinationVotesClient() {
     const b = bundles.find((x) => x.poll.id === pollId);
     const c = b?.candidates.find((x) => x.id === candidateId);
     if (!b || !c) return;
-    if (!confirm(`「${c.data.name}」を「${b.poll.data.title}」として確定しますか？`)) return;
+    const name = c.data.name.trim();
+    const current = normalizeDecidedNamesFromPollDoc(b.poll.data);
+    if (current.includes(name)) return;
+    if (current.length >= DESTINATION_DECIDE_MAX_PER_POLL) {
+      setError(
+        `確定できる目的地はこのブロックで最大${String(DESTINATION_DECIDE_MAX_PER_POLL)}件までです。`,
+      );
+      return;
+    }
+    if (
+      !confirm(
+        `「${c.data.name}」を「${b.poll.data.title}」の確定リストに追加しますか？（最大${String(DESTINATION_DECIDE_MAX_PER_POLL)}件）`,
+      )
+    ) {
+      return;
+    }
     setBusy(`decide-${pollId}-${candidateId}`);
     setError(null);
     try {
-      await setPollDecidedDestination(groupId, pollId, c.data.name);
+      await setPollDecidedDestinationNames(groupId, pollId, [...current, name]);
       await load();
     } catch (ex) {
       setError(ex instanceof Error ? ex.message : "確定に失敗しました");
@@ -393,13 +412,39 @@ export function DestinationVotesClient() {
     }
   }
 
+  async function handleUndecideOne(pollId: string, candidateId: string) {
+    if (!groupId) return;
+    const b = bundles.find((x) => x.poll.id === pollId);
+    const c = b?.candidates.find((x) => x.id === candidateId);
+    if (!b || !c) return;
+    const name = c.data.name.trim();
+    const current = normalizeDecidedNamesFromPollDoc(b.poll.data);
+    if (!current.includes(name)) return;
+    if (!confirm(`「${c.data.name}」だけ確定を外しますか？`)) return;
+    setBusy(`undecide-one-${pollId}-${candidateId}`);
+    setError(null);
+    try {
+      const next = current.filter((n) => n !== name);
+      await setPollDecidedDestinationNames(
+        groupId,
+        pollId,
+        next.length > 0 ? next : [],
+      );
+      await load();
+    } catch (ex) {
+      setError(ex instanceof Error ? ex.message : "解除に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleUndecide(pollId: string) {
     if (!groupId) return;
-    if (!confirm("このブロックの確定を解除しますか？再度投票・確定できます。")) return;
+    if (!confirm("このブロックの確定をすべて解除しますか？再度投票・確定できます。")) return;
     setBusy(`undecide-${pollId}`);
     setError(null);
     try {
-      await setPollDecidedDestination(groupId, pollId, null);
+      await setPollDecidedDestinationNames(groupId, pollId, []);
       await load();
     } catch (ex) {
       setError(ex instanceof Error ? ex.message : "解除に失敗しました");
@@ -514,8 +559,8 @@ export function DestinationVotesClient() {
   /** 未確定のブロックを上に、確定済みのブロックは下に（同じ区分内は sortOrder） */
   const sortedBundles = useMemo(() => {
     return [...bundles].sort((a, b) => {
-      const aDecided = !!(a.poll.data.decidedDestinationName?.trim());
-      const bDecided = !!(b.poll.data.decidedDestinationName?.trim());
+      const aDecided = normalizeDecidedNamesFromPollDoc(a.poll.data).length > 0;
+      const bDecided = normalizeDecidedNamesFromPollDoc(b.poll.data).length > 0;
       if (aDecided !== bDecided) {
         return aDecided ? 1 : -1;
       }
@@ -587,7 +632,7 @@ export function DestinationVotesClient() {
         目的地を決める
       </h1>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        投票ブロックごとにタイトル（例:「1日目の目的地」）を付けられます。日ごとに別の候補で投票・確定できます。オーナーは確定後も解除してやり直せます。
+        投票ブロックごとにタイトル（例:「1日目の目的地」）を付けられます。日ごとに別の候補で投票・確定できます。1ブロックで最大3件まで確定できます（複数施設に行く場合など）。オーナーは確定後も1件ずつ外すか、すべて解除してやり直せます。
         各投票ブロックで、メンバー1人あたり「行きたい」合計3票までを候補に分けて入れられます。あなたの行の「−」「＋」で票を調整してください（0にするとその候補分は取り消し）。オーナーと管理者は、合計票の数字を押すと誰が何票入れたかを確認できます。
       </p>
 
@@ -738,6 +783,7 @@ export function DestinationVotesClient() {
           onSetWant={handleSetWant}
           onDecide={handleDecide}
           onUndecide={handleUndecide}
+          onUndecideOne={handleUndecideOne}
           onDeleteCandidate={handleDeleteCandidate}
           canViewVoteBreakdown={canViewVoteBreakdown}
           wantVoterDetailsForAdmin={wantVoterDetailsForAdmin}
@@ -771,6 +817,7 @@ function PollSection({
   onSetWant,
   onDecide,
   onUndecide,
+  onUndecideOne,
   onDeleteCandidate,
   canViewVoteBreakdown,
   wantVoterDetailsForAdmin,
@@ -807,6 +854,7 @@ function PollSection({
   ) => void;
   onDecide: (pollId: string, candidateId: string) => void;
   onUndecide: (pollId: string) => void;
+  onUndecideOne: (pollId: string, candidateId: string) => void;
   onDeleteCandidate: (pollId: string, candidateId: string) => void;
   canViewVoteBreakdown: boolean;
   wantVoterDetailsForAdmin: (
@@ -818,8 +866,8 @@ function PollSection({
 }) {
   const { poll, candidates, votes } = bundle;
   const pollId = poll.id;
-  const decided = poll.data.decidedDestinationName?.trim() ?? "";
-  const decidedLocked = decided.length > 0;
+  const decidedNames = normalizeDecidedNamesFromPollDoc(poll.data);
+  const decidedLocked = decidedNames.length > 0;
 
   const myWantPoolInPoll = useMemo(() => {
     if (!user) return 0;
@@ -921,7 +969,7 @@ function PollSection({
             </div>
             {decidedLocked ? (
               <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-300">
-                ✓ 確定: {poll.data.decidedDestinationName}
+                ✓ 確定: {decidedNames.join("、")}
               </p>
             ) : null}
           </div>
@@ -958,7 +1006,7 @@ function PollSection({
       {decidedLocked ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            確定中は投票を変更できません。やり直す場合はオーナーが解除してください。
+            確定中は投票を変更できません。候補ごとに「確定を外す」か、下のボタンで一度にすべて外せます。
           </p>
           {isOwner ? (
             <button
@@ -967,7 +1015,7 @@ function PollSection({
               disabled={busy !== null}
               className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
             >
-              確定を解除
+              確定をすべて解除
             </button>
           ) : null}
         </div>
@@ -1006,9 +1054,9 @@ function PollSection({
                 const myCount = myRowVote
                   ? wantVoteWeightFromDoc(myRowVote.data)
                   : 0;
+                const candName = c.data.name.trim();
                 const isDecidedRow =
-                  decidedLocked &&
-                  poll.data.decidedDestinationName === c.data.name;
+                  decidedLocked && decidedNames.includes(candName);
 
                 if (editingCandidateId === c.id) {
                   return (
@@ -1198,11 +1246,36 @@ function PollSection({
                             ) : null}
                           </div>
                         </div>
-                        {(isOwner ||
-                          (user && c.data.proposedByUserId === user.uid)) &&
-                        !decidedLocked ? (
+                        {(isOwner &&
+                          decidedLocked &&
+                          isDecidedRow) ||
+                        (isOwner &&
+                          decidedLocked &&
+                          !isDecidedRow &&
+                          decidedNames.length <
+                            DESTINATION_DECIDE_MAX_PER_POLL) ||
+                        ((isOwner ||
+                          (user &&
+                            c.data.proposedByUserId === user.uid)) &&
+                          !decidedLocked) ? (
                           <div className="mt-2 flex flex-wrap gap-1 border-t border-zinc-100 pt-2 text-xs dark:border-zinc-700">
-                            {isOwner && !isDecidedRow ? (
+                            {isOwner && decidedLocked && isDecidedRow ? (
+                              <button
+                                type="button"
+                                onClick={() => onUndecideOne(pollId, c.id)}
+                                disabled={busy !== null}
+                                className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+                              >
+                                {busy === `undecide-one-${pollId}-${c.id}`
+                                  ? "…"
+                                  : "確定を外す"}
+                              </button>
+                            ) : null}
+                            {isOwner &&
+                            decidedLocked &&
+                            !isDecidedRow &&
+                            decidedNames.length <
+                              DESTINATION_DECIDE_MAX_PER_POLL ? (
                               <button
                                 type="button"
                                 onClick={() => onDecide(pollId, c.id)}
@@ -1211,27 +1284,46 @@ function PollSection({
                               >
                                 {busy === `decide-${pollId}-${c.id}`
                                   ? "…"
-                                  : "確定"}
+                                  : "確定に追加"}
                               </button>
                             ) : null}
-                            <button
-                              type="button"
-                              onClick={() => setEditingCandidateId(c.id)}
-                              disabled={busy !== null}
-                              className="rounded border border-zinc-300 px-2 py-0.5 text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-400"
-                            >
-                              編集
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onDeleteCandidate(pollId, c.id)
-                              }
-                              disabled={busy !== null}
-                              className="rounded px-2 py-0.5 text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400"
-                            >
-                              削除
-                            </button>
+                            {(isOwner ||
+                              (user &&
+                                c.data.proposedByUserId === user.uid)) &&
+                            !decidedLocked ? (
+                              <>
+                                {isOwner && !isDecidedRow ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onDecide(pollId, c.id)}
+                                    disabled={busy !== null}
+                                    className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
+                                  >
+                                    {busy === `decide-${pollId}-${c.id}`
+                                      ? "…"
+                                      : "確定"}
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingCandidateId(c.id)}
+                                  disabled={busy !== null}
+                                  className="rounded border border-zinc-300 px-2 py-0.5 text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-400"
+                                >
+                                  編集
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onDeleteCandidate(pollId, c.id)
+                                  }
+                                  disabled={busy !== null}
+                                  className="rounded px-2 py-0.5 text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400"
+                                >
+                                  削除
+                                </button>
+                              </>
+                            ) : null}
                           </div>
                         ) : null}
                       </td>
