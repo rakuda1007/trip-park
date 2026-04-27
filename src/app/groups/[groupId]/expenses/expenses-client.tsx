@@ -69,6 +69,65 @@ function splitModeLabel(mode: ExpenseSplitMode): string {
   return mode === "weighted" ? "人数割" : "均等割";
 }
 
+function calcExpenseFamilyBalances(
+  row: ExpenseDoc,
+  userToFamilyId: Map<string, string>,
+): Map<string, number> {
+  const balances = new Map<string, number>();
+  const shareMap = new Map<string, number>();
+
+  if (row.participantFamilyIds && row.participantFamilyIds.length > 0) {
+    const familyIds = [...row.participantFamilyIds].sort();
+    const weights = new Map<string, number>();
+    for (const fid of familyIds) {
+      const w = row.splitMode === "weighted" ? row.weightByFamilyId?.[fid] : 1;
+      weights.set(`family:${fid}`, w && w > 0 ? w : 1);
+    }
+    for (const [key, amountYen] of distributeWeightedSharesYen(row.amount, weights)) {
+      shareMap.set(key, amountYen);
+    }
+  } else {
+    const userIds = [...row.participantUserIds].sort();
+    const weights = new Map<string, number>();
+    for (const uid of userIds) {
+      const w = row.splitMode === "weighted" ? row.weightByUserId?.[uid] : 1;
+      weights.set(uid, w && w > 0 ? w : 1);
+    }
+    for (const [uid, amountYen] of distributeWeightedSharesYen(row.amount, weights)) {
+      const fid = userToFamilyId.get(uid);
+      const key = fid ? `family:${fid}` : `user:${uid}`;
+      shareMap.set(key, (shareMap.get(key) ?? 0) + amountYen);
+    }
+  }
+
+  for (const [key, share] of shareMap) {
+    balances.set(key, (balances.get(key) ?? 0) - share);
+  }
+
+  let payerKey: string | null = null;
+  if (row.paidByFamilyId) {
+    payerKey = `family:${row.paidByFamilyId}`;
+  } else if (row.paidByUserId) {
+    const fid = userToFamilyId.get(row.paidByUserId);
+    payerKey = fid ? `family:${fid}` : `user:${row.paidByUserId}`;
+  }
+  if (payerKey) {
+    balances.set(payerKey, (balances.get(payerKey) ?? 0) + row.amount);
+  }
+  return balances;
+}
+
+function calcExpenseShareBreakdown(
+  row: ExpenseDoc,
+  userToFamilyId: Map<string, string>,
+): { key: string; amountYen: number }[] {
+  const balances = calcExpenseFamilyBalances(row, userToFamilyId);
+  return [...balances.entries()]
+    .filter(([, bal]) => bal < -0.5)
+    .map(([key, bal]) => ({ key, amountYen: Math.round(-bal) }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
 function canManageExpense(
   group: GroupDoc,
   members: { userId: string; data: MemberDoc }[],
@@ -523,7 +582,7 @@ export function ExpensesClient() {
           {/* プレビュー */}
           {previewShares && selectedFamilyIds.size > 0 ? (
             <div className="rounded-md border border-emerald-200 bg-emerald-50/80 p-3 text-xs text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
-              <p className="font-medium">負担の目安（円）</p>
+              <p className="font-medium">負担シミュレーション（円）</p>
               <ul className="mt-2 space-y-0.5">
                 {[...previewShares.entries()]
                   .sort((a, b) => a[0].localeCompare(b[0]))
@@ -570,11 +629,11 @@ export function ExpensesClient() {
   const settlementGuideSection = (
       <section className="mt-10">
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-          精算の目安
+          最終精算結果
         </h2>
         {expenses.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-500">
-            支出がまだありません。登録すると残高と送金リストが表示されます。
+            支出がまだありません。登録すると最終的な残高と送金結果が表示されます。
           </p>
         ) : (
           <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50/60 p-4 dark:border-emerald-900 dark:bg-emerald-950/20">
@@ -597,7 +656,7 @@ export function ExpensesClient() {
             </ul>
             <div className="mt-4">
               <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
-                送金（最小回数）
+                最終送金（最小回数）
               </p>
               {familyTransfers.length === 0 ? (
                 <p className="mt-1 text-sm text-emerald-900/80 dark:text-emerald-200/80">
@@ -633,6 +692,9 @@ export function ExpensesClient() {
               const can = user
                 ? canManageExpense(group, members, user.uid, row.data.createdByUserId)
                 : false;
+              const expenseBalances = calcExpenseFamilyBalances(row.data, userToFamilyId);
+              const expenseTransfers = computeKeyedSettlementTransfers(expenseBalances);
+              const expenseShares = calcExpenseShareBreakdown(row.data, userToFamilyId);
               return (
                 <li
                   key={row.id}
@@ -647,7 +709,7 @@ export function ExpensesClient() {
                         </span>
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
-                        {splitModeLabel(row.data.splitMode)}
+                        {splitModeLabel(row.data.splitMode)}で計算
                       </p>
                       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                         立て替え: {resolvePaidByLabel(row.data)}
@@ -667,6 +729,37 @@ export function ExpensesClient() {
                               .map((uid) => displayName(uid))
                               .join("、")}
                       </p>
+                      {expenseShares.length > 0 ? (
+                        <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 p-2 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300">
+                          <p className="font-medium">
+                            この支出の負担結果（{splitModeLabel(row.data.splitMode)}）
+                          </p>
+                          <ul className="mt-1 space-y-0.5">
+                            {expenseShares.map((s) => (
+                              <li key={s.key}>
+                                {resolveSettlementUnitLabel(s.key, families, displayName)}:{" "}
+                                {formatYen(s.amountYen)}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/70 p-2 text-xs text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/25 dark:text-emerald-100">
+                        <p className="font-medium">この支出で必要な送金</p>
+                        {expenseTransfers.length === 0 ? (
+                          <p className="mt-1">この支出単体では送金不要です。</p>
+                        ) : (
+                          <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+                            {expenseTransfers.map((t, i) => (
+                              <li key={`${row.id}-transfer-${i}`}>
+                                {resolveSettlementUnitLabel(t.fromKey, families, displayName)} は{" "}
+                                {resolveSettlementUnitLabel(t.toKey, families, displayName)} に{" "}
+                                {formatYen(t.amountYen)} を払う
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+                      </div>
                     </div>
                     {can ? (
                       <div className="flex gap-2">
