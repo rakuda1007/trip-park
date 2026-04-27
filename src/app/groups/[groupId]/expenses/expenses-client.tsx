@@ -692,8 +692,6 @@ export function ExpensesClient() {
               const can = user
                 ? canManageExpense(group, members, user.uid, row.data.createdByUserId)
                 : false;
-              const expenseBalances = calcExpenseFamilyBalances(row.data, userToFamilyId);
-              const expenseTransfers = computeKeyedSettlementTransfers(expenseBalances);
               const expenseShares = calcExpenseShareBreakdown(row.data, userToFamilyId);
               return (
                 <li
@@ -744,22 +742,6 @@ export function ExpensesClient() {
                           </ul>
                         </div>
                       ) : null}
-                      <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/70 p-2 text-xs text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/25 dark:text-emerald-100">
-                        <p className="font-medium">この支出で必要な送金</p>
-                        {expenseTransfers.length === 0 ? (
-                          <p className="mt-1">この支出単体では送金不要です。</p>
-                        ) : (
-                          <ol className="mt-1 list-decimal space-y-0.5 pl-4">
-                            {expenseTransfers.map((t, i) => (
-                              <li key={`${row.id}-transfer-${i}`}>
-                                {resolveSettlementUnitLabel(t.fromKey, families, displayName)} は{" "}
-                                {resolveSettlementUnitLabel(t.toKey, families, displayName)} に{" "}
-                                {formatYen(t.amountYen)} を払う
-                              </li>
-                            ))}
-                          </ol>
-                        )}
-                      </div>
                     </div>
                     {can ? (
                       <div className="flex gap-2">
