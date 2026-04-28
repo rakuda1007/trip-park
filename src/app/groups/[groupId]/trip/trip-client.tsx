@@ -521,7 +521,7 @@ export function TripClient() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { preferredDay?: number }) => {
     if (!groupId) return;
     setError(null);
     try {
@@ -530,10 +530,18 @@ export function TripClient() {
       if (g) {
         const r = await listTripRoutes(groupId);
         setRoutes(r);
-        // 初期表示: 最初の未完了 Day をデフォルト選択
-        const firstIncomplete = r.find((x) => !x.data.isDone);
-        if (firstIncomplete) setSelectedDay(firstIncomplete.data.dayNumber);
-        else if (r.length > 0) setSelectedDay(r[r.length - 1]!.data.dayNumber);
+        const preferredDay = options?.preferredDay;
+        if (
+          typeof preferredDay === "number" &&
+          r.some((x) => x.data.dayNumber === preferredDay)
+        ) {
+          setSelectedDay(preferredDay);
+        } else {
+          // 初期表示: 最初の未完了 Day をデフォルト選択
+          const firstIncomplete = r.find((x) => !x.data.isDone);
+          if (firstIncomplete) setSelectedDay(firstIncomplete.data.dayNumber);
+          else if (r.length > 0) setSelectedDay(r[r.length - 1]!.data.dayNumber);
+        }
         try {
           setBulletinTopics(await listBulletinTopics(groupId));
         } catch {
@@ -606,7 +614,7 @@ export function TripClient() {
     try {
       await updateTripRoute(groupId, routeId, input);
       setEditingId(null);
-      await load();
+      await load({ preferredDay: input.dayNumber });
     } catch (e) {
       setError(e instanceof Error ? e.message : "更新に失敗しました");
     } finally {
