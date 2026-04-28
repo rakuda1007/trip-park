@@ -413,6 +413,9 @@ function DayCard({
                 {(route.segmentRouteMapUrls ?? []).map((url, i) =>
                   url ? (
                     <li key={i} className="flex flex-wrap items-baseline gap-2 text-sm">
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {segmentRouteLabelForRoute(i, route)}
+                      </span>
                       <a
                         href={url}
                         target="_blank"
@@ -421,9 +424,6 @@ function DayCard({
                       >
                         ルートを開く
                       </a>
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {segmentRouteLabelForRoute(i, route)}
-                      </span>
                     </li>
                   ) : null,
                 )}
