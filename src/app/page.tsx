@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { FirebaseEnvHint } from "@/components/firebase-env-hint";
 import { HomeLandingActions } from "@/components/home-landing-actions";
 
@@ -111,6 +112,17 @@ export default function Home() {
         <div className="mt-4 flex justify-center">
           <HomeLandingActions />
         </div>
+        <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
+          Parkシリーズ全体を見る:{" "}
+          <Link
+            href="https://series.tennis-park-community.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300"
+          >
+            公式ポータル
+          </Link>
+        </p>
       </section>
     </div>
   );
