@@ -47,8 +47,8 @@ self.addEventListener('push', function (event) {
   event.waitUntil(
     self.registration.showNotification(title, {
       body: body,
-      icon: '/icons/icon.png',
-      badge: '/icons/icon.png',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
       data: { url: url },
       vibrate: [200, 100, 200],
     })
