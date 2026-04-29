@@ -5,15 +5,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-export function HomeLandingActions() {
+type HomeLandingActionsProps = {
+  autoRedirectOnAuth?: boolean;
+};
+
+export function HomeLandingActions({
+  autoRedirectOnAuth = true,
+}: HomeLandingActionsProps) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && user) {
+    if (autoRedirectOnAuth && !loading && user) {
       router.replace("/dashboard");
     }
-  }, [user, loading, router]);
+  }, [autoRedirectOnAuth, user, loading, router]);
 
   if (loading || user) {
     return (

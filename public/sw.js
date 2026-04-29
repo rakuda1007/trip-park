@@ -1,4 +1,4 @@
-const CACHE_NAME = "trip-park-v1";
+const CACHE_NAME = "trip-park-v2";
 
 const STATIC_ASSETS = [
   "/",
@@ -101,7 +101,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 静的アセット: キャッシュ優先
+  // Next.js のビルドアセットはネットワーク優先（古いJS配信を防ぐ）
   if (
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icons/") ||
@@ -110,15 +110,13 @@ self.addEventListener("fetch", (event) => {
     url.pathname.endsWith(".ico")
   ) {
     event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ??
-          fetch(request).then((response) => {
-            const cloned = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, cloned));
-            return response;
-          }),
-      ),
+      fetch(request)
+        .then((response) => {
+          const cloned = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, cloned));
+          return response;
+        })
+        .catch(() => caches.match(request)),
     );
     return;
   }
