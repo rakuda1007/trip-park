@@ -59,14 +59,15 @@ export function PromoPageContent({
         </div>
         <article>
           <p className="text-sm font-semibold text-orange-600">特徴 01</p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-zinc-900">
+          <h2 className="mt-2 text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             多数決も、日程調整も、一瞬。
           </h2>
-          <p className="mt-4 text-sm leading-relaxed text-zinc-700 sm:text-base">
+          <p className="mt-4 text-base leading-relaxed text-zinc-700 sm:text-lg">
             行き先で揉めることはもうありません。候補地を登録して、みんなで「投票」。
             一番人気のスポットが自動で旅程に組み込まれます。
+            旅行の意思決定がスピーディーになり、企画の熱量を落とさずに次の準備へ進めます。
           </p>
-          <ul className="mt-4 space-y-2 text-sm text-zinc-700">
+          <ul className="mt-5 space-y-3 text-base text-zinc-700 sm:text-lg">
             <li>✓ 誰がいつ空いているか、パッと集計</li>
             <li>✓ 候補地へのコメント機能で盛り上がる</li>
           </ul>
@@ -76,14 +77,15 @@ export function PromoPageContent({
       <section className="grid items-center gap-8 lg:grid-cols-2">
         <article>
           <p className="text-sm font-semibold text-orange-600">特徴 02</p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-zinc-900">
+          <h2 className="mt-2 text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             買い出し分担で、当日の連携もスムーズ。
           </h2>
-          <p className="mt-4 text-sm leading-relaxed text-zinc-700 sm:text-base">
+          <p className="mt-4 text-base leading-relaxed text-zinc-700 sm:text-lg">
             「誰が何を持ってくるか」を世帯ごとに割り当てて、購入チェックまで一画面で共有。
             旅行中の連絡ロスを減らし、現地での合流や準備をスムーズに進められます。
+            事前の役割が明確になることで、当日は「楽しむ時間」をしっかり確保できます。
           </p>
-          <ul className="mt-4 space-y-2 text-sm text-zinc-700">
+          <ul className="mt-5 space-y-3 text-base text-zinc-700 sm:text-lg">
             <li>✓ 未割当の項目がすぐ分かるから、役割漏れを防止</li>
             <li>✓ 購入済みチェックで「どこまで済んだか」を全員で共有</li>
           </ul>
@@ -111,14 +113,15 @@ export function PromoPageContent({
         </div>
         <article>
           <p className="text-sm font-semibold text-orange-600">特徴 03</p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-zinc-900">
+          <h2 className="mt-2 text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             「誰が払ったっけ？」をゼロに。
           </h2>
-          <p className="mt-4 text-sm leading-relaxed text-zinc-700 sm:text-base">
+          <p className="mt-4 text-base leading-relaxed text-zinc-700 sm:text-lg">
             旅行中の支払いをその場で入力。最後にボタンを押すだけで、複雑な貸し借りも一瞬で計算完了。
             精算の煩わしさから解放されて、最後まで笑顔の旅を。
+            お金まわりの不安や遠慮が減ることで、グループ旅行の空気を気持ちよく保てます。
           </p>
-          <ul className="mt-4 space-y-2 text-sm text-zinc-700">
+          <ul className="mt-5 space-y-3 text-base text-zinc-700 sm:text-lg">
             <li>✓ 外貨入力や、特定の人を除いた割り勘にも対応</li>
             <li>✓ 立て替え履歴が残るから後から見返せる</li>
           </ul>
