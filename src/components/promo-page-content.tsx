@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { FirebaseEnvHint } from "@/components/firebase-env-hint";
+import { PromoAuthRedirect } from "@/components/promo-auth-redirect";
 import { SmartCtaLink } from "@/components/smart-cta-link";
 
 type PromoPageContentProps = {
@@ -8,10 +9,11 @@ type PromoPageContentProps = {
 };
 
 export function PromoPageContent({
-  autoRedirectOnAuth: _autoRedirectOnAuth = true,
+  autoRedirectOnAuth = true,
 }: PromoPageContentProps) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-16 bg-white px-4 py-8 sm:px-6 sm:py-12">
+      <PromoAuthRedirect enabled={autoRedirectOnAuth} />
       <section className="rounded-3xl border border-zinc-200 bg-zinc-100 p-3 shadow-sm sm:p-4">
         <div className="relative min-h-[440px] overflow-hidden rounded-2xl sm:min-h-[520px]">
           <Image
@@ -75,7 +77,7 @@ export function PromoPageContent({
       </section>
 
       <section className="grid items-center gap-8 lg:grid-cols-2">
-        <article>
+        <article className="order-2 lg:order-1">
           <p className="text-sm font-semibold text-orange-600">特徴 02</p>
           <h2 className="mt-2 text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             買い出し分担で、当日の連携もスムーズ。
@@ -90,7 +92,7 @@ export function PromoPageContent({
             <li>✓ 購入済みチェックで「どこまで済んだか」を全員で共有</li>
           </ul>
         </article>
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+        <div className="order-1 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm lg:order-2">
           <Image
             src="/shoppinglist_s.jpg"
             alt="買い出しリストを想起させる食材写真"
