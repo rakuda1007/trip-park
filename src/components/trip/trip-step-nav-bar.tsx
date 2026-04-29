@@ -1,8 +1,12 @@
 "use client";
 
 import { useGroupRouteId } from "@/contexts/group-route-context";
-import { isDestinationStepComplete } from "@/lib/firestore/destination-votes";
+import {
+  listDestinationPolls,
+  normalizeDecidedNamesFromPollDoc,
+} from "@/lib/firestore/destination-votes";
 import { getGroup } from "@/lib/firestore/groups";
+import { listScheduleCandidates } from "@/lib/firestore/schedule";
 import { listTripRoutes } from "@/lib/firestore/trip";
 import type { GroupDoc } from "@/types/group";
 import type { TripRouteDoc } from "@/types/trip";
@@ -38,39 +42,71 @@ function isGroupPage(pathname: string, groupId: string): boolean {
   return pathname.startsWith(`/groups/${groupId}`);
 }
 
+/** ナビ上の工程状態（完了・未完に加え進行中を表示） */
+type StepStatus = "pending" | "in_progress" | "done";
+
+function dividerClassBeforeStep(prev: StepStatus): string {
+  if (prev === "done") return "bg-emerald-300 dark:bg-emerald-700";
+  if (prev === "in_progress") return "bg-amber-300 dark:bg-amber-700";
+  return "bg-zinc-200 dark:bg-zinc-700";
+}
+
 export function TripStepNavBar({ groupId }: { groupId: string }) {
   const pathname = usePathname();
   const [group, setGroup] = useState<GroupDoc | null>(null);
   const [destStepDone, setDestStepDone] = useState(false);
+  const [destinationInProgress, setDestinationInProgress] = useState(false);
+  const [scheduleHasCandidates, setScheduleHasCandidates] = useState(false);
   const [tripRoutes, setTripRoutes] = useState<
     { id: string; data: TripRouteDoc }[]
   >([]);
 
   useEffect(() => {
-    getGroup(groupId)
-      .then(async (g) => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const g = await getGroup(groupId);
+        if (cancelled) return;
         setGroup(g);
         if (!g) {
           setDestStepDone(false);
+          setDestinationInProgress(false);
+          setScheduleHasCandidates(false);
+          setTripRoutes([]);
           return;
         }
-        try {
-          const done = await isDestinationStepComplete(
-            groupId,
-            g.destination,
-          );
-          setDestStepDone(done);
-        } catch {
-          setDestStepDone(!!g.destination);
-        }
-      })
-      .catch(() => {});
-  }, [groupId, pathname]);
+        const [polls, candidates, routes] = await Promise.all([
+          listDestinationPolls(groupId),
+          listScheduleCandidates(groupId),
+          listTripRoutes(groupId),
+        ]);
+        if (cancelled) return;
+        setTripRoutes(routes);
+        setScheduleHasCandidates(candidates.length > 0);
 
-  useEffect(() => {
-    listTripRoutes(groupId)
-      .then(setTripRoutes)
-      .catch(() => setTripRoutes([]));
+        let destDone: boolean;
+        if (polls.length === 0) {
+          destDone = !!g.destination?.trim();
+        } else {
+          destDone = polls.every(
+            (p) => normalizeDecidedNamesFromPollDoc(p.data).length > 0,
+          );
+        }
+        setDestStepDone(destDone);
+        setDestinationInProgress(!destDone && polls.length > 0);
+      } catch {
+        if (!cancelled) {
+          setGroup(null);
+          setDestStepDone(false);
+          setDestinationInProgress(false);
+          setScheduleHasCandidates(false);
+          setTripRoutes([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [groupId, pathname]);
 
   /** 旅程ページと同様: 日程からの日数と登録済み最大Dayの大きい方 */
@@ -96,6 +132,12 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
     return true;
   }, [tripRoutes, numTripDays]);
 
+  /** いずれかの Day が完了済みだが全体は未完了のとき進行中 */
+  const itinInProgress = useMemo(() => {
+    if (itinDone) return false;
+    return tripRoutes.some((r) => r.data.isDone);
+  }, [itinDone, tripRoutes]);
+
   // グループ配下のページ以外では非表示
   if (!isGroupPage(pathname, groupId)) return null;
 
@@ -104,13 +146,37 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
   const datesDone = !!group?.tripStartDate;
   const destDone = destStepDone;
   const status = group?.status ?? "planning";
-  const settleDone = status === "completed";
+
+  const scheduleStatus: StepStatus = datesDone
+    ? "done"
+    : scheduleHasCandidates
+      ? "in_progress"
+      : "pending";
+
+  const destinationStatus: StepStatus = destDone
+    ? "done"
+    : destinationInProgress
+      ? "in_progress"
+      : "pending";
+
+  const tripStatus: StepStatus = itinDone
+    ? "done"
+    : itinInProgress
+      ? "in_progress"
+      : "pending";
+
+  const settlementStatus: StepStatus =
+    status === "completed"
+      ? "done"
+      : status === "confirmed"
+        ? "in_progress"
+        : "pending";
 
   const steps = [
     {
       key: "schedule",
       label: "日程",
-      done: datesDone,
+      status: scheduleStatus,
       href: `/groups/${groupId}/schedule`,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
@@ -121,7 +187,7 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
     {
       key: "destination",
       label: "目的地",
-      done: destDone,
+      status: destinationStatus,
       href: `/groups/${groupId}/destination-votes`,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
@@ -132,7 +198,7 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
     {
       key: "trip",
       label: "旅程",
-      done: itinDone,
+      status: tripStatus,
       href: `/groups/${groupId}/trip`,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
@@ -143,7 +209,7 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
     {
       key: "expenses",
       label: "精算",
-      done: settleDone,
+      status: settlementStatus,
       href: `/groups/${groupId}/expenses`,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
@@ -160,26 +226,44 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
           {/* ステップ */}
           {steps.map((step, idx) => {
             const isActive = step.key === activeStep;
+            const prevStatus = idx > 0 ? steps[idx - 1]!.status : "pending";
+            const statusTitle =
+              step.status === "done"
+                ? "完了"
+                : step.status === "in_progress"
+                  ? "進行中"
+                  : "未着手";
             return (
               <div key={step.key} className="flex shrink-0 items-center">
                 {idx > 0 && (
-                  <div className={`mx-1 h-px w-3 shrink-0 ${
-                    step.done ? "bg-emerald-300 dark:bg-emerald-700" : "bg-zinc-200 dark:bg-zinc-700"
-                  }`} />
+                  <div
+                    className={`mx-1 h-px w-3 shrink-0 ${dividerClassBeforeStep(prevStatus)}`}
+                  />
                 )}
                 <Link
                   href={step.href}
+                  title={`${step.label}（${statusTitle}）`}
                   className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${
                     isActive
                       ? "bg-blue-600 text-white shadow-sm"
-                      : step.done
+                      : step.status === "done"
                         ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300"
-                        : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                        : step.status === "in_progress"
+                          ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950/40 dark:text-amber-200"
+                          : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                   }`}
                 >
-                  {step.done && !isActive ? (
+                  {step.status === "done" && !isActive ? (
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
                       <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
+                    </svg>
+                  ) : step.status === "in_progress" && !isActive ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3" aria-hidden>
+                      <path
+                        fillRule="evenodd"
+                        d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16Zm.75-13.25a.75.75 0 0 0-1.5 0v5c0 .199.079.391.22.53l2.5 2.5a.75.75 0 1 0 1.06-1.06L8 7.59V2.75Z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   ) : (
                     step.icon
