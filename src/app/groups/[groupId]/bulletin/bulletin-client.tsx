@@ -481,10 +481,15 @@ export function BulletinClient() {
                     href={`/groups/${groupId}/bulletin/${id}`}
                     className={`block rounded-lg border p-4 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
                       showImportant
-                        ? "border-amber-200 bg-amber-50/80 dark:border-amber-900/60 dark:bg-amber-950/25"
+                        ? "border-amber-300/90 bg-amber-50 shadow-sm ring-1 ring-amber-200/80 dark:border-amber-800/80 dark:bg-amber-950/35 dark:ring-amber-900/50"
                         : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
                     }`}
                   >
+                    {data.importance === "important" ? (
+                      <div className="mb-2 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-300 dark:bg-amber-900/50 dark:text-amber-100 dark:ring-amber-700">
+                        重要トピック
+                      </div>
+                    ) : null}
                     {data.pinned ? (
                       <p className="mb-1 text-xs font-medium text-amber-800 dark:text-amber-200">
                         📌 ピン留め
@@ -518,7 +523,7 @@ export function BulletinClient() {
                         </span>
                       ))}
                       {data.importance === "important" ? (
-                        <span className="text-amber-700 dark:text-amber-300">
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
                           重要
                         </span>
                       ) : null}
