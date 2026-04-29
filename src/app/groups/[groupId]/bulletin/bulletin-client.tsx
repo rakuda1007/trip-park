@@ -23,6 +23,7 @@ import {
   BULLETIN_TOPIC_TAG_LABELS,
   type BulletinCategory,
   type BulletinImportance,
+  type NearbyMapSpot,
   type BulletinTopicDoc,
   type BulletinTopicTag,
   normalizeBulletinTopicTags,
@@ -49,6 +50,9 @@ function formatTs(v: unknown): string {
 function excerptTopic(data: BulletinTopicDoc, max = 120): string {
   if (data.category === "recipe_vote" && data.recipePoll?.candidates?.length) {
     return `候補 ${data.recipePoll.candidates.length}件のレシピ投票`;
+  }
+  if (data.category === "nearby_map" && data.nearbyMapSpots?.length) {
+    return `立ち寄り先 ${data.nearbyMapSpots.length}件の周辺地図`;
   }
   const t = data.body.trim().replace(/\s+/g, " ");
   if (t.length <= max) return t;
@@ -78,6 +82,24 @@ export function BulletinClient() {
   const [newImportance, setNewImportance] =
     useState<BulletinImportance>("normal");
   const [newTags, setNewTags] = useState<BulletinTopicTag[]>([]);
+  const [newNearbyMapName, setNewNearbyMapName] = useState("");
+  const [newNearbyMapUrl, setNewNearbyMapUrl] = useState("");
+  const [newNearbyMapSpots, setNewNearbyMapSpots] = useState<NearbyMapSpot[]>(
+    [],
+  );
+
+  function isValidMapUrl(url: string): boolean {
+    return /^https?:\/\/\S+/i.test(url.trim());
+  }
+
+  function addNearbyMapSpot() {
+    const name = newNearbyMapName.trim();
+    const url = newNearbyMapUrl.trim();
+    if (!name || !isValidMapUrl(url)) return;
+    setNewNearbyMapSpots((prev) => [...prev, { name, url }]);
+    setNewNearbyMapName("");
+    setNewNearbyMapUrl("");
+  }
 
   const load = useCallback(async () => {
     if (!groupId) return;
@@ -127,11 +149,12 @@ export function BulletinClient() {
 
   async function handleCreateTopic() {
     if (!user || !groupId || !newTitle.trim()) return;
-    if (newCategory !== "recipe_vote" && !newBody.trim()) return;
+    if (newCategory !== "recipe_vote" && newCategory !== "nearby_map" && !newBody.trim()) return;
     if (newCategory === "recipe_vote") {
       const urls = parseRecipeUrlLines(newBody);
       if (urls.length === 0) return;
     }
+    if (newCategory === "nearby_map" && newNearbyMapSpots.length === 0) return;
     setBusy("create");
     setError(null);
     try {
@@ -150,6 +173,7 @@ export function BulletinClient() {
         newCategory,
         newImportance,
         recipePoll ?? undefined,
+        newCategory === "nearby_map" ? newNearbyMapSpots : undefined,
         newTags,
       );
       setNewTitle("");
@@ -157,6 +181,9 @@ export function BulletinClient() {
       setNewCategory("general");
       setNewImportance("normal");
       setNewTags([]);
+      setNewNearbyMapName("");
+      setNewNearbyMapUrl("");
+      setNewNearbyMapSpots([]);
       setShowForm(false);
       await load();
       // 通知送信（失敗しても続行）
@@ -304,19 +331,80 @@ export function BulletinClient() {
             <label className="block text-xs text-zinc-600 dark:text-zinc-400">
               {newCategory === "recipe_vote"
                 ? "レシピページのURL（1行に1件）"
-                : "本文（最初の投稿）"}
+                : newCategory === "nearby_map"
+                  ? "本文（任意）"
+                  : "本文（最初の投稿）"}
               <textarea
                 value={newBody}
                 onChange={(e) => setNewBody(e.target.value)}
-                rows={newCategory === "recipe_vote" ? 6 : 5}
+                rows={newCategory === "recipe_vote" ? 6 : 4}
                 className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                 placeholder={
                   newCategory === "recipe_vote"
                     ? "https://cookpad.com/jp/recipes/…"
-                    : "内容"
+                    : newCategory === "nearby_map"
+                      ? "補足メモ（任意）"
+                      : "内容"
                 }
               />
             </label>
+            {newCategory === "nearby_map" ? (
+              <div className="rounded-md border border-sky-200 bg-sky-50/70 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
+                <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
+                  立ち寄り先の地図を登録
+                </p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                  <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                    場所名
+                    <input
+                      type="text"
+                      value={newNearbyMapName}
+                      onChange={(e) => setNewNearbyMapName(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      placeholder="例: 道の駅 富楽里"
+                    />
+                  </label>
+                  <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                    地図URL
+                    <input
+                      type="url"
+                      value={newNearbyMapUrl}
+                      onChange={(e) => setNewNearbyMapUrl(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      placeholder="https://maps.google.com/..."
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addNearbyMapSpot}
+                    disabled={!newNearbyMapName.trim() || !isValidMapUrl(newNearbyMapUrl)}
+                    className="rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+                  >
+                    追加
+                  </button>
+                </div>
+                <ul className="mt-3 space-y-1.5">
+                  {newNearbyMapSpots.map((spot, idx) => (
+                    <li key={`${spot.name}-${idx}`} className="flex items-center justify-between rounded-md bg-white px-2 py-1.5 text-sm dark:bg-zinc-900/70">
+                      <span className="truncate text-zinc-700 dark:text-zinc-200">
+                        {spot.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewNearbyMapSpots((prev) =>
+                            prev.filter((_, i) => i !== idx),
+                          )
+                        }
+                        className="text-xs text-red-600 hover:underline"
+                      >
+                        削除
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-4">
               <label className="text-xs text-zinc-600 dark:text-zinc-400">
                 カテゴリ
@@ -361,7 +449,9 @@ export function BulletinClient() {
                 !newTitle.trim() ||
                 (newCategory === "recipe_vote"
                   ? parseRecipeUrlLines(newBody).length === 0
-                  : !newBody.trim())
+                  : newCategory === "nearby_map"
+                    ? newNearbyMapSpots.length === 0
+                    : !newBody.trim())
               }
               className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
             >

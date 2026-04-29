@@ -47,6 +47,7 @@ import {
   type BulletinTopicDoc,
   type BulletinRecipeVoteDoc,
   type BulletinTopicTag,
+  type NearbyMapSpot,
   type RecipePollData,
   RECIPE_MEAL_LABELS,
   type RecipeMealSlot,
@@ -118,6 +119,10 @@ function memberDisplayName(
   return `${userId.slice(0, 6)}…`;
 }
 
+function isValidMapUrl(url: string): boolean {
+  return /^https?:\/\/\S+/i.test(url.trim());
+}
+
 export function BulletinTopicClient() {
   const params = useParams();
   const groupId = useGroupRouteId();
@@ -153,6 +158,11 @@ export function BulletinTopicClient() {
   const [editImportance, setEditImportance] =
     useState<BulletinImportance>("normal");
   const [editTags, setEditTags] = useState<BulletinTopicTag[]>([]);
+  const [editNearbyMapName, setEditNearbyMapName] = useState("");
+  const [editNearbyMapUrl, setEditNearbyMapUrl] = useState("");
+  const [editNearbyMapSpots, setEditNearbyMapSpots] = useState<NearbyMapSpot[]>(
+    [],
+  );
 
   const [newReplyBody, setNewReplyBody] = useState("");
 
@@ -205,6 +215,7 @@ export function BulletinTopicClient() {
         setEditCategory(t.category);
         setEditImportance(t.importance);
         setEditTags(normalizeBulletinTopicTags(t));
+        setEditNearbyMapSpots(t.nearbyMapSpots ?? []);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -414,8 +425,11 @@ export function BulletinTopicClient() {
 
   async function handleSaveTopic() {
     if (!groupId || !topicId || !topic || !editTitle.trim()) return;
-    if (editCategory !== "recipe_vote" && !editBody.trim()) return;
+    if (editCategory !== "recipe_vote" && editCategory !== "nearby_map" && !editBody.trim()) return;
     if (editCategory === "recipe_vote" && parseRecipeUrlLines(editBody).length === 0) {
+      return;
+    }
+    if (editCategory === "nearby_map" && editNearbyMapSpots.length === 0) {
       return;
     }
     setBusy("save-topic");
@@ -453,6 +467,7 @@ export function BulletinTopicClient() {
         editCategory,
         editImportance,
         recipePoll,
+        editCategory === "nearby_map" ? editNearbyMapSpots : undefined,
         editTags,
       );
       setEditingTopic(false);
@@ -462,6 +477,15 @@ export function BulletinTopicClient() {
     } finally {
       setBusy(null);
     }
+  }
+
+  function addEditNearbyMapSpot() {
+    const name = editNearbyMapName.trim();
+    const url = editNearbyMapUrl.trim();
+    if (!name || !isValidMapUrl(url)) return;
+    setEditNearbyMapSpots((prev) => [...prev, { name, url }]);
+    setEditNearbyMapName("");
+    setEditNearbyMapUrl("");
   }
 
   function setDraftRatingAt(index: number, score: number) {
@@ -856,9 +880,42 @@ export function BulletinTopicClient() {
                 : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
             }`}
           >
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
-              {topic.body}
-            </p>
+            {topic.category === "nearby_map" ? (
+              <div className="space-y-3">
+                {topic.body.trim() ? (
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
+                    {topic.body}
+                  </p>
+                ) : null}
+                <ul className="space-y-2">
+                  {(topic.nearbyMapSpots ?? []).map((spot, idx) => (
+                    <li
+                      key={`${spot.name}-${idx}`}
+                      className="flex items-center justify-between rounded-md border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/60"
+                    >
+                      <span className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
+                        {spot.name}
+                      </span>
+                      <a
+                        href={spot.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                          <path fillRule="evenodd" d="m9.69 18.933.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 0 0 .281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 1 0 3 9c0 3.492 1.698 5.988 3.355 7.584a13.731 13.731 0 0 0 2.273 1.765 11.842 11.842 0 0 0 .953.524l.004.002.006.003ZM10 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" clipRule="evenodd" />
+                        </svg>
+                        地図
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
+                {topic.body}
+              </p>
+            )}
             <p className="mt-2 text-[11px] text-zinc-500">
               {topic.authorDisplayName ||
                 topic.authorUserId.slice(0, 8) + "…"}{" "}
@@ -1145,7 +1202,9 @@ export function BulletinTopicClient() {
             <label className="block text-xs text-zinc-500">
               {editCategory === "recipe_vote"
                 ? "レシピページのURL（1行に1件）"
-                : "本文"}
+                : editCategory === "nearby_map"
+                  ? "本文（任意）"
+                  : "本文"}
               <textarea
                 value={editBody}
                 onChange={(e) => setEditBody(e.target.value)}
@@ -1158,6 +1217,63 @@ export function BulletinTopicClient() {
                 }
               />
             </label>
+            {editCategory === "nearby_map" ? (
+              <div className="rounded-md border border-sky-200 bg-sky-50/70 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
+                <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
+                  立ち寄り先の地図を編集
+                </p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                  <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                    場所名
+                    <input
+                      type="text"
+                      value={editNearbyMapName}
+                      onChange={(e) => setEditNearbyMapName(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      placeholder="例: 道の駅 富楽里"
+                    />
+                  </label>
+                  <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                    地図URL
+                    <input
+                      type="url"
+                      value={editNearbyMapUrl}
+                      onChange={(e) => setEditNearbyMapUrl(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      placeholder="https://maps.google.com/..."
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addEditNearbyMapSpot}
+                    disabled={!editNearbyMapName.trim() || !isValidMapUrl(editNearbyMapUrl)}
+                    className="rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+                  >
+                    追加
+                  </button>
+                </div>
+                <ul className="mt-3 space-y-1.5">
+                  {editNearbyMapSpots.map((spot, idx) => (
+                    <li key={`${spot.name}-${idx}`} className="flex items-center justify-between rounded-md bg-white px-2 py-1.5 text-sm dark:bg-zinc-900/70">
+                      <span className="truncate text-zinc-700 dark:text-zinc-200">
+                        {spot.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditNearbyMapSpots((prev) =>
+                            prev.filter((_, i) => i !== idx),
+                          )
+                        }
+                        className="text-xs text-red-600 hover:underline"
+                      >
+                        削除
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-4">
               <select
                 value={editCategory}
@@ -1197,7 +1313,9 @@ export function BulletinTopicClient() {
                   !editTitle.trim() ||
                   (editCategory === "recipe_vote"
                     ? parseRecipeUrlLines(editBody).length === 0
-                    : !editBody.trim())
+                    : editCategory === "nearby_map"
+                      ? editNearbyMapSpots.length === 0
+                      : !editBody.trim())
                 }
                 className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs text-white dark:bg-zinc-100 dark:text-zinc-900"
               >
@@ -1212,6 +1330,9 @@ export function BulletinTopicClient() {
                   setEditCategory(topic.category);
                   setEditImportance(topic.importance);
                   setEditTags(normalizeBulletinTopicTags(topic));
+                  setEditNearbyMapName("");
+                  setEditNearbyMapUrl("");
+                  setEditNearbyMapSpots(topic.nearbyMapSpots ?? []);
                 }}
                 disabled={busy !== null}
                 className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs dark:border-zinc-600"
@@ -1679,6 +1800,37 @@ export function BulletinTopicClient() {
                     {topic.body}
                   </pre>
                 </details>
+              </div>
+            ) : topic.category === "nearby_map" ? (
+              <div className="mt-3 space-y-3">
+                {topic.body.trim() ? (
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
+                    {topic.body}
+                  </p>
+                ) : null}
+                <ul className="space-y-2">
+                  {(topic.nearbyMapSpots ?? []).map((spot, idx) => (
+                    <li
+                      key={`${spot.name}-${idx}`}
+                      className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/60"
+                    >
+                      <span className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
+                        {spot.name}
+                      </span>
+                      <a
+                        href={spot.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                          <path fillRule="evenodd" d="m9.69 18.933.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 0 0 .281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 1 0 3 9c0 3.492 1.698 5.988 3.355 7.584a13.731 13.731 0 0 0 2.273 1.765 11.842 11.842 0 0 0 .953.524l.004.002.006.003ZM10 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" clipRule="evenodd" />
+                        </svg>
+                        地図
+                      </a>
+                    </li>
+                  ))}
+                </ul>
               </div>
             ) : (
               <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">

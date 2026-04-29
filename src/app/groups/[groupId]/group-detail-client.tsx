@@ -204,6 +204,7 @@ export function GroupDetailClient() {
         newCategory,
         newImportance,
         recipePoll ?? undefined,
+        undefined,
         newTags,
       );
       setNewTitle("");

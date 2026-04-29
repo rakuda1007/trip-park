@@ -9,6 +9,7 @@ import {
   type BulletinTopicDoc,
   type BulletinTopicReplyReadProgressDoc,
   type BulletinTopicTag,
+  type NearbyMapSpot,
   type RecipePollData,
   type RecipePollResolution,
 } from "@/types/bulletin";
@@ -144,6 +145,7 @@ export async function createBulletinTopic(
   category: BulletinCategory,
   importance: BulletinImportance,
   recipePoll?: RecipePollData | null,
+  nearbyMapSpots?: NearbyMapSpot[] | null,
   tags?: BulletinTopicTag[],
 ): Promise<string> {
   const db = getFirebaseFirestore();
@@ -168,6 +170,9 @@ export async function createBulletinTopic(
   if (category === "recipe_vote" && recipePoll?.candidates?.length) {
     payload.recipePoll = recipePoll;
   }
+  if (category === "nearby_map" && nearbyMapSpots?.length) {
+    payload.nearbyMapSpots = nearbyMapSpots;
+  }
   const ref = await addDoc(col, payload);
   return ref.id;
 }
@@ -183,6 +188,7 @@ export async function updateBulletinTopic(
   category: BulletinCategory,
   importance: BulletinImportance,
   recipePoll?: RecipePollData | null,
+  nearbyMapSpots?: NearbyMapSpot[] | null,
   tags?: BulletinTopicTag[],
 ): Promise<void> {
   const db = getFirebaseFirestore();
@@ -206,6 +212,11 @@ export async function updateBulletinTopic(
   } else {
     updates.recipePoll = deleteField();
     updates.recipePollResolution = deleteField();
+  }
+  if (category === "nearby_map" && nearbyMapSpots?.length) {
+    updates.nearbyMapSpots = nearbyMapSpots;
+  } else {
+    updates.nearbyMapSpots = deleteField();
   }
   await updateDoc(ref, updates);
 }

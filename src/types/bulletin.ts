@@ -4,7 +4,13 @@ export type BulletinCategory =
   | "gear"
   | "dayof"
   | "other"
-  | "recipe_vote";
+  | "recipe_vote"
+  | "nearby_map";
+
+export type NearbyMapSpot = {
+  name: string;
+  url: string;
+};
 
 /** レシピ投票でプレビューに保存する候補（URL 先から取得） */
 export type RecipePollCandidate = {
@@ -47,6 +53,7 @@ export const BULLETIN_CATEGORY_LABELS: Record<BulletinCategory, string> = {
   dayof: "当日の連絡",
   other: "その他",
   recipe_vote: "レシピ投票",
+  nearby_map: "周辺地図",
 };
 
 export const BULLETIN_CATEGORY_OPTIONS: BulletinCategory[] = [
@@ -55,6 +62,7 @@ export const BULLETIN_CATEGORY_OPTIONS: BulletinCategory[] = [
   "dayof",
   "other",
   "recipe_vote",
+  "nearby_map",
 ];
 
 /** 重要度 */
@@ -88,6 +96,8 @@ export type BulletinTopicDoc = {
   tags?: BulletinTopicTag[];
   /** カテゴリが recipe_vote のとき、候補のプレビュー（画像・材料） */
   recipePoll?: RecipePollData;
+  /** カテゴリが nearby_map のとき、立ち寄り先の一覧 */
+  nearbyMapSpots?: NearbyMapSpot[];
   /** 投票確定後の食事割当（旅程で参照） */
   recipePollResolution?: RecipePollResolution;
   createdAt: unknown;
