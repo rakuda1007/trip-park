@@ -169,15 +169,6 @@ export function AppHeader() {
                       </svg>
                       ダッシュボード
                     </Link>
-                    <Link
-                      href="/portal"
-                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
-                        <path fillRule="evenodd" d="M2 4.75A2.75 2.75 0 0 1 4.75 2h10.5A2.75 2.75 0 0 1 18 4.75v10.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25V4.75ZM4.75 3.5a1.25 1.25 0 0 0-1.25 1.25v2.5h13v-2.5a1.25 1.25 0 0 0-1.25-1.25H4.75Zm11.75 5.25h-13v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5Z" clipRule="evenodd" />
-                      </svg>
-                      公式ポータル
-                    </Link>
                     {/* 3. トピック（グループ選択中のみ） */}
                     {currentGroupId ? (
                       <Link
@@ -199,6 +190,15 @@ export function AppHeader() {
                         <path d="M10 1a6 6 0 0 0-3.815 10.631C7.237 12.5 8 13.443 8 14.456v.644a.75.75 0 0 0 .572.729 6.016 6.016 0 0 0 2.856 0A.75.75 0 0 0 12 15.1v-.644c0-1.013.762-1.957 1.815-2.825A6 6 0 0 0 10 1ZM8.863 17.414a.75.75 0 0 0-.226 1.483 9.066 9.066 0 0 0 2.726 0 .75.75 0 0 0-.226-1.483 7.553 7.553 0 0 1-2.274 0Z" />
                       </svg>
                       旅行一覧
+                    </Link>
+                    <Link
+                      href="/portal"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
+                        <path fillRule="evenodd" d="M2 4.75A2.75 2.75 0 0 1 4.75 2h10.5A2.75 2.75 0 0 1 18 4.75v10.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25V4.75ZM4.75 3.5a1.25 1.25 0 0 0-1.25 1.25v2.5h13v-2.5a1.25 1.25 0 0 0-1.25-1.25H4.75Zm11.75 5.25h-13v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5Z" clipRule="evenodd" />
+                      </svg>
+                      公式ポータル
                     </Link>
                     {/* 5. 参加世帯（グループ選択中のみ） */}
                     {currentGroupId ? (
