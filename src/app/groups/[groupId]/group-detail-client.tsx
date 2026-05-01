@@ -753,17 +753,19 @@ export function GroupDetailClient() {
           ) : (
             <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {topics.map(({ id, data, replyCount }) => {
-                const showImportant =
-                  data.importance === "important" || data.pinned;
+                const isImportant = data.importance === "important";
+                const showImportant = isImportant || data.pinned;
                 const tags = normalizeBulletinTopicTags(data);
                 return (
                   <li key={id}>
                     <Link
                       href={`/groups/${groupId}/bulletin/${id}`}
                       className={`block px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
-                        showImportant
-                          ? "bg-amber-50/60 dark:bg-amber-950/15"
-                          : ""
+                        isImportant
+                          ? "mx-2 my-2 rounded-lg border-2 border-amber-500 bg-amber-50/90 shadow-sm ring-1 ring-amber-200/90 dark:border-amber-600 dark:bg-amber-950/35 dark:ring-amber-800/50"
+                          : showImportant
+                            ? "bg-amber-50/60 dark:bg-amber-950/15"
+                            : ""
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -796,7 +798,7 @@ export function GroupDetailClient() {
                               </span>
                             ))}
                             {data.importance === "important" ? (
-                              <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-300 dark:bg-amber-900/45 dark:text-amber-100 dark:ring-amber-700">
                                 重要
                               </span>
                             ) : null}

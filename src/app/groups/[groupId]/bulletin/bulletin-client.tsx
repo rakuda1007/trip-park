@@ -474,6 +474,10 @@ export function BulletinClient() {
             {topics.map(({ id, data, replyCount }) => {
               const showImportant =
                 data.importance === "important" || data.pinned;
+              const importantMobileFrame =
+                data.importance === "important"
+                  ? "max-sm:border-2 max-sm:border-amber-500 max-sm:ring-2 max-sm:ring-amber-400/90 max-sm:shadow-md dark:max-sm:border-amber-500 dark:max-sm:ring-amber-600/55"
+                  : "";
               const tags = normalizeBulletinTopicTags(data);
               return (
                 <li key={id}>
@@ -483,7 +487,7 @@ export function BulletinClient() {
                       showImportant
                         ? "border-amber-300/90 bg-amber-50 shadow-sm ring-1 ring-amber-200/80 dark:border-amber-800/80 dark:bg-amber-950/35 dark:ring-amber-900/50"
                         : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
-                    }`}
+                    } ${importantMobileFrame}`}
                   >
                     {data.importance === "important" ? (
                       <div className="mb-2 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-300 dark:bg-amber-900/50 dark:text-amber-100 dark:ring-amber-700">

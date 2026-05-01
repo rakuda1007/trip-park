@@ -802,7 +802,9 @@ export function BulletinTopicClient() {
   }
 
   const isTopicAuthor = user?.uid === topic.authorUserId;
-  const showImportant = topic.importance === "important" || topic.pinned;
+  const isImportantTopic = topic.importance === "important";
+  /** 一覧と違い詳細では全面アンバーにしない。重要はピルのみ、ピン留めのみは薄い帯で示す */
+  const detailAmberSurface = topic.pinned && !isImportantTopic;
   /** レシピ投票以外: タイトル固定・本文はスクロール・下部に入力 */
   const chatLayout = !editingTopic && topic.category !== "recipe_vote";
 
@@ -833,7 +835,7 @@ export function BulletinTopicClient() {
 
         <header
           className={`mt-3 shrink-0 border-b px-3 py-2.5 sm:px-4 ${
-            showImportant
+            detailAmberSurface
               ? "border-amber-300 bg-amber-50 shadow-sm ring-1 ring-amber-200/80 dark:border-amber-800/70 dark:bg-amber-950/90 dark:ring-amber-900/40"
               : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
           }`}
@@ -882,7 +884,7 @@ export function BulletinTopicClient() {
           <div ref={chatInnerRef}>
           <div
             className={`rounded-xl border p-3 sm:p-4 ${
-              showImportant
+              detailAmberSurface
                 ? "border-amber-200 bg-amber-50/80 dark:border-amber-900/60 dark:bg-amber-950/25"
                 : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
             }`}
@@ -937,49 +939,64 @@ export function BulletinTopicClient() {
                 <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
                   共有・再通知
                 </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-sky-800/90 dark:text-sky-300/90">
-                  一言を添えて LINE で共有するか、投稿者・管理者はメンバーへプッシュで再通知できます。
-                </p>
-                <label className="mt-2 block text-[11px] text-zinc-600 dark:text-zinc-400">
-                  一言メッセージ（任意・300文字まで）
-                  <textarea
-                    value={remindComment}
-                    onChange={(e) =>
-                      setRemindComment(e.target.value.slice(0, 300))
-                    }
-                    rows={2}
-                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                    placeholder="例: 締切は金曜までです"
-                    disabled={busy !== null}
-                  />
-                </label>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleShareLine()}
-                    disabled={busy !== null}
-                    className="rounded-md bg-[#06C755] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
-                  >
-                    {busy === "share-line" ? "開いています…" : "LINEで共有"}
-                  </button>
+                <input
+                  type="text"
+                  value={remindComment}
+                  onChange={(e) =>
+                    setRemindComment(e.target.value.slice(0, 300))
+                  }
+                  maxLength={300}
+                  className="mt-2 w-full rounded-md border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                  placeholder="一言メッセージ（任意・300文字まで）"
+                  disabled={busy !== null}
+                  aria-label="一言メッセージ（任意・300文字まで）"
+                />
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
                   {isTopicAuthor || canManage ? (
-                    <>
-                      <VisibilityBadge kind="authorOrAdmin" />
+                    <VisibilityBadge kind="authorOrAdmin" />
+                  ) : null}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleShareLine()}
+                      disabled={busy !== null}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-800/25 bg-[#06C755] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+                      aria-label="LINEで共有"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="h-4 w-4 shrink-0 opacity-95"
+                        aria-hidden
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.448-.39l1.395-5.087a.39.39 0 00-.297-.17 48.977 48.977 0 01-3.476-.383c-1.978-.292-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.678 3.348-3.97z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      {busy === "share-line" ? "開いています…" : "LINE"}
+                    </button>
+                    {isTopicAuthor || canManage ? (
                       <button
                         type="button"
                         onClick={() => void handleRemindPush()}
                         disabled={busy !== null}
-                        className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                        className="rounded-md border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200/90 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
                       >
-                        {busy === "remind-push" ? "送信中…" : "プッシュで再通知"}
+                        {busy === "remind-push" ? "送信中…" : "push通知"}
                       </button>
-                    </>
-                  ) : null}
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ) : null}
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
+              {(isTopicAuthor || canManage) ? (
+                <VisibilityBadge kind="authorOrAdmin" />
+              ) : null}
               {isTopicAuthor ? (
                 <button
                   type="button"
@@ -1004,17 +1021,14 @@ export function BulletinTopicClient() {
                 </>
               ) : null}
               {(isTopicAuthor || canManage) && (
-                <>
-                  <VisibilityBadge kind="authorOrAdmin" />
-                  <button
-                    type="button"
-                    onClick={handleDeleteTopic}
-                    disabled={busy !== null}
-                    className="text-xs text-red-600 underline"
-                  >
-                    話題を削除
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={handleDeleteTopic}
+                  disabled={busy !== null}
+                  className="text-xs text-red-600 underline"
+                >
+                  話題を削除
+                </button>
               )}
             </div>
           </div>
@@ -1186,7 +1200,7 @@ export function BulletinTopicClient() {
 
       <article
         className={`mt-6 rounded-xl border p-3 sm:p-4 ${
-          showImportant
+          detailAmberSurface
             ? "border-amber-300/90 bg-amber-50 shadow-sm ring-1 ring-amber-200/80 dark:border-amber-800/70 dark:bg-amber-950/35 dark:ring-amber-900/40"
             : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
         }`}
@@ -1404,10 +1418,10 @@ export function BulletinTopicClient() {
                   {canManage && recipeVoteAdminSummary ? (
                     <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50/90 p-3 dark:border-violet-900/50 dark:bg-violet-950/25">
                       <div className="flex flex-wrap items-center gap-2">
+                        <VisibilityBadge kind="admin" />
                         <h3 className="text-xs font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-200">
                           投票の進捗
                         </h3>
-                        <VisibilityBadge kind="admin" />
                       </div>
                       <p className="mt-1 text-xs text-violet-900/85 dark:text-violet-200/90">
                         メンバーのうち、1点以上付けて「評価を保存」した人:{" "}
@@ -1651,10 +1665,10 @@ export function BulletinTopicClient() {
                 {canManageRecipeJourney ? (
                   <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/80 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
                     <div className="flex flex-wrap items-center gap-2">
+                      <VisibilityBadge kind="admin" />
                       <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-100">
                         投票結果を確定して旅程に反映
                       </h3>
-                      <VisibilityBadge kind="admin" />
                     </div>
                     <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-200/90">
                       上の「投票結果の集計」と<strong className="font-semibold">同じ順</strong>
@@ -1865,47 +1879,62 @@ export function BulletinTopicClient() {
                 <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
                   共有・再通知
                 </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-sky-800/90 dark:text-sky-300/90">
-                  一言を添えて LINE で共有するか、投稿者・管理者はメンバーへプッシュで再通知できます。
-                </p>
-                <label className="mt-2 block text-[11px] text-zinc-600 dark:text-zinc-400">
-                  一言メッセージ（任意・300文字まで）
-                  <textarea
-                    value={remindComment}
-                    onChange={(e) => setRemindComment(e.target.value.slice(0, 300))}
-                    rows={2}
-                    className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                    placeholder="例: 締切は金曜までです"
-                    disabled={busy !== null}
-                  />
-                </label>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleShareLine()}
-                    disabled={busy !== null}
-                    className="rounded-md bg-[#06C755] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
-                  >
-                    {busy === "share-line" ? "開いています…" : "LINEで共有"}
-                  </button>
+                <input
+                  type="text"
+                  value={remindComment}
+                  onChange={(e) => setRemindComment(e.target.value.slice(0, 300))}
+                  maxLength={300}
+                  className="mt-2 w-full rounded-md border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                  placeholder="一言メッセージ（任意・300文字まで）"
+                  disabled={busy !== null}
+                  aria-label="一言メッセージ（任意・300文字まで）"
+                />
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
                   {isTopicAuthor || canManage ? (
-                    <>
-                      <VisibilityBadge kind="authorOrAdmin" />
+                    <VisibilityBadge kind="authorOrAdmin" />
+                  ) : null}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleShareLine()}
+                      disabled={busy !== null}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-800/25 bg-[#06C755] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+                      aria-label="LINEで共有"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="h-4 w-4 shrink-0 opacity-95"
+                        aria-hidden
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.448-.39l1.395-5.087a.39.39 0 00-.297-.17 48.977 48.977 0 01-3.476-.383c-1.978-.292-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.678 3.348-3.97z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      {busy === "share-line" ? "開いています…" : "LINE"}
+                    </button>
+                    {isTopicAuthor || canManage ? (
                       <button
                         type="button"
                         onClick={() => void handleRemindPush()}
                         disabled={busy !== null}
-                        className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                        className="rounded-md border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200/90 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
                       >
-                        {busy === "remind-push" ? "送信中…" : "プッシュで再通知"}
+                        {busy === "remind-push" ? "送信中…" : "push通知"}
                       </button>
-                    </>
-                  ) : null}
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ) : null}
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
+              {(isTopicAuthor || canManage) ? (
+                <VisibilityBadge kind="authorOrAdmin" />
+              ) : null}
               {isTopicAuthor ? (
                 <button
                   type="button"
@@ -1930,17 +1959,14 @@ export function BulletinTopicClient() {
                 </>
               ) : null}
               {(isTopicAuthor || canManage) && (
-                <>
-                  <VisibilityBadge kind="authorOrAdmin" />
-                  <button
-                    type="button"
-                    onClick={handleDeleteTopic}
-                    disabled={busy !== null}
-                    className="text-xs text-red-600 underline"
-                  >
-                    話題を削除
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={handleDeleteTopic}
+                  disabled={busy !== null}
+                  className="text-xs text-red-600 underline"
+                >
+                  話題を削除
+                </button>
               )}
             </div>
           </>
