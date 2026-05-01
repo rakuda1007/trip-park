@@ -191,15 +191,6 @@ export function AppHeader() {
                       </svg>
                       旅行一覧
                     </Link>
-                    <Link
-                      href="/portal"
-                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
-                        <path fillRule="evenodd" d="M2 4.75A2.75 2.75 0 0 1 4.75 2h10.5A2.75 2.75 0 0 1 18 4.75v10.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25V4.75ZM4.75 3.5a1.25 1.25 0 0 0-1.25 1.25v2.5h13v-2.5a1.25 1.25 0 0 0-1.25-1.25H4.75Zm11.75 5.25h-13v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5Z" clipRule="evenodd" />
-                      </svg>
-                      公式ポータル
-                    </Link>
                     {/* 5. 参加世帯（グループ選択中のみ） */}
                     {currentGroupId ? (
                       <Link
@@ -225,6 +216,16 @@ export function AppHeader() {
                         <VisibilityBadge kind="admin" className="shrink-0" />
                       </Link>
                     ) : null}
+                    {/* 7. 公式ポータル */}
+                    <Link
+                      href="/portal"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
+                        <path fillRule="evenodd" d="M2 4.75A2.75 2.75 0 0 1 4.75 2h10.5A2.75 2.75 0 0 1 18 4.75v10.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25V4.75ZM4.75 3.5a1.25 1.25 0 0 0-1.25 1.25v2.5h13v-2.5a1.25 1.25 0 0 0-1.25-1.25H4.75Zm11.75 5.25h-13v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5Z" clipRule="evenodd" />
+                      </svg>
+                      公式ポータル
+                    </Link>
                   </nav>
 
                   {/* ログアウト */}
