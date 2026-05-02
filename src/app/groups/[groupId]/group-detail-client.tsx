@@ -11,6 +11,7 @@ import {
   removeMember,
   updateDestination,
   updateGroupDescription,
+  updateGroupName,
   updateGroupTripDates,
 } from "@/lib/firestore/groups";
 import {
@@ -90,6 +91,10 @@ export function GroupDetailClient() {
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
+  // 旅行名編集用
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState("");
 
   // 旅行日程編集用
   const [editingDates, setEditingDates] = useState(false);
@@ -239,10 +244,38 @@ export function GroupDetailClient() {
   // 未ユーザーでも開けるランディングURLを招待リンクとして使う
   const inviteUrl = group ? buildWelcomeUrl(group.inviteCode) : "";
 
+  function startEditName() {
+    if (!group) return;
+    setDraftName(group.name);
+    setEditingDates(false);
+    setEditingName(true);
+  }
+
+  async function handleSaveName() {
+    if (!groupId) return;
+    const n = draftName.trim();
+    if (!n) {
+      setError("旅行名を入力してください。");
+      return;
+    }
+    setBusy("save-name");
+    setError(null);
+    try {
+      await updateGroupName(groupId, draftName);
+      setEditingName(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "保存に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function startEditDates() {
     if (!group) return;
     setDraftStart(group.tripStartDate ?? "");
     setDraftEnd(group.tripEndDate ?? "");
+    setEditingName(false);
     setEditingDates(true);
   }
 
@@ -389,32 +422,75 @@ export function GroupDetailClient() {
         ← 旅行一覧
       </Link>
 
-      {/* 旅行名 + 日程バッジ（旅行名はダッシュボードへ） */}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          <Link
-            href={`/groups/${groupId}`}
-            className="rounded-md hover:text-zinc-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:hover:text-zinc-200"
-          >
-            {group.name}
-          </Link>
-        </h1>
-        {group.tripStartDate ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-            <span>📅</span>
-            {formatDateRange(group.tripStartDate, group.tripEndDate)}
-          </span>
-        ) : null}
-        {isOwner && !editingDates ? (
-          <button
-            type="button"
-            onClick={startEditDates}
-            className="text-xs text-zinc-500 underline hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            {group.tripStartDate ? "日程を変更" : "日程を設定"}
-          </button>
-        ) : null}
-      </div>
+      {/* 旅行名 + 日程バッジ */}
+      {editingName && isOwner ? (
+        <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            旅行名
+            <input
+              type="text"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              maxLength={200}
+              autoFocus
+              className="mt-1.5 w-full max-w-md rounded-md border border-zinc-300 bg-white px-3 py-2 text-base font-semibold text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+            />
+          </label>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleSaveName}
+              disabled={busy !== null}
+              className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              {busy === "save-name" ? "保存中…" : "保存"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditingName(false)}
+              disabled={busy !== null}
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300"
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+            <Link
+              href={`/groups/${groupId}`}
+              className="rounded-md hover:text-zinc-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:hover:text-zinc-200"
+            >
+              {group.name}
+            </Link>
+          </h1>
+          {group.tripStartDate ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+              <span>📅</span>
+              {formatDateRange(group.tripStartDate, group.tripEndDate)}
+            </span>
+          ) : null}
+          {isOwner ? (
+            <button
+              type="button"
+              onClick={startEditName}
+              className="text-xs text-zinc-500 underline hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              旅行名を変更
+            </button>
+          ) : null}
+          {isOwner && !editingDates ? (
+            <button
+              type="button"
+              onClick={startEditDates}
+              className="text-xs text-zinc-500 underline hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              {group.tripStartDate ? "日程を変更" : "日程を設定"}
+            </button>
+          ) : null}
+        </div>
+      )}
 
       {/* 説明 */}
       {editingDesc ? (

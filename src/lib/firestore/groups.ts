@@ -21,6 +21,8 @@ import {
   type Firestore,
 } from "firebase/firestore";
 
+const GROUP_NAME_MAX_LEN = 200;
+
 const INVITE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function generateInviteCode(): string {
@@ -176,12 +178,46 @@ export async function listMyGroups(uid: string): Promise<
         groupId: item.groupId,
         data: {
           ...item.data,
+          /** グループ本体の最新名（ユーザーの参加時参照が古くても一覧は正しい表示になる） */
+          groupName: gd?.name ?? item.data.groupName,
           tripStartDate: gd?.tripStartDate ?? null,
           tripEndDate: gd?.tripEndDate ?? null,
         },
       },
     ];
   });
+}
+
+/** 旅行名（グループ名）を更新する（オーナーのみ・セキュリティルール側でも検証） */
+export async function updateGroupName(groupId: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("旅行名を入力してください。");
+  }
+  if (trimmed.length > GROUP_NAME_MAX_LEN) {
+    throw new Error(`旅行名は${GROUP_NAME_MAX_LEN}文字以内にしてください。`);
+  }
+  const db = getFirebaseFirestore();
+  const group = await getGroup(groupId);
+  if (!group) {
+    throw new Error("旅行が見つかりません。");
+  }
+
+  const groupRef = doc(db, COLLECTIONS.groups, groupId);
+  const inviteRef = doc(db, COLLECTIONS.inviteCodes, group.inviteCode);
+  const inviteSnap = await getDoc(inviteRef);
+
+  const batch = writeBatch(db);
+  batch.update(groupRef, {
+    name: trimmed,
+    updatedAt: serverTimestamp(),
+  });
+  if (inviteSnap.exists()) {
+    batch.update(inviteRef, {
+      groupName: trimmed,
+    });
+  }
+  await batch.commit();
 }
 
 /** グループの旅行日程を更新する（オーナーまたは管理者が実行） */
