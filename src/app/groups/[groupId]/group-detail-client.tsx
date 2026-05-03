@@ -24,7 +24,9 @@ import { saveLastTripId } from "@/lib/last-trip";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
 import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
+import { BulletinImageAttachButton } from "@/components/bulletin/bulletin-image-attach-button";
 import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
+import { useBulletinImagePaste } from "@/hooks/use-bulletin-image-paste";
 import { VisibilityBadge } from "@/components/visibility-badge";
 import {
   BULLETIN_CATEGORY_LABELS,
@@ -41,7 +43,7 @@ import { Timestamp } from "firebase/firestore";
 import { SharingListPanel } from "@/app/groups/[groupId]/sharing/sharing-list-panel";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 function formatTs(v: unknown): string {
   if (!v) return "—";
@@ -75,7 +77,10 @@ function excerptBulletinBody(data: BulletinTopicDoc, max = 120): string {
   if (data.category === "recipe_vote" && data.recipePoll?.candidates?.length) {
     return `候補 ${data.recipePoll.candidates.length}件のレシピ投票`;
   }
-  const t = data.body.trim().replace(/\s+/g, " ");
+  const t = data.body
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, "[画像]")
+    .trim()
+    .replace(/\s+/g, " ");
   if (t.length <= max) return t;
   return t.slice(0, max) + "…";
 }
@@ -91,6 +96,17 @@ export function GroupDetailClient() {
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
+  const { pasteBulletinImage, insertImageFromFile } = useBulletinImagePaste({
+    groupId,
+    uid: user?.uid,
+    disabled: busy !== null,
+    setBusy,
+    setError,
+  });
+
+  const newTopicBodyRef = useRef<HTMLTextAreaElement>(null);
+  const bulletinImgDashTopicId = useId();
 
   // 旅行名編集用
   const [editingName, setEditingName] = useState(false);
@@ -742,11 +758,31 @@ export function GroupDetailClient() {
                 placeholder="タイトル（件名）"
                 className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
               />
-              <label className="block text-xs text-zinc-500 dark:text-zinc-400">
-                {newCategory === "recipe_vote"
-                  ? "レシピページのURL（1行に1件）"
-                  : "本文"}
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {newCategory === "recipe_vote"
+                      ? "レシピページのURL（1行に1件）"
+                      : "本文"}
+                  </span>
+                  {newCategory !== "recipe_vote" ? (
+                    <BulletinImageAttachButton
+                      inputId={bulletinImgDashTopicId}
+                      disabled={busy !== null}
+                      onFile={(f) =>
+                        void insertImageFromFile(
+                          f,
+                          newBody,
+                          setNewBody,
+                          newTopicBodyRef,
+                          true,
+                        )
+                      }
+                    />
+                  ) : null}
+                </div>
                 <textarea
+                  ref={newTopicBodyRef}
                   value={newBody}
                   onChange={(e) => setNewBody(e.target.value)}
                   rows={newCategory === "recipe_vote" ? 5 : 3}
@@ -755,9 +791,17 @@ export function GroupDetailClient() {
                       ? "https://cookpad.com/jp/recipes/…"
                       : "本文"
                   }
-                  className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                  onPaste={(e) =>
+                    void pasteBulletinImage(
+                      e,
+                      newBody,
+                      setNewBody,
+                      newCategory !== "recipe_vote",
+                    )
+                  }
                 />
-              </label>
+              </div>
               <div className="flex flex-wrap gap-3">
                 <select
                   value={newCategory}

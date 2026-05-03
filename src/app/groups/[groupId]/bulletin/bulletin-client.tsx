@@ -16,6 +16,8 @@ import {
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
 import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
+import { useBulletinImagePaste } from "@/hooks/use-bulletin-image-paste";
+import { BulletinImageAttachButton } from "@/components/bulletin/bulletin-image-attach-button";
 import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
 import {
   BULLETIN_CATEGORY_LABELS,
@@ -31,7 +33,7 @@ import {
 import { Timestamp } from "firebase/firestore";
 import { SharingListPanel } from "@/app/groups/[groupId]/sharing/sharing-list-panel";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 function formatTs(v: unknown): string {
   if (!v) return "—";
@@ -54,7 +56,10 @@ function excerptTopic(data: BulletinTopicDoc, max = 120): string {
   if (data.category === "nearby_map" && data.nearbyMapSpots?.length) {
     return `立ち寄り先 ${data.nearbyMapSpots.length}件の周辺地図`;
   }
-  const t = data.body.trim().replace(/\s+/g, " ");
+  const t = data.body
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, "[画像]")
+    .trim()
+    .replace(/\s+/g, " ");
   if (t.length <= max) return t;
   return t.slice(0, max) + "…";
 }
@@ -73,6 +78,17 @@ export function BulletinClient() {
   const [sharingItems, setSharingItems] = useState<SharingItemRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
+  const { pasteBulletinImage, insertImageFromFile } = useBulletinImagePaste({
+    groupId,
+    uid: user?.uid,
+    disabled: busy !== null,
+    setBusy,
+    setError,
+  });
+
+  const newBodyRef = useRef<HTMLTextAreaElement>(null);
+  const bulletinImgNewTopicId = useId();
 
   const [showForm, setShowForm] = useState(false);
   const [shoppingOpen, setShoppingOpen] = useState(false);
@@ -328,17 +344,37 @@ export function BulletinClient() {
                 placeholder="件名"
               />
             </label>
-            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-              {newCategory === "recipe_vote"
-                ? "レシピページのURL（1行に1件）"
-                : newCategory === "nearby_map"
-                  ? "本文（任意）"
-                  : "本文（最初の投稿）"}
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                  {newCategory === "recipe_vote"
+                    ? "レシピページのURL（1行に1件）"
+                    : newCategory === "nearby_map"
+                      ? "本文（任意）"
+                      : "本文（最初の投稿）"}
+                </span>
+                {newCategory !== "recipe_vote" ? (
+                  <BulletinImageAttachButton
+                    inputId={bulletinImgNewTopicId}
+                    disabled={busy !== null}
+                    onFile={(f) =>
+                      void insertImageFromFile(
+                        f,
+                        newBody,
+                        setNewBody,
+                        newBodyRef,
+                        true,
+                      )
+                    }
+                  />
+                ) : null}
+              </div>
               <textarea
+                ref={newBodyRef}
                 value={newBody}
                 onChange={(e) => setNewBody(e.target.value)}
                 rows={newCategory === "recipe_vote" ? 6 : 4}
-                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                 placeholder={
                   newCategory === "recipe_vote"
                     ? "https://cookpad.com/jp/recipes/…"
@@ -346,8 +382,16 @@ export function BulletinClient() {
                       ? "補足メモ（任意）"
                       : "内容"
                 }
+                onPaste={(e) =>
+                  void pasteBulletinImage(
+                    e,
+                    newBody,
+                    setNewBody,
+                    newCategory !== "recipe_vote",
+                  )
+                }
               />
-            </label>
+            </div>
             {newCategory === "nearby_map" ? (
               <div className="rounded-md border border-sky-200 bg-sky-50/70 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
                 <p className="text-xs font-medium text-sky-900 dark:text-sky-200">

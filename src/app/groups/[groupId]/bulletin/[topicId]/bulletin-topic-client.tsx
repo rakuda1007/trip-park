@@ -35,6 +35,8 @@ import { getGroup, listMembers } from "@/lib/firestore/groups";
 import { shareBulletinTopicPreferred } from "@/lib/bulletin-share";
 import { sendNotification } from "@/lib/notify";
 import type { GroupDoc, MemberDoc } from "@/types/group";
+import { BulletinImageAttachButton } from "@/components/bulletin/bulletin-image-attach-button";
+import { BulletinRichBody } from "@/components/bulletin/bulletin-rich-body";
 import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
 import { VisibilityBadge } from "@/components/visibility-badge";
 import {
@@ -54,12 +56,14 @@ import {
   normalizeBulletinTopicTags,
 } from "@/types/bulletin";
 import { serverTimestamp, Timestamp } from "firebase/firestore";
+import { useBulletinImagePaste } from "@/hooks/use-bulletin-image-paste";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -183,6 +187,12 @@ export function BulletinTopicClient() {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatInnerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const replyComposerRef = useRef<HTMLTextAreaElement>(null);
+  const editTopicBodyRef = useRef<HTMLTextAreaElement>(null);
+  const editReplyBodyRef = useRef<HTMLTextAreaElement>(null);
+  const bulletinImgReplyId = useId();
+  const bulletinImgTopicId = useId();
+  const bulletinImgReplyEditId = useId();
 
   const load = useCallback(async () => {
     if (!groupId || !topicId) return;
@@ -234,6 +244,14 @@ export function BulletinTopicClient() {
   );
   const canManage =
     user && group ? canManageBulletin(group, members, user.uid) : false;
+
+  const { pasteBulletinImage, insertImageFromFile } = useBulletinImagePaste({
+    groupId,
+    uid: user?.uid,
+    disabled: busy !== null,
+    setBusy,
+    setError,
+  });
 
   const replyReadCounts = useMemo(
     () =>
@@ -892,9 +910,10 @@ export function BulletinTopicClient() {
             {topic.category === "nearby_map" ? (
               <div className="space-y-3">
                 {topic.body.trim() ? (
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
-                    {topic.body}
-                  </p>
+                  <BulletinRichBody
+                    body={topic.body}
+                    className="text-sm leading-relaxed"
+                  />
                 ) : null}
                 <ul className="space-y-2">
                   {(topic.nearbyMapSpots ?? []).map((spot, idx) => (
@@ -921,9 +940,10 @@ export function BulletinTopicClient() {
                 </ul>
               </div>
             ) : (
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
-                {topic.body}
-              </p>
+              <BulletinRichBody
+                body={topic.body}
+                className="text-sm leading-relaxed text-zinc-800 dark:text-zinc-200"
+              />
             )}
             <p className="mt-2 text-[11px] text-zinc-500">
               {topic.authorDisplayName ||
@@ -1055,12 +1075,34 @@ export function BulletinTopicClient() {
                       {editingReplyId === id ? (
                         <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-2 dark:border-zinc-600 dark:bg-zinc-900/80">
                           <textarea
+                            ref={editReplyBodyRef}
                             value={editReplyBody}
                             onChange={(e) => setEditReplyBody(e.target.value)}
                             rows={3}
                             className="w-full resize-none rounded-xl border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                            onPaste={(e) =>
+                              void pasteBulletinImage(
+                                e,
+                                editReplyBody,
+                                setEditReplyBody,
+                                true,
+                              )
+                            }
                           />
-                          <div className="mt-1.5 flex gap-2">
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                            <BulletinImageAttachButton
+                              inputId={bulletinImgReplyEditId}
+                              disabled={busy !== null}
+                              onFile={(f) =>
+                                void insertImageFromFile(
+                                  f,
+                                  editReplyBody,
+                                  setEditReplyBody,
+                                  editReplyBodyRef,
+                                  true,
+                                )
+                              }
+                            />
                             <button
                               type="button"
                               onClick={() => handleSaveReply(id)}
@@ -1088,9 +1130,19 @@ export function BulletinTopicClient() {
                                 : "rounded-bl-sm bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
                             }`}
                           >
-                            <p className="whitespace-pre-wrap break-words">
-                              {data.body}
-                            </p>
+                            <BulletinRichBody
+                              body={data.body}
+                              textClassName={
+                                isOwn
+                                  ? "text-white"
+                                  : "text-zinc-900 dark:text-zinc-100"
+                              }
+                              imgClassName={
+                                isOwn
+                                  ? "border-white/30"
+                                  : "border-zinc-200 dark:border-zinc-600"
+                              }
+                            />
                           </div>
                           <p
                             className={`mt-1 text-[10px] leading-tight text-zinc-400 ${
@@ -1149,23 +1201,40 @@ export function BulletinTopicClient() {
 
         {user && isMember ? (
           <div className="shrink-0 border-t border-zinc-200 bg-white px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] dark:border-zinc-700 dark:bg-zinc-950">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
+            <div className="flex items-end gap-2">
+              <textarea
+                ref={replyComposerRef}
                 value={newReplyBody}
                 onChange={(e) => setNewReplyBody(e.target.value)}
-                className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
-                placeholder="メッセージを入力"
+                rows={1}
                 disabled={busy !== null}
+                className="min-h-[42px] min-w-0 flex-1 resize-none rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+                placeholder="メッセージ…（画像は貼り付け・ファイル可）"
+                onPaste={(e) =>
+                  void pasteBulletinImage(e, newReplyBody, setNewReplyBody, true)
+                }
                 onKeyDown={(e) => {
                   if (e.nativeEvent.isComposing) return;
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     if (newReplyBody.trim() && busy === null) {
                       void handleCreateReply();
                     }
                   }
                 }}
+              />
+              <BulletinImageAttachButton
+                inputId={bulletinImgReplyId}
+                disabled={busy !== null}
+                onFile={(f) =>
+                  void insertImageFromFile(
+                    f,
+                    newReplyBody,
+                    setNewReplyBody,
+                    replyComposerRef,
+                    true,
+                  )
+                }
               />
               <button
                 type="button"
@@ -1225,24 +1294,52 @@ export function BulletinTopicClient() {
               maxLength={200}
               className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
             />
-            <label className="block text-xs text-zinc-500">
-              {editCategory === "recipe_vote"
-                ? "レシピページのURL（1行に1件）"
-                : editCategory === "nearby_map"
-                  ? "本文（任意）"
-                  : "本文"}
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-zinc-500">
+                  {editCategory === "recipe_vote"
+                    ? "レシピページのURL（1行に1件）"
+                    : editCategory === "nearby_map"
+                      ? "本文（任意）"
+                      : "本文"}
+                </span>
+                {editCategory !== "recipe_vote" ? (
+                  <BulletinImageAttachButton
+                    inputId={bulletinImgTopicId}
+                    disabled={busy !== null}
+                    onFile={(f) =>
+                      void insertImageFromFile(
+                        f,
+                        editBody,
+                        setEditBody,
+                        editTopicBodyRef,
+                        true,
+                      )
+                    }
+                  />
+                ) : null}
+              </div>
               <textarea
+                ref={editTopicBodyRef}
                 value={editBody}
                 onChange={(e) => setEditBody(e.target.value)}
                 rows={editCategory === "recipe_vote" ? 8 : 8}
-                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
                 placeholder={
                   editCategory === "recipe_vote"
                     ? "https://…"
                     : undefined
                 }
+                onPaste={(e) =>
+                  void pasteBulletinImage(
+                    e,
+                    editBody,
+                    setEditBody,
+                    editCategory !== "recipe_vote",
+                  )
+                }
               />
-            </label>
+            </div>
             {editCategory === "nearby_map" ? (
               <div className="rounded-md border border-sky-200 bg-sky-50/70 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
                 <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
@@ -1832,9 +1929,10 @@ export function BulletinTopicClient() {
             ) : topic.category === "nearby_map" ? (
               <div className="mt-3 space-y-3">
                 {topic.body.trim() ? (
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
-                    {topic.body}
-                  </p>
+                  <BulletinRichBody
+                    body={topic.body}
+                    className="text-sm leading-relaxed text-zinc-800 dark:text-zinc-200"
+                  />
                 ) : null}
                 <ul className="space-y-2">
                   {(topic.nearbyMapSpots ?? []).map((spot, idx) => (
@@ -1861,9 +1959,10 @@ export function BulletinTopicClient() {
                 </ul>
               </div>
             ) : (
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
-                {topic.body}
-              </p>
+              <BulletinRichBody
+                body={topic.body}
+                className="mt-3 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200"
+              />
             )}
             <p className="mt-2 text-[11px] text-zinc-500">
               {topic.authorDisplayName ||
@@ -1994,12 +2093,34 @@ export function BulletinTopicClient() {
                   {editingReplyId === id ? (
                     <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-2 dark:border-zinc-600 dark:bg-zinc-900/80">
                       <textarea
+                        ref={editReplyBodyRef}
                         value={editReplyBody}
                         onChange={(e) => setEditReplyBody(e.target.value)}
                         rows={3}
                         className="w-full resize-none rounded-xl border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                        onPaste={(e) =>
+                          void pasteBulletinImage(
+                            e,
+                            editReplyBody,
+                            setEditReplyBody,
+                            true,
+                          )
+                        }
                       />
-                      <div className="mt-1.5 flex gap-2">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <BulletinImageAttachButton
+                          inputId={bulletinImgReplyEditId}
+                          disabled={busy !== null}
+                          onFile={(f) =>
+                            void insertImageFromFile(
+                              f,
+                              editReplyBody,
+                              setEditReplyBody,
+                              editReplyBodyRef,
+                              true,
+                            )
+                          }
+                        />
                         <button
                           type="button"
                           onClick={() => handleSaveReply(id)}
@@ -2027,9 +2148,19 @@ export function BulletinTopicClient() {
                             : "rounded-bl-sm bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
                         }`}
                       >
-                        <p className="whitespace-pre-wrap break-words">
-                          {data.body}
-                        </p>
+                        <BulletinRichBody
+                          body={data.body}
+                          textClassName={
+                            isOwn
+                              ? "text-white"
+                              : "text-zinc-900 dark:text-zinc-100"
+                          }
+                          imgClassName={
+                            isOwn
+                              ? "border-white/30"
+                              : "border-zinc-200 dark:border-zinc-600"
+                          }
+                        />
                       </div>
                       <p
                         className={`mt-1 text-[10px] leading-tight text-zinc-400 ${
@@ -2082,11 +2213,15 @@ export function BulletinTopicClient() {
         {user && isMember ? (
           <div className="mt-4 flex items-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-700">
             <textarea
+              ref={replyComposerRef}
               value={newReplyBody}
               onChange={(e) => setNewReplyBody(e.target.value)}
               rows={1}
               className="min-h-[42px] flex-1 resize-none rounded-2xl border border-zinc-300 bg-white px-3 py-2.5 text-sm leading-snug placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
-              placeholder="メッセージを入力…"
+              placeholder="メッセージを入力…（画像は貼り付け・ファイル可）"
+              onPaste={(e) =>
+                void pasteBulletinImage(e, newReplyBody, setNewReplyBody, true)
+              }
               onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing) return;
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -2094,6 +2229,19 @@ export function BulletinTopicClient() {
                   if (newReplyBody.trim() && busy === null) void handleCreateReply();
                 }
               }}
+            />
+            <BulletinImageAttachButton
+              inputId={bulletinImgReplyId}
+              disabled={busy !== null}
+              onFile={(f) =>
+                void insertImageFromFile(
+                  f,
+                  newReplyBody,
+                  setNewReplyBody,
+                  replyComposerRef,
+                  true,
+                )
+              }
             />
             <button
               type="button"
