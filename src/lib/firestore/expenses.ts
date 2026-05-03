@@ -1,10 +1,16 @@
 import { getFirebaseFirestore } from "@/lib/firebase/client";
 import { COLLECTIONS, SUB } from "@/lib/firestore/collections";
-import type { ExpenseCategory, ExpenseDoc, ExpenseSplitMode } from "@/types/expense";
+import type {
+  ExpenseCategory,
+  ExpenseDoc,
+  ExpenseSplitMode,
+  PerExpenseFamilyDemographics,
+} from "@/types/expense";
 import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDocs,
   orderBy,
@@ -38,6 +44,11 @@ export type ExpenseInput = {
   participantFamilyIds: string[];
   /** 人数割のとき: familyId -> 重み（adultCount + childCount * childRatio） */
   weightByFamilyId?: Record<string, number>;
+  /** 人数割でこの支出だけ人数を上書きした場合、世帯ごとの入力（未設定なら保存しない） */
+  perExpenseFamilyDemographicsByFamilyId?: Record<
+    string,
+    PerExpenseFamilyDemographics
+  >;
 };
 
 function buildWeightByFamilyId(input: ExpenseInput): Record<string, number> {
@@ -102,6 +113,15 @@ export async function addExpense(
     ...input,
     participantFamilyIds: parts,
   });
+  const demo = input.perExpenseFamilyDemographicsByFamilyId;
+  const demoClean =
+    demo &&
+    typeof demo === "object" &&
+    Object.keys(demo).length > 0 &&
+    input.splitMode === "weighted"
+      ? demo
+      : undefined;
+
   const db = getFirebaseFirestore();
   const col = collection(db, COLLECTIONS.groups, groupId, SUB.expenses);
   const ref = await addDoc(col, {
@@ -113,6 +133,7 @@ export async function addExpense(
     splitMode: input.splitMode,
     participantFamilyIds: parts,
     weightByFamilyId,
+    ...(demoClean ? { perExpenseFamilyDemographicsByFamilyId: demoClean } : {}),
     participantUserIds: [],
     createdByUserId: uid,
     createdAt: serverTimestamp(),
@@ -136,6 +157,15 @@ export async function updateExpense(
     ...input,
     participantFamilyIds: parts,
   });
+  const demo = input.perExpenseFamilyDemographicsByFamilyId;
+  const demoClean =
+    demo &&
+    typeof demo === "object" &&
+    Object.keys(demo).length > 0 &&
+    input.splitMode === "weighted"
+      ? demo
+      : undefined;
+
   const db = getFirebaseFirestore();
   const ref = doc(db, COLLECTIONS.groups, groupId, SUB.expenses, expenseId);
   await updateDoc(ref, {
@@ -149,6 +179,9 @@ export async function updateExpense(
     weightByFamilyId,
     participantUserIds: [],
     updatedAt: serverTimestamp(),
+    perExpenseFamilyDemographicsByFamilyId: demoClean
+      ? demoClean
+      : deleteField(),
   });
 }
 

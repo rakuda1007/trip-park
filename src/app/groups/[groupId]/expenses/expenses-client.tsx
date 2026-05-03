@@ -20,7 +20,17 @@ import {
 } from "@/lib/settlement";
 import type { FamilyDoc } from "@/types/family";
 import type { GroupDoc, MemberDoc } from "@/types/group";
-import type { ExpenseCategory, ExpenseDoc, ExpenseSplitMode } from "@/types/expense";
+import {
+  demographicsFromFamilyDoc,
+  validatePerExpenseDemographicsForFamilies,
+  weightFromDemographics,
+} from "@/lib/expense-family-demographics";
+import type {
+  ExpenseCategory,
+  ExpenseDoc,
+  ExpenseSplitMode,
+  PerExpenseFamilyDemographics,
+} from "@/types/expense";
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -142,9 +152,26 @@ function canManageExpense(
 
 /** 世帯の人数割重みを計算（大人 * 1 + 子供 * childRatio） */
 function familyWeight(data: FamilyDoc): number {
-  const cr = typeof data.childRatio === "number" ? data.childRatio : 1;
-  const w = data.adultCount + data.childCount * cr;
-  return w > 0 ? w : 1;
+  return weightFromDemographics(demographicsFromFamilyDoc(data));
+}
+
+function buildDemoMapFromSelection(
+  ids: Set<string>,
+  famList: { id: string; data: FamilyDoc }[],
+  prev?: Record<string, PerExpenseFamilyDemographics>,
+): Record<string, PerExpenseFamilyDemographics> {
+  const next: Record<string, PerExpenseFamilyDemographics> = {};
+  for (const fid of ids) {
+    if (prev?.[fid]) {
+      next[fid] = { ...prev[fid] };
+      continue;
+    }
+    const fam = famList.find((f) => f.id === fid);
+    next[fid] = fam
+      ? demographicsFromFamilyDoc(fam.data)
+      : { adultCount: 1, childCount: 0, childRatio: 1 };
+  }
+  return next;
 }
 
 export function ExpensesClient() {
@@ -167,6 +194,11 @@ export function ExpensesClient() {
   const [memo, setMemo] = useState("");
   const [splitMode, setSplitMode] = useState<ExpenseSplitMode>("weighted");
   const [selectedFamilyIds, setSelectedFamilyIds] = useState<Set<string>>(new Set());
+  /** 人数割のとき、この支出だけ大人・子供・比率を上書きする */
+  const [perExpenseDemoMode, setPerExpenseDemoMode] = useState(false);
+  const [perExpenseDemoByFamilyId, setPerExpenseDemoByFamilyId] = useState<
+    Record<string, PerExpenseFamilyDemographics>
+  >({});
 
   const userToFamilyId = useMemo(() => {
     const m = new Map<string, string>();
@@ -214,6 +246,13 @@ export function ExpensesClient() {
       return families[0]!.id;
     });
   }, [families]);
+
+  useEffect(() => {
+    if (!perExpenseDemoMode || splitMode !== "weighted") return;
+    setPerExpenseDemoByFamilyId((prev) =>
+      buildDemoMapFromSelection(selectedFamilyIds, families, prev),
+    );
+  }, [selectedFamilyIds, perExpenseDemoMode, splitMode, families]);
 
   const balances = useMemo(
     () => computeBalancesYen(expenses, userToFamilyId),
@@ -270,13 +309,27 @@ export function ExpensesClient() {
     const amt = Math.floor(n);
     const wmap = new Map<string, number>();
     for (const fid of selectedFamilyIds) {
-      const fam = families.find((f) => f.id === fid);
-      if (!fam) continue;
-      const w = splitMode === "weighted" ? familyWeight(fam.data) : 1;
-      wmap.set(fid, w);
+      let w = 1;
+      if (splitMode === "weighted") {
+        if (perExpenseDemoMode) {
+          const d = perExpenseDemoByFamilyId[fid];
+          w = d ? weightFromDemographics(d) : 1;
+        } else {
+          const fam = families.find((f) => f.id === fid);
+          w = fam ? familyWeight(fam.data) : 1;
+        }
+      }
+      wmap.set(fid, w > 0 ? w : 1);
     }
     return distributeWeightedSharesYen(amt, wmap);
-  }, [amount, selectedFamilyIds, splitMode, families]);
+  }, [
+    amount,
+    selectedFamilyIds,
+    splitMode,
+    families,
+    perExpenseDemoMode,
+    perExpenseDemoByFamilyId,
+  ]);
 
   function resetForm() {
     setEditingId(null);
@@ -285,6 +338,8 @@ export function ExpensesClient() {
     setCategory("food");
     setMemo("");
     setSplitMode("equal");
+    setPerExpenseDemoMode(false);
+    setPerExpenseDemoByFamilyId({});
     setSelectedFamilyIds(new Set(families.map((f) => f.id)));
     if (families.length > 0) {
       setPaidByFamilyId(families[0]!.id);
@@ -312,6 +367,22 @@ export function ExpensesClient() {
       setSelectedFamilyIds(new Set(families.map((f) => f.id)));
     }
     setSplitMode(row.data.splitMode ?? "equal");
+    const pdata = row.data.perExpenseFamilyDemographicsByFamilyId;
+    const pWeighted = (row.data.splitMode ?? "equal") === "weighted";
+    if (pWeighted && pdata && Object.keys(pdata).length > 0) {
+      setPerExpenseDemoMode(true);
+      const pids = row.data.participantFamilyIds ?? [];
+      const map: Record<string, PerExpenseFamilyDemographics> = {};
+      for (const fid of pids) {
+        const stored = pdata[fid];
+        const fam = families.find((f) => f.id === fid);
+        map[fid] = stored ?? (fam ? demographicsFromFamilyDoc(fam.data) : { adultCount: 1, childCount: 0, childRatio: 1 });
+      }
+      setPerExpenseDemoByFamilyId(map);
+    } else {
+      setPerExpenseDemoMode(false);
+      setPerExpenseDemoByFamilyId({});
+    }
   }
 
   function toggleFamily(fid: string) {
@@ -332,15 +403,53 @@ export function ExpensesClient() {
       return;
     }
     const selectedList = [...selectedFamilyIds];
-    const weightByFamilyId: Record<string, number> | undefined =
-      splitMode === "weighted"
-        ? Object.fromEntries(
-            selectedList.map((fid) => {
-              const fam = families.find((f) => f.id === fid);
-              return [fid, fam ? familyWeight(fam.data) : 1];
-            }),
-          )
-        : undefined;
+
+    let weightByFamilyId: Record<string, number> | undefined;
+    let perExpenseFamilyDemographicsByFamilyId:
+      | Record<string, PerExpenseFamilyDemographics>
+      | undefined;
+
+    if (splitMode === "weighted") {
+      if (perExpenseDemoMode) {
+        const err = validatePerExpenseDemographicsForFamilies(
+          selectedList,
+          perExpenseDemoByFamilyId,
+        );
+        if (err) {
+          setError(err);
+          return;
+        }
+        weightByFamilyId = {};
+        perExpenseFamilyDemographicsByFamilyId = {};
+        for (const fid of selectedList) {
+          const d = perExpenseDemoByFamilyId[fid]!;
+          const cr =
+            typeof d.childRatio === "number" &&
+            Number.isFinite(d.childRatio) &&
+            d.childRatio >= 0
+              ? d.childRatio
+              : 1;
+          const normalized: PerExpenseFamilyDemographics = {
+            adultCount: Math.max(0, Math.floor(Number(d.adultCount) || 0)),
+            childCount: Math.max(0, Math.floor(Number(d.childCount) || 0)),
+            childRatio: cr,
+          };
+          perExpenseFamilyDemographicsByFamilyId[fid] = normalized;
+          weightByFamilyId[fid] = weightFromDemographics(normalized);
+        }
+      } else {
+        weightByFamilyId = Object.fromEntries(
+          selectedList.map((fid) => {
+            const fam = families.find((f) => f.id === fid);
+            return [fid, fam ? familyWeight(fam.data) : 1];
+          }),
+        );
+        perExpenseFamilyDemographicsByFamilyId = undefined;
+      }
+    } else {
+      weightByFamilyId = undefined;
+      perExpenseFamilyDemographicsByFamilyId = undefined;
+    }
 
     const input: ExpenseInput = {
       amount: Math.floor(n),
@@ -351,6 +460,7 @@ export function ExpensesClient() {
       splitMode,
       participantFamilyIds: selectedList,
       weightByFamilyId,
+      perExpenseFamilyDemographicsByFamilyId,
     };
     const familyRefs = families.map((f) => ({ id: f.id }));
     setBusy(editingId ? "save" : "add");
@@ -552,29 +662,178 @@ export function ExpensesClient() {
                   type="radio"
                   name="splitMode"
                   checked={splitMode === "equal"}
-                  onChange={() => setSplitMode("equal")}
+                  onChange={() => {
+                    setSplitMode("equal");
+                    setPerExpenseDemoMode(false);
+                    setPerExpenseDemoByFamilyId({});
+                  }}
                 />
                 均等割（世帯ごとに同額）
               </label>
             </div>
             {splitMode === "weighted" && selectedFamilyIds.size > 0 ? (
-              <div className="mt-2 rounded-md border border-zinc-200 bg-white p-3 text-xs text-zinc-600 dark:border-zinc-600 dark:bg-zinc-900/40 dark:text-zinc-400">
-                <p className="font-medium text-zinc-700 dark:text-zinc-300">各世帯の重み（参考）</p>
-                <ul className="mt-1.5 space-y-0.5">
-                  {[...selectedFamilyIds].map((fid) => {
-                    const fam = families.find((f) => f.id === fid);
-                    if (!fam) return null;
-                    const w = familyWeight(fam.data);
-                    return (
-                      <li key={fid}>
-                        {fam.data.name}: {w.toFixed(1)}
-                        <span className="ml-1 text-zinc-400">
-                          （大人{fam.data.adultCount} × 1 + 子供{fam.data.childCount} × {fam.data.childRatio ?? 1}）
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
+              <div className="mt-2 space-y-3">
+                <div className="rounded-md border border-zinc-200 bg-white p-3 text-xs text-zinc-600 dark:border-zinc-600 dark:bg-zinc-900/40 dark:text-zinc-400">
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={perExpenseDemoMode}
+                      disabled={busy !== null}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setPerExpenseDemoMode(on);
+                        if (on) {
+                          setPerExpenseDemoByFamilyId(
+                            buildDemoMapFromSelection(
+                              selectedFamilyIds,
+                              families,
+                              undefined,
+                            ),
+                          );
+                        } else {
+                          setPerExpenseDemoByFamilyId({});
+                        }
+                      }}
+                    />
+                    <span>
+                      <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                        この支出だけ、人数割の人数を変える
+                      </span>
+                      <span className="mt-0.5 block text-zinc-500 dark:text-zinc-400">
+                        世帯マスタは変わりません。ボーリングなど、その支出の負担人数だけ合わせるときに使います。
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
+                {perExpenseDemoMode ? (
+                  <div className="overflow-x-auto rounded-md border border-sky-200 bg-sky-50/80 p-3 text-xs dark:border-sky-900/50 dark:bg-sky-950/25">
+                    <p className="font-medium text-sky-950 dark:text-sky-100">
+                      この支出での人数（負担対象にチェックした世帯のみ）
+                    </p>
+                    <table className="mt-2 w-full min-w-[280px] border-collapse text-left">
+                      <thead>
+                        <tr className="border-b border-sky-200/80 text-[11px] text-sky-800 dark:border-sky-800 dark:text-sky-200">
+                          <th className="py-1 pr-2 font-medium">世帯</th>
+                          <th className="py-1 pr-2 font-medium">大人</th>
+                          <th className="py-1 pr-2 font-medium">子供</th>
+                          <th className="py-1 pr-2 font-medium">子供比率</th>
+                          <th className="py-1 font-medium">重み</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...selectedFamilyIds].map((fid) => {
+                          const fam = families.find((f) => f.id === fid);
+                          const d = perExpenseDemoByFamilyId[fid];
+                          if (!fam || !d) return null;
+                          const w = weightFromDemographics(d);
+                          return (
+                            <tr
+                              key={fid}
+                              className="border-b border-sky-100/80 last:border-0 dark:border-sky-900/40"
+                            >
+                              <td className="py-1.5 pr-2 align-middle text-zinc-800 dark:text-zinc-200">
+                                {fam.data.name}
+                              </td>
+                              <td className="py-1.5 pr-2 align-middle">
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min={0}
+                                  step={1}
+                                  disabled={busy !== null}
+                                  value={d.adultCount}
+                                  onChange={(e) => {
+                                    const v = Math.max(
+                                      0,
+                                      Math.floor(Number(e.target.value) || 0),
+                                    );
+                                    setPerExpenseDemoByFamilyId((prev) => ({
+                                      ...prev,
+                                      [fid]: { ...prev[fid]!, adultCount: v },
+                                    }));
+                                  }}
+                                  className="w-14 rounded border border-zinc-300 bg-white px-1 py-0.5 text-xs dark:border-zinc-600 dark:bg-zinc-900"
+                                />
+                              </td>
+                              <td className="py-1.5 pr-2 align-middle">
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min={0}
+                                  step={1}
+                                  disabled={busy !== null}
+                                  value={d.childCount}
+                                  onChange={(e) => {
+                                    const v = Math.max(
+                                      0,
+                                      Math.floor(Number(e.target.value) || 0),
+                                    );
+                                    setPerExpenseDemoByFamilyId((prev) => ({
+                                      ...prev,
+                                      [fid]: { ...prev[fid]!, childCount: v },
+                                    }));
+                                  }}
+                                  className="w-14 rounded border border-zinc-300 bg-white px-1 py-0.5 text-xs dark:border-zinc-600 dark:bg-zinc-900"
+                                />
+                              </td>
+                              <td className="py-1.5 pr-2 align-middle">
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={0}
+                                  step={0.1}
+                                  disabled={busy !== null}
+                                  value={d.childRatio}
+                                  onChange={(e) => {
+                                    const raw = Number(e.target.value);
+                                    const v =
+                                      Number.isFinite(raw) && raw >= 0 ? raw : 0;
+                                    setPerExpenseDemoByFamilyId((prev) => ({
+                                      ...prev,
+                                      [fid]: { ...prev[fid]!, childRatio: v },
+                                    }));
+                                  }}
+                                  className="w-16 rounded border border-zinc-300 bg-white px-1 py-0.5 text-xs dark:border-zinc-600 dark:bg-zinc-900"
+                                />
+                              </td>
+                              <td className="py-1.5 align-middle tabular-nums text-zinc-700 dark:text-zinc-300">
+                                {w > 0 ? w.toFixed(2) : "—"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <p className="mt-2 text-[11px] text-sky-900/80 dark:text-sky-200/80">
+                      重み ＝ 大人 × 1 ＋ 子供 × 子供比率（0
+                      になると保存できません）
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-zinc-200 bg-white p-3 text-xs text-zinc-600 dark:border-zinc-600 dark:bg-zinc-900/40 dark:text-zinc-400">
+                    <p className="font-medium text-zinc-700 dark:text-zinc-300">
+                      各世帯の重み（世帯マスタに基づく参考）
+                    </p>
+                    <ul className="mt-1.5 space-y-0.5">
+                      {[...selectedFamilyIds].map((fid) => {
+                        const fam = families.find((f) => f.id === fid);
+                        if (!fam) return null;
+                        const w = familyWeight(fam.data);
+                        const demo = demographicsFromFamilyDoc(fam.data);
+                        return (
+                          <li key={fid}>
+                            {fam.data.name}: {w.toFixed(1)}
+                            <span className="ml-1 text-zinc-400">
+                              （大人{demo.adultCount} × 1 + 子供{demo.childCount} × {demo.childRatio}）
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
@@ -708,6 +967,14 @@ export function ExpensesClient() {
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
                         {splitModeLabel(row.data.splitMode)}で計算
+                        {row.data.splitMode === "weighted" &&
+                        row.data.perExpenseFamilyDemographicsByFamilyId &&
+                        Object.keys(row.data.perExpenseFamilyDemographicsByFamilyId)
+                          .length > 0 ? (
+                          <span className="ml-1 text-sky-700 dark:text-sky-300">
+                            （この支出のみ人数を指定）
+                          </span>
+                        ) : null}
                       </p>
                       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                         立て替え: {resolvePaidByLabel(row.data)}
