@@ -17,6 +17,7 @@ import type { GroupDoc, MemberDoc } from "@/types/group";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
 import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
 import { useBulletinImagePaste } from "@/hooks/use-bulletin-image-paste";
+import { BulletinExpandableBodyField } from "@/components/bulletin/bulletin-expandable-body-field";
 import { BulletinImageAttachButton } from "@/components/bulletin/bulletin-image-attach-button";
 import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
 import {
@@ -344,16 +345,16 @@ export function BulletinClient() {
                 placeholder="件名"
               />
             </label>
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-zinc-600 dark:text-zinc-400">
-                  {newCategory === "recipe_vote"
-                    ? "レシピページのURL（1行に1件）"
-                    : newCategory === "nearby_map"
-                      ? "本文（任意）"
-                      : "本文（最初の投稿）"}
-                </span>
-                {newCategory !== "recipe_vote" ? (
+            <BulletinExpandableBodyField
+              label={
+                newCategory === "recipe_vote"
+                  ? "レシピページのURL（1行に1件）"
+                  : newCategory === "nearby_map"
+                    ? "本文（任意）"
+                    : "本文（最初の投稿）"
+              }
+              leadingActions={
+                newCategory !== "recipe_vote" ? (
                   <BulletinImageAttachButton
                     inputId={bulletinImgNewTopicId}
                     disabled={busy !== null}
@@ -367,31 +368,29 @@ export function BulletinClient() {
                       )
                     }
                   />
-                ) : null}
-              </div>
-              <textarea
-                ref={newBodyRef}
-                value={newBody}
-                onChange={(e) => setNewBody(e.target.value)}
-                rows={newCategory === "recipe_vote" ? 6 : 4}
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                placeholder={
-                  newCategory === "recipe_vote"
-                    ? "https://cookpad.com/jp/recipes/…"
-                    : newCategory === "nearby_map"
-                      ? "補足メモ（任意）"
-                      : "内容"
-                }
-                onPaste={(e) =>
-                  void pasteBulletinImage(
-                    e,
-                    newBody,
-                    setNewBody,
-                    newCategory !== "recipe_vote",
-                  )
-                }
-              />
-            </div>
+                ) : null
+              }
+              textareaRef={newBodyRef}
+              value={newBody}
+              onChange={setNewBody}
+              rows={newCategory === "recipe_vote" ? 6 : 4}
+              placeholder={
+                newCategory === "recipe_vote"
+                  ? "https://cookpad.com/jp/recipes/…"
+                  : newCategory === "nearby_map"
+                    ? "補足メモ（任意）"
+                    : "内容"
+              }
+              disabled={busy !== null}
+              onPaste={(e) =>
+                void pasteBulletinImage(
+                  e,
+                  newBody,
+                  setNewBody,
+                  newCategory !== "recipe_vote",
+                )
+              }
+            />
             {newCategory === "nearby_map" ? (
               <div className="rounded-md border border-sky-200 bg-sky-50/70 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
                 <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
