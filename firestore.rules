@@ -358,7 +358,6 @@ service cloud.firestore {
           request.resource.data.participantFamilyIds is list &&
           request.resource.data.participantFamilyIds.size() >= 1 &&
           exists(/databases/$(database)/documents/groups/$(groupId)/families/$(request.resource.data.paidByFamilyId)) &&
-          request.resource.data.participantFamilyIds.hasAll([request.resource.data.paidByFamilyId]) &&
           request.resource.data.category in ['food', 'transport', 'lodging', 'other'] &&
           request.resource.data.keys().hasAll([
             'amount', 'paidByFamilyId', 'expenseDate', 'category', 'memo', 'splitMode',
@@ -376,7 +375,6 @@ service cloud.firestore {
           request.resource.data.participantFamilyIds is list &&
           request.resource.data.participantFamilyIds.size() >= 1 &&
           exists(/databases/$(database)/documents/groups/$(groupId)/families/$(request.resource.data.paidByFamilyId)) &&
-          request.resource.data.participantFamilyIds.hasAll([request.resource.data.paidByFamilyId]) &&
           request.resource.data.category in ['food', 'transport', 'lodging', 'other'] &&
           (isOwnerOrAdmin(groupId) || resource.data.createdByUserId == request.auth.uid) &&
           request.resource.data.keys().hasAll([

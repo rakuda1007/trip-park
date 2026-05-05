@@ -1,4 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 type BulletinRichBodyProps = {
   body: string;
@@ -20,6 +23,20 @@ export function BulletinRichBody({
   textClassName = "text-zinc-800 dark:text-zinc-200",
   imgClassName = "border-zinc-200 dark:border-zinc-600",
 }: BulletinRichBodyProps) {
+  const [zoomedImage, setZoomedImage] = useState<{
+    src: string;
+    alt: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!zoomedImage) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setZoomedImage(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [zoomedImage]);
+
   const parts: ReactNode[] = [];
   const re = /!\[([^\]]*)\]\((https?:[^)\s]+)\)/g;
   let last = 0;
@@ -41,13 +58,22 @@ export function BulletinRichBody({
     const url = m[2];
     parts.push(
       <span key={`img-${key++}`} className="my-1 block max-w-full">
-        {/* eslint-disable-next-line @next/next/no-img-element -- Storage の公開トークン付き URL */}
-        <img
-          src={url}
-          alt={alt || "貼り付け画像"}
-          className={`max-h-64 max-w-full rounded-md border object-contain ${imgClassName}`}
-          loading="lazy"
-        />
+        <button
+          type="button"
+          onClick={() =>
+            setZoomedImage({ src: url, alt: alt || "貼り付け画像" })
+          }
+          className="block max-w-full cursor-zoom-in"
+          aria-label="画像を拡大表示"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- Storage の公開トークン付き URL */}
+          <img
+            src={url}
+            alt={alt || "貼り付け画像"}
+            className={`max-h-64 max-w-full rounded-md border object-contain ${imgClassName}`}
+            loading="lazy"
+          />
+        </button>
       </span>,
     );
     last = m.index + m[0].length;
@@ -72,5 +98,34 @@ export function BulletinRichBody({
     ) : null;
   }
 
-  return <div className={className ?? "text-sm leading-relaxed"}>{parts}</div>;
+  return (
+    <>
+      <div className={className ?? "text-sm leading-relaxed"}>{parts}</div>
+      {zoomedImage ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="拡大画像"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setZoomedImage(null)}
+        >
+          <button
+            type="button"
+            aria-label="拡大画像を閉じる"
+            onClick={() => setZoomedImage(null)}
+            className="absolute right-3 top-3 rounded-md bg-black/50 px-2 py-1 text-sm text-white hover:bg-black/70"
+          >
+            閉じる
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element -- Storage の公開トークン付き URL */}
+          <img
+            src={zoomedImage.src}
+            alt={zoomedImage.alt}
+            className="max-h-[90vh] max-w-[95vw] rounded-md object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
+    </>
+  );
 }
