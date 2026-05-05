@@ -55,7 +55,10 @@ export function BulletinRichBody({
     }
   }, [zoomedImage]);
 
-  function touchDistance(t1: Touch, t2: Touch): number {
+  function touchDistance(
+    t1: { clientX: number; clientY: number },
+    t2: { clientX: number; clientY: number },
+  ): number {
     const dx = t1.clientX - t2.clientX;
     const dy = t1.clientY - t2.clientY;
     return Math.hypot(dx, dy);
