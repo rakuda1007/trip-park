@@ -40,7 +40,7 @@ export type ExpenseInput = {
   category: ExpenseCategory;
   memo: string;
   splitMode: ExpenseSplitMode;
-  /** 負担の対象となる世帯 ID リスト（paidByFamilyId を含むこと） */
+  /** 負担の対象となる世帯 ID リスト */
   participantFamilyIds: string[];
   /** 人数割のとき: familyId -> 重み（adultCount + childCount * childRatio） */
   weightByFamilyId?: Record<string, number>;
@@ -92,9 +92,6 @@ function validateExpenseInput(
   );
   if (parts.length === 0) {
     throw new Error("負担の対象となる世帯を 1 つ以上選んでください。");
-  }
-  if (!parts.includes(input.paidByFamilyId)) {
-    throw new Error("立て替えた世帯を「負担の対象」に含めてください。");
   }
 }
 
