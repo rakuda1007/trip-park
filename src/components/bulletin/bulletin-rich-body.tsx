@@ -27,7 +27,6 @@ export function BulletinRichBody({
     src: string;
     alt: string;
   } | null>(null);
-  const [isImageGestureActive, setIsImageGestureActive] = useState(false);
   const [modalScale, setModalScale] = useState(1);
   const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
   const pinchStartDistanceRef = useRef<number | null>(null);
@@ -47,7 +46,6 @@ export function BulletinRichBody({
 
   useEffect(() => {
     if (!zoomedImage) {
-      setIsImageGestureActive(false);
       setModalScale(1);
       setModalOffset({ x: 0, y: 0 });
       pinchStartDistanceRef.current = null;
@@ -153,10 +151,9 @@ export function BulletinRichBody({
           role="dialog"
           aria-modal="true"
           aria-label="拡大画像"
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4"
           onClick={() => {
-            if (modalScale > 1.001 || isImageGestureActive) {
-              setIsImageGestureActive(false);
+            if (modalScale > 1.001) {
               resetZoom();
               return;
             }
@@ -201,13 +198,11 @@ export function BulletinRichBody({
           <img
             src={zoomedImage.src}
             alt={zoomedImage.alt}
-            className={`max-h-[90vh] max-w-[95vw] rounded-md object-contain ${
-              isImageGestureActive ? "ring-2 ring-sky-400/90" : ""
-            }`}
+            className="max-h-[90vh] max-w-[95vw] rounded-md object-contain"
             style={{
               transform: `translate(${modalOffset.x}px, ${modalOffset.y}px) scale(${modalScale})`,
               transformOrigin: "center center",
-              touchAction: isImageGestureActive ? "none" : "manipulation",
+              touchAction: "none",
               WebkitTapHighlightColor: "transparent",
               WebkitTouchCallout: "none",
               userSelect: "none",
@@ -216,13 +211,9 @@ export function BulletinRichBody({
             }}
             draggable={false}
             onContextMenu={(e) => e.preventDefault()}
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsImageGestureActive(true);
-            }}
+            onClick={(e) => e.stopPropagation()}
             onDoubleClick={(e) => {
               e.stopPropagation();
-              setIsImageGestureActive(true);
               if (modalScale > 1.05) {
                 resetZoom();
               } else {
@@ -231,7 +222,6 @@ export function BulletinRichBody({
             }}
             onTouchStart={(e) => {
               e.stopPropagation();
-              setIsImageGestureActive(true);
               if (e.touches.length === 2) {
                 pinchStartDistanceRef.current = touchDistance(
                   e.touches[0]!,
@@ -251,7 +241,6 @@ export function BulletinRichBody({
             }}
             onTouchMove={(e) => {
               e.stopPropagation();
-              if (!isImageGestureActive) return;
               if (e.touches.length === 2) {
                 e.preventDefault();
                 const start = pinchStartDistanceRef.current;
