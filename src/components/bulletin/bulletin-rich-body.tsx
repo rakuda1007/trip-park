@@ -28,8 +28,12 @@ export function BulletinRichBody({
     alt: string;
   } | null>(null);
   const [modalScale, setModalScale] = useState(1);
+  const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
   const pinchStartDistanceRef = useRef<number | null>(null);
   const pinchStartScaleRef = useRef(1);
+  const dragStartPointRef = useRef<{ x: number; y: number } | null>(null);
+  const dragStartOffsetRef = useRef({ x: 0, y: 0 });
+  const lastTapTimeRef = useRef(0);
 
   useEffect(() => {
     if (!zoomedImage) return;
@@ -43,8 +47,11 @@ export function BulletinRichBody({
   useEffect(() => {
     if (!zoomedImage) {
       setModalScale(1);
+      setModalOffset({ x: 0, y: 0 });
       pinchStartDistanceRef.current = null;
       pinchStartScaleRef.current = 1;
+      dragStartPointRef.current = null;
+      dragStartOffsetRef.current = { x: 0, y: 0 };
     }
   }, [zoomedImage]);
 
@@ -52,6 +59,27 @@ export function BulletinRichBody({
     const dx = t1.clientX - t2.clientX;
     const dy = t1.clientY - t2.clientY;
     return Math.hypot(dx, dy);
+  }
+
+  function clampScale(v: number): number {
+    return Math.min(4, Math.max(1, v));
+  }
+
+  function zoomIn() {
+    setModalScale((prev) => clampScale(prev + 0.25));
+  }
+
+  function zoomOut() {
+    setModalScale((prev) => {
+      const next = clampScale(prev - 0.25);
+      if (next <= 1) setModalOffset({ x: 0, y: 0 });
+      return next;
+    });
+  }
+
+  function resetZoom() {
+    setModalScale(1);
+    setModalOffset({ x: 0, y: 0 });
   }
 
   const parts: ReactNode[] = [];
@@ -126,49 +154,124 @@ export function BulletinRichBody({
           className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4"
           onClick={() => setZoomedImage(null)}
         >
-          <button
-            type="button"
-            aria-label="拡大画像を閉じる"
-            onClick={() => setZoomedImage(null)}
-            className="absolute right-3 top-3 rounded-md bg-black/50 px-2 py-1 text-sm text-white hover:bg-black/70"
-          >
-            閉じる
-          </button>
+          <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-md bg-black/55 p-1">
+            <button
+              type="button"
+              aria-label="拡大"
+              onClick={zoomIn}
+              className="rounded bg-white/15 px-2 py-1 text-sm text-white hover:bg-white/25"
+            >
+              ＋
+            </button>
+            <button
+              type="button"
+              aria-label="縮小"
+              onClick={zoomOut}
+              className="rounded bg-white/15 px-2 py-1 text-sm text-white hover:bg-white/25"
+            >
+              －
+            </button>
+            <button
+              type="button"
+              aria-label="拡大率をリセット"
+              onClick={resetZoom}
+              className="rounded bg-white/15 px-2 py-1 text-xs text-white hover:bg-white/25"
+            >
+              リセット
+            </button>
+            <button
+              type="button"
+              aria-label="拡大画像を閉じる"
+              onClick={() => setZoomedImage(null)}
+              className="rounded bg-white/20 px-2 py-1 text-sm text-white hover:bg-white/30"
+            >
+              閉じる
+            </button>
+          </div>
           {/* eslint-disable-next-line @next/next/no-img-element -- Storage の公開トークン付き URL */}
           <img
             src={zoomedImage.src}
             alt={zoomedImage.alt}
             className="max-h-[90vh] max-w-[95vw] rounded-md object-contain"
             style={{
-              transform: `scale(${modalScale})`,
+              transform: `translate(${modalOffset.x}px, ${modalOffset.y}px) scale(${modalScale})`,
               transformOrigin: "center center",
               touchAction: "none",
+              transition: pinchStartDistanceRef.current ? "none" : "transform 100ms ease-out",
             }}
             onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              if (modalScale > 1.05) {
+                resetZoom();
+              } else {
+                setModalScale(2);
+              }
+            }}
             onTouchStart={(e) => {
               e.stopPropagation();
-              if (e.touches.length !== 2) return;
-              pinchStartDistanceRef.current = touchDistance(
-                e.touches[0]!,
-                e.touches[1]!,
-              );
-              pinchStartScaleRef.current = modalScale;
+              if (e.touches.length === 2) {
+                pinchStartDistanceRef.current = touchDistance(
+                  e.touches[0]!,
+                  e.touches[1]!,
+                );
+                pinchStartScaleRef.current = modalScale;
+                dragStartPointRef.current = null;
+                return;
+              }
+              if (e.touches.length === 1 && modalScale > 1.001) {
+                dragStartPointRef.current = {
+                  x: e.touches[0]!.clientX,
+                  y: e.touches[0]!.clientY,
+                };
+                dragStartOffsetRef.current = modalOffset;
+              }
             }}
             onTouchMove={(e) => {
               e.stopPropagation();
-              if (e.touches.length !== 2) return;
-              const start = pinchStartDistanceRef.current;
-              if (!start || start <= 0) return;
-              const current = touchDistance(e.touches[0]!, e.touches[1]!);
-              const rawScale = pinchStartScaleRef.current * (current / start);
-              const nextScale = Math.min(4, Math.max(1, rawScale));
-              setModalScale(nextScale);
+              if (e.touches.length === 2) {
+                e.preventDefault();
+                const start = pinchStartDistanceRef.current;
+                if (!start || start <= 0) return;
+                const current = touchDistance(e.touches[0]!, e.touches[1]!);
+                const rawScale = pinchStartScaleRef.current * (current / start);
+                const nextScale = clampScale(rawScale);
+                setModalScale(nextScale);
+                return;
+              }
+              if (e.touches.length === 1 && modalScale > 1.001 && dragStartPointRef.current) {
+                e.preventDefault();
+                const dx = e.touches[0]!.clientX - dragStartPointRef.current.x;
+                const dy = e.touches[0]!.clientY - dragStartPointRef.current.y;
+                setModalOffset({
+                  x: dragStartOffsetRef.current.x + dx,
+                  y: dragStartOffsetRef.current.y + dy,
+                });
+              }
             }}
             onTouchEnd={(e) => {
               e.stopPropagation();
+              if (e.touches.length === 0) {
+                const now = Date.now();
+                if (now - lastTapTimeRef.current < 280) {
+                  if (modalScale > 1.05) {
+                    resetZoom();
+                  } else {
+                    setModalScale(2);
+                  }
+                }
+                lastTapTimeRef.current = now;
+              }
               if (e.touches.length < 2) {
                 pinchStartDistanceRef.current = null;
                 pinchStartScaleRef.current = modalScale;
+              }
+              if (e.touches.length === 0) {
+                dragStartPointRef.current = null;
+                dragStartOffsetRef.current = modalOffset;
+              }
+              if (modalScale <= 1.001) {
+                setModalOffset({ x: 0, y: 0 });
               }
             }}
           />
