@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type BulletinRichBodyProps = {
   body: string;
@@ -27,6 +27,9 @@ export function BulletinRichBody({
     src: string;
     alt: string;
   } | null>(null);
+  const [modalScale, setModalScale] = useState(1);
+  const pinchStartDistanceRef = useRef<number | null>(null);
+  const pinchStartScaleRef = useRef(1);
 
   useEffect(() => {
     if (!zoomedImage) return;
@@ -36,6 +39,20 @@ export function BulletinRichBody({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [zoomedImage]);
+
+  useEffect(() => {
+    if (!zoomedImage) {
+      setModalScale(1);
+      pinchStartDistanceRef.current = null;
+      pinchStartScaleRef.current = 1;
+    }
+  }, [zoomedImage]);
+
+  function touchDistance(t1: Touch, t2: Touch): number {
+    const dx = t1.clientX - t2.clientX;
+    const dy = t1.clientY - t2.clientY;
+    return Math.hypot(dx, dy);
+  }
 
   const parts: ReactNode[] = [];
   const re = /!\[([^\]]*)\]\((https?:[^)\s]+)\)/g;
@@ -122,7 +139,38 @@ export function BulletinRichBody({
             src={zoomedImage.src}
             alt={zoomedImage.alt}
             className="max-h-[90vh] max-w-[95vw] rounded-md object-contain"
+            style={{
+              transform: `scale(${modalScale})`,
+              transformOrigin: "center center",
+              touchAction: "none",
+            }}
             onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              if (e.touches.length !== 2) return;
+              pinchStartDistanceRef.current = touchDistance(
+                e.touches[0]!,
+                e.touches[1]!,
+              );
+              pinchStartScaleRef.current = modalScale;
+            }}
+            onTouchMove={(e) => {
+              e.stopPropagation();
+              if (e.touches.length !== 2) return;
+              const start = pinchStartDistanceRef.current;
+              if (!start || start <= 0) return;
+              const current = touchDistance(e.touches[0]!, e.touches[1]!);
+              const rawScale = pinchStartScaleRef.current * (current / start);
+              const nextScale = Math.min(4, Math.max(1, rawScale));
+              setModalScale(nextScale);
+            }}
+            onTouchEnd={(e) => {
+              e.stopPropagation();
+              if (e.touches.length < 2) {
+                pinchStartDistanceRef.current = null;
+                pinchStartScaleRef.current = modalScale;
+              }
+            }}
           />
         </div>
       ) : null}
