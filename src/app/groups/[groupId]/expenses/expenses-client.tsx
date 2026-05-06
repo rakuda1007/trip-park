@@ -10,7 +10,7 @@ import {
   type ExpenseInput,
 } from "@/lib/firestore/expenses";
 import { listFamilies } from "@/lib/firestore/families";
-import { getGroup, listMembers } from "@/lib/firestore/groups";
+import { getGroup, listMembers, updateTripStatus } from "@/lib/firestore/groups";
 import {
   aggregateBalancesByFamilyUnit,
   computeBalancesYen,
@@ -516,6 +516,30 @@ export function ExpensesClient() {
   }
 
   const hasExpenses = expenses.length > 0;
+  const myRole = members.find((m) => m.userId === user?.uid)?.data.role;
+  const canUpdateSettlementStep =
+    !!user && (group.ownerId === user.uid || myRole === "admin");
+  const settlementStepDone = (group.status ?? "planning") === "completed";
+
+  async function handleCompleteSettlementStep() {
+    if (!canUpdateSettlementStep) return;
+    if (settlementStepDone) return;
+    if (!confirm("精算の工程を「完了」に変更しますか？")) return;
+    setBusy("settlement-complete");
+    setError(null);
+    try {
+      await updateTripStatus(groupId, "completed");
+      setGroup((prev) => (prev ? { ...prev, status: "completed" } : prev));
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "精算工程のステータス更新に失敗しました",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const addExpenseFormSection = (
       <section className={`${hasExpenses ? "mt-10" : "mt-8"} min-w-0 max-w-full overflow-x-clip rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50`}>
@@ -1066,6 +1090,33 @@ export function ExpensesClient() {
         </Link>
         が必要です。
       </p>
+      <section className="mt-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              精算工程ステータス
+            </p>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              現在:{" "}
+              {settlementStepDone ? "完了" : "進行中"}
+            </p>
+          </div>
+          {canUpdateSettlementStep ? (
+            <button
+              type="button"
+              onClick={() => void handleCompleteSettlementStep()}
+              disabled={busy !== null || settlementStepDone}
+              className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+            >
+              {busy === "settlement-complete"
+                ? "更新中…"
+                : settlementStepDone
+                  ? "完了済み"
+                  : "精算工程を完了にする"}
+            </button>
+          ) : null}
+        </div>
+      </section>
 
       {error ? (
         <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
