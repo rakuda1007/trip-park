@@ -37,6 +37,7 @@ export type UserGroupRefDoc = {
   groupId: string;
   groupName: string;
   memoryPhotoUrl?: string | null;
+  status?: TripStatus | null;
   role: GroupRole;
   joinedAt: unknown;
   /** listMyGroups でグループ本体から取得してマージ */

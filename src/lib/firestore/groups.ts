@@ -183,6 +183,7 @@ export async function listMyGroups(uid: string): Promise<
           /** グループ本体の最新名（ユーザーの参加時参照が古くても一覧は正しい表示になる） */
           groupName: gd?.name ?? item.data.groupName,
           memoryPhotoUrl: gd?.memoryPhotoUrl ?? null,
+          status: gd?.status ?? "planning",
           tripStartDate: gd?.tripStartDate ?? null,
           tripEndDate: gd?.tripEndDate ?? null,
         },

@@ -521,15 +521,23 @@ export function ExpensesClient() {
     !!user && (group.ownerId === user.uid || myRole === "admin");
   const settlementStepDone = (group.status ?? "planning") === "completed";
 
-  async function handleCompleteSettlementStep() {
+  async function handleToggleSettlementStep() {
     if (!canUpdateSettlementStep) return;
-    if (settlementStepDone) return;
-    if (!confirm("精算の工程を「完了」に変更しますか？")) return;
-    setBusy("settlement-complete");
+    const nextStatus = settlementStepDone ? "confirmed" : "completed";
+    if (
+      !confirm(
+        settlementStepDone
+          ? "精算工程を未完了に戻しますか？"
+          : "精算の工程を「完了」に変更しますか？",
+      )
+    ) {
+      return;
+    }
+    setBusy("settlement-status");
     setError(null);
     try {
-      await updateTripStatus(groupId, "completed");
-      setGroup((prev) => (prev ? { ...prev, status: "completed" } : prev));
+      await updateTripStatus(groupId, nextStatus);
+      setGroup((prev) => (prev ? { ...prev, status: nextStatus } : prev));
     } catch (err) {
       setError(
         err instanceof Error
@@ -1104,14 +1112,18 @@ export function ExpensesClient() {
           {canUpdateSettlementStep ? (
             <button
               type="button"
-              onClick={() => void handleCompleteSettlementStep()}
-              disabled={busy !== null || settlementStepDone}
-              className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+              onClick={() => void handleToggleSettlementStep()}
+              disabled={busy !== null}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 ${
+                settlementStepDone
+                  ? "bg-zinc-600 hover:bg-zinc-500"
+                  : "bg-emerald-600 hover:bg-emerald-500"
+              }`}
             >
-              {busy === "settlement-complete"
+              {busy === "settlement-status"
                 ? "更新中…"
                 : settlementStepDone
-                  ? "完了済み"
+                  ? "未完了に戻す"
                   : "精算工程を完了にする"}
             </button>
           ) : null}

@@ -202,6 +202,13 @@ export function GroupsClient() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const shouldOpen = params.get("pastOpen") === "1" || params.get("pastOpen") === "true";
+    if (shouldOpen) setPastOpen(true);
+  }, []);
+
   const handleDelete = useCallback(
     async (groupId: string, groupName: string) => {
       if (!user) return;

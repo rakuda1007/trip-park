@@ -76,22 +76,31 @@ export function DashboardHome() {
   useEffect(() => {
     if (!user) return;
 
-    // 前回アクセスした旅行があればそちらを優先
-    const lastTripId = loadLastTripId(user.uid);
-    if (lastTripId) {
-      router.replace(`/groups/${lastTripId}`);
-      return;
-    }
-
-    // なければ旅行リストを取得して最適な旅行へ自動遷移
+    // 旅行リストを取得して要件に沿って遷移先を決定する
     listMyGroups(user.uid).then((items) => {
-      const today = getTodayISO();
-      const bestId = pickBestTripId(items, today);
-      if (bestId) {
-        router.replace(`/groups/${bestId}`);
-      } else {
+      if (items.length === 0) {
         setChecked(true);
+        return;
       }
+      const incomplete = items.filter((x) => x.data.status !== "completed");
+      const lastTripId = loadLastTripId(user.uid);
+
+      // ① 全工程未完了の旅行がある: 直近参照旅行（未完了のみ）を優先表示
+      if (incomplete.length > 0) {
+        if (lastTripId && incomplete.some((x) => x.groupId === lastTripId)) {
+          router.replace(`/groups/${lastTripId}`);
+          return;
+        }
+        const today = getTodayISO();
+        const bestId = pickBestTripId(incomplete, today);
+        if (bestId) {
+          router.replace(`/groups/${bestId}`);
+          return;
+        }
+      }
+
+      // ② すべて完了済み: 旅行一覧を開き、過去の旅行を初期展開
+      router.replace("/groups?pastOpen=1");
     }).catch(() => {
       setChecked(true);
     });
