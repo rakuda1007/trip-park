@@ -129,6 +129,8 @@ export function GroupDetailClient() {
   const [editingDesc, setEditingDesc] = useState(false);
   const [draftDesc, setDraftDesc] = useState("");
   const [memoryPhotoPreview, setMemoryPhotoPreview] = useState<string | null>(null);
+  const [memoryPhotoDraftFile, setMemoryPhotoDraftFile] = useState<File | null>(null);
+  const [memoryPhotoDraftPreview, setMemoryPhotoDraftPreview] = useState<string | null>(null);
 
   // トピック
   const [topics, setTopics] = useState<
@@ -265,6 +267,14 @@ export function GroupDetailClient() {
     setMemoryPhotoPreview(group?.memoryPhotoUrl ?? null);
   }, [group?.memoryPhotoUrl]);
 
+  useEffect(() => {
+    return () => {
+      if (memoryPhotoDraftPreview?.startsWith("blob:")) {
+        URL.revokeObjectURL(memoryPhotoDraftPreview);
+      }
+    };
+  }, [memoryPhotoDraftPreview]);
+
   const isOwner = user && group && user.uid === group.ownerId;
   // 未ユーザーでも開けるランディングURLを招待リンクとして使う
   const inviteUrl = group ? buildWelcomeUrl(group.inviteCode) : "";
@@ -363,18 +373,40 @@ export function GroupDetailClient() {
     e.currentTarget.value = "";
     if (!file) return;
 
-    setBusy("memory-photo-upload");
+    if (memoryPhotoDraftPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(memoryPhotoDraftPreview);
+    }
+    setMemoryPhotoDraftFile(file);
+    setMemoryPhotoDraftPreview(URL.createObjectURL(file));
+  }
+
+  async function handleSaveMemoryPhoto() {
+    if (!user || !groupId || !memoryPhotoDraftFile) return;
+    setBusy("memory-photo-save");
     setError(null);
     try {
-      const url = await uploadGroupMemoryPhoto(groupId, user.uid, file);
+      const url = await uploadGroupMemoryPhoto(groupId, user.uid, memoryPhotoDraftFile);
       await updateGroupMemoryPhotoUrl(groupId, url);
       setMemoryPhotoPreview(url);
       setGroup((prev) => (prev ? { ...prev, memoryPhotoUrl: url } : prev));
+      if (memoryPhotoDraftPreview?.startsWith("blob:")) {
+        URL.revokeObjectURL(memoryPhotoDraftPreview);
+      }
+      setMemoryPhotoDraftFile(null);
+      setMemoryPhotoDraftPreview(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "写真の保存に失敗しました");
     } finally {
       setBusy(null);
     }
+  }
+
+  function handleCancelMemoryPhotoSelection() {
+    if (memoryPhotoDraftPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(memoryPhotoDraftPreview);
+    }
+    setMemoryPhotoDraftFile(null);
+    setMemoryPhotoDraftPreview(null);
   }
 
   async function handleClearMemoryPhoto() {
@@ -384,6 +416,11 @@ export function GroupDetailClient() {
     try {
       await updateGroupMemoryPhotoUrl(groupId, null);
       setMemoryPhotoPreview(null);
+      if (memoryPhotoDraftPreview?.startsWith("blob:")) {
+        URL.revokeObjectURL(memoryPhotoDraftPreview);
+      }
+      setMemoryPhotoDraftFile(null);
+      setMemoryPhotoDraftPreview(null);
       setGroup((prev) => (prev ? { ...prev, memoryPhotoUrl: null } : prev));
     } catch (err) {
       setError(err instanceof Error ? err.message : "写真の削除に失敗しました");
@@ -637,7 +674,7 @@ export function GroupDetailClient() {
           </div>
           {isOwner ? (
             <label className="inline-flex cursor-pointer items-center rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800">
-              {busy === "memory-photo-upload" ? "アップロード中…" : "写真を選択"}
+              写真を選択
               <input
                 type="file"
                 accept="image/*"
@@ -648,10 +685,10 @@ export function GroupDetailClient() {
             </label>
           ) : null}
         </div>
-        {memoryPhotoPreview ? (
+        {memoryPhotoDraftPreview || memoryPhotoPreview ? (
           <div className="mt-3">
             <Image
-              src={memoryPhotoPreview}
+              src={memoryPhotoDraftPreview ?? memoryPhotoPreview ?? ""}
               alt="旅行の思い出写真"
               width={960}
               height={540}
@@ -659,14 +696,36 @@ export function GroupDetailClient() {
               className="h-44 w-full rounded-md object-cover sm:h-56"
             />
             {isOwner ? (
-              <button
-                type="button"
-                onClick={() => void handleClearMemoryPhoto()}
-                disabled={busy !== null}
-                className="mt-2 text-xs text-red-600 hover:underline disabled:opacity-50"
-              >
-                {busy === "memory-photo-clear" ? "削除中…" : "写真を削除"}
-              </button>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {memoryPhotoDraftFile ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveMemoryPhoto()}
+                      disabled={busy !== null}
+                      className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+                    >
+                      {busy === "memory-photo-save" ? "保存中…" : "保存"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelMemoryPhotoSelection}
+                      disabled={busy !== null}
+                      className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      選択を取り消す
+                    </button>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void handleClearMemoryPhoto()}
+                  disabled={busy !== null}
+                  className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                >
+                  {busy === "memory-photo-clear" ? "削除中…" : "写真を削除"}
+                </button>
+              </div>
             ) : null}
           </div>
         ) : (
