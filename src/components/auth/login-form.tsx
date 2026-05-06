@@ -39,8 +39,6 @@ export function LoginForm() {
         email.trim(),
         password,
       );
-      router.push(returnTo || "/dashboard");
-      router.refresh();
     } catch (err: unknown) {
       const code =
         err && typeof err === "object" && "code" in err

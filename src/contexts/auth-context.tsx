@@ -48,18 +48,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const auth = getFirebaseAuth();
-      unsub = onAuthStateChanged(auth, async (u) => {
+      unsub = onAuthStateChanged(auth, (u) => {
         if (!resolved) resolved = true;
         clearTimeout(timeout);
         setUser(u);
-        if (u) {
-          try {
-            await ensureUserDocument(u.uid, u.email, u.displayName);
-          } catch (e) {
-            console.error("ensureUserDocument failed:", e);
-          }
-        }
+        // 画面遷移を auth 文書作成の完了待ちでブロックしない
         setLoading(false);
+        if (u) {
+          void ensureUserDocument(u.uid, u.email, u.displayName).catch((e) => {
+            console.error("ensureUserDocument failed:", e);
+          });
+        }
       });
     } catch {
       clearTimeout(timeout);
