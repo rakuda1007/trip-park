@@ -3,6 +3,7 @@
 import { useAuth } from "@/contexts/auth-context";
 import { deleteGroup, listMyGroups } from "@/lib/firestore/groups";
 import type { UserGroupRefDoc } from "@/types/group";
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -71,12 +72,14 @@ function GroupCard({
   data,
   today,
   highlight = false,
+  showThumbnail = false,
   onDelete,
 }: {
   groupId: string;
   data: UserGroupRefDoc;
   today: string;
   highlight?: boolean;
+  showThumbnail?: boolean;
   onDelete?: () => void;
 }) {
   const { tripStartDate, tripEndDate } = data;
@@ -106,34 +109,48 @@ function GroupCard({
     >
       <Link
         href={`/groups/${groupId}`}
-        className={`flex-1 px-4 py-3 transition ${
+        className={`flex-1 ${showThumbnail ? "p-2" : "px-4 py-3"} transition ${
           highlight
             ? "hover:border-emerald-400 dark:hover:border-emerald-600"
             : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
         } rounded-l-lg`}
       >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="font-medium text-zinc-900 dark:text-zinc-50">
-            {data.groupName}
-            <RoleBadge role={data.role} />
-          </span>
-          {daysLabel ? (
-            <span
-              className={`text-xs font-semibold ${
-                section === "active"
-                  ? "text-emerald-700 dark:text-emerald-400"
-                  : "text-blue-700 dark:text-blue-400"
-              }`}
-            >
-              {daysLabel}
-            </span>
+        <div className={`flex gap-3 ${showThumbnail ? "items-start" : "items-center"}`}>
+          {showThumbnail && data.memoryPhotoUrl ? (
+            <Image
+              src={data.memoryPhotoUrl}
+              alt={`${data.groupName}のサムネイル`}
+              width={240}
+              height={160}
+              unoptimized
+              className="h-16 w-24 shrink-0 rounded-md object-cover"
+            />
           ) : null}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                {data.groupName}
+                <RoleBadge role={data.role} />
+              </span>
+              {daysLabel ? (
+                <span
+                  className={`text-xs font-semibold ${
+                    section === "active"
+                      ? "text-emerald-700 dark:text-emerald-400"
+                      : "text-blue-700 dark:text-blue-400"
+                  }`}
+                >
+                  {daysLabel}
+                </span>
+              ) : null}
+            </div>
+            {dateLabel ? (
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                {dateLabel}
+              </p>
+            ) : null}
+          </div>
         </div>
-        {dateLabel ? (
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            {dateLabel}
-          </p>
-        ) : null}
       </Link>
       {onDelete ? (
         <button
@@ -326,6 +343,7 @@ export function GroupsClient() {
                         groupId={groupId}
                         data={data}
                         today={today}
+                        showThumbnail
                         onDelete={
                           data.role === "owner"
                             ? () => handleDelete(groupId, data.groupName)

@@ -6,6 +6,8 @@ export type TripStatus = "planning" | "confirmed" | "completed";
 export type GroupDoc = {
   name: string;
   description: string | null;
+  /** 旅行の思い出写真（サムネイル表示用） */
+  memoryPhotoUrl?: string | null;
   ownerId: string;
   inviteCode: string;
   createdAt: unknown;
@@ -34,6 +36,7 @@ export type MemberDocWithJoinCode = MemberDoc & { code: string };
 export type UserGroupRefDoc = {
   groupId: string;
   groupName: string;
+  memoryPhotoUrl?: string | null;
   role: GroupRole;
   joinedAt: unknown;
   /** listMyGroups でグループ本体から取得してマージ */

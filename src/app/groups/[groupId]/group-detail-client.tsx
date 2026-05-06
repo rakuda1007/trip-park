@@ -11,6 +11,7 @@ import {
   removeMember,
   updateDestination,
   updateGroupDescription,
+  updateGroupMemoryPhotoUrl,
   updateGroupName,
   updateGroupTripDates,
 } from "@/lib/firestore/groups";
@@ -21,6 +22,7 @@ import {
 import { listSharingItems, sharingSummaryStats } from "@/lib/firestore/sharing";
 import { sendNotification } from "@/lib/notify";
 import { saveLastTripId } from "@/lib/last-trip";
+import { uploadGroupMemoryPhoto } from "@/lib/storage/group-memory-photo";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
 import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
@@ -42,9 +44,10 @@ import {
 } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
 import { SharingListPanel } from "@/app/groups/[groupId]/sharing/sharing-list-panel";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 
 function formatTs(v: unknown): string {
   if (!v) return "—";
@@ -125,6 +128,7 @@ export function GroupDetailClient() {
   // 説明編集用
   const [editingDesc, setEditingDesc] = useState(false);
   const [draftDesc, setDraftDesc] = useState("");
+  const [memoryPhotoPreview, setMemoryPhotoPreview] = useState<string | null>(null);
 
   // トピック
   const [topics, setTopics] = useState<
@@ -257,6 +261,10 @@ export function GroupDetailClient() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    setMemoryPhotoPreview(group?.memoryPhotoUrl ?? null);
+  }, [group?.memoryPhotoUrl]);
+
   const isOwner = user && group && user.uid === group.ownerId;
   // 未ユーザーでも開けるランディングURLを招待リンクとして使う
   const inviteUrl = group ? buildWelcomeUrl(group.inviteCode) : "";
@@ -344,6 +352,43 @@ export function GroupDetailClient() {
       setTimeout(() => setBusy(null), 2000);
     } catch {
       setError("コピーに失敗しました");
+    }
+  }
+
+  async function handleMemoryPhotoFileChange(
+    e: ChangeEvent<HTMLInputElement>,
+  ) {
+    if (!user || !groupId) return;
+    const file = e.target.files?.[0];
+    e.currentTarget.value = "";
+    if (!file) return;
+
+    setBusy("memory-photo-upload");
+    setError(null);
+    try {
+      const url = await uploadGroupMemoryPhoto(groupId, user.uid, file);
+      await updateGroupMemoryPhotoUrl(groupId, url);
+      setMemoryPhotoPreview(url);
+      setGroup((prev) => (prev ? { ...prev, memoryPhotoUrl: url } : prev));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "写真の保存に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleClearMemoryPhoto() {
+    if (!groupId) return;
+    setBusy("memory-photo-clear");
+    setError(null);
+    try {
+      await updateGroupMemoryPhotoUrl(groupId, null);
+      setMemoryPhotoPreview(null);
+      setGroup((prev) => (prev ? { ...prev, memoryPhotoUrl: null } : prev));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "写真の削除に失敗しました");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -578,6 +623,58 @@ export function GroupDetailClient() {
           ) : null}
         </div>
       )}
+
+      {/* 思い出写真（1枚のみ） */}
+      <section className="mt-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              思い出写真
+            </h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              1枚だけ登録できます。「過去の旅行」一覧のサムネイルにも使われます。
+            </p>
+          </div>
+          {isOwner ? (
+            <label className="inline-flex cursor-pointer items-center rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800">
+              {busy === "memory-photo-upload" ? "アップロード中…" : "写真を選択"}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => void handleMemoryPhotoFileChange(e)}
+                disabled={busy !== null}
+              />
+            </label>
+          ) : null}
+        </div>
+        {memoryPhotoPreview ? (
+          <div className="mt-3">
+            <Image
+              src={memoryPhotoPreview}
+              alt="旅行の思い出写真"
+              width={960}
+              height={540}
+              unoptimized
+              className="h-44 w-full rounded-md object-cover sm:h-56"
+            />
+            {isOwner ? (
+              <button
+                type="button"
+                onClick={() => void handleClearMemoryPhoto()}
+                disabled={busy !== null}
+                className="mt-2 text-xs text-red-600 hover:underline disabled:opacity-50"
+              >
+                {busy === "memory-photo-clear" ? "削除中…" : "写真を削除"}
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-zinc-400 dark:text-zinc-500">
+            まだ写真が登録されていません。
+          </p>
+        )}
+      </section>
 
       {/* 日程編集フォーム（オーナーのみ） */}
       {editingDates && isOwner ? (

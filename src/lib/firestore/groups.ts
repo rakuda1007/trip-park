@@ -50,6 +50,7 @@ export async function createGroup(
   description: string | null,
   tripStartDate?: string | null,
   tripEndDate?: string | null,
+  memoryPhotoUrl?: string | null,
 ): Promise<string> {
   const db = getFirebaseFirestore();
   const code = await ensureUniqueInviteCode(db);
@@ -63,6 +64,7 @@ export async function createGroup(
   await setDoc(groupRef, {
     name,
     description: description ?? null,
+    memoryPhotoUrl: memoryPhotoUrl ?? null,
     ownerId: uid,
     inviteCode: code,
     createdAt: serverTimestamp(),
@@ -180,6 +182,7 @@ export async function listMyGroups(uid: string): Promise<
           ...item.data,
           /** グループ本体の最新名（ユーザーの参加時参照が古くても一覧は正しい表示になる） */
           groupName: gd?.name ?? item.data.groupName,
+          memoryPhotoUrl: gd?.memoryPhotoUrl ?? null,
           tripStartDate: gd?.tripStartDate ?? null,
           tripEndDate: gd?.tripEndDate ?? null,
         },
@@ -487,6 +490,18 @@ export async function updateGroupDescription(
   const db = getFirebaseFirestore();
   await updateDoc(doc(db, COLLECTIONS.groups, groupId), {
     description,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** 旅行の思い出写真URLを更新する（オーナー） */
+export async function updateGroupMemoryPhotoUrl(
+  groupId: string,
+  memoryPhotoUrl: string | null,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  await updateDoc(doc(db, COLLECTIONS.groups, groupId), {
+    memoryPhotoUrl,
     updatedAt: serverTimestamp(),
   });
 }
