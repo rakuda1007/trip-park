@@ -1,9 +1,12 @@
 import { getFirebaseFirestore } from "@/lib/firebase/client";
+import { listDestinationPolls } from "@/lib/firestore/destination-votes";
 import {
   COLLECTIONS,
   SCHEDULE_CONFIG_DOC,
   SUB,
 } from "@/lib/firestore/collections";
+import { listTripRoutes } from "@/lib/firestore/trip";
+import { areAllTripWorkflowStepsComplete } from "@/lib/trip-workflow-all-complete";
 import type { GroupDoc, InviteCodeDoc, MemberDoc, TripStatus, UserGroupRefDoc } from "@/types/group";
 import {
   collection,
@@ -170,26 +173,40 @@ export async function listMyGroups(uid: string): Promise<
     ),
   );
 
-  return items.flatMap((item, i) => {
-    const gSnap = groupSnaps[i];
-    if (!gSnap) return []; // アクセス不可 → スキップ
-    if (!gSnap.exists()) return []; // グループ本体が削除済み（ユーザーの参照だけ残っている）
-    const gd = gSnap.data() as GroupDoc | undefined;
-    return [
-      {
-        groupId: item.groupId,
-        data: {
-          ...item.data,
-          /** グループ本体の最新名（ユーザーの参加時参照が古くても一覧は正しい表示になる） */
-          groupName: gd?.name ?? item.data.groupName,
-          memoryPhotoUrl: gd?.memoryPhotoUrl ?? null,
-          status: gd?.status ?? "planning",
-          tripStartDate: gd?.tripStartDate ?? null,
-          tripEndDate: gd?.tripEndDate ?? null,
+  const enrichedRows = await Promise.all(
+    items.map(async (item, i) => {
+      const gSnap = groupSnaps[i];
+      if (!gSnap || !gSnap.exists()) return [];
+      const gd = gSnap.data() as GroupDoc | undefined;
+      const gid = item.groupId;
+      const [polls, routes] = await Promise.all([
+        listDestinationPolls(gid).catch(() => []),
+        listTripRoutes(gid).catch(() => []),
+      ]);
+      const memoryPhotoVisible = areAllTripWorkflowStepsComplete(
+        gd ?? null,
+        polls,
+        routes,
+      );
+      return [
+        {
+          groupId: item.groupId,
+          data: {
+            ...item.data,
+            /** グループ本体の最新名（ユーザーの参加時参照が古くても一覧は正しい表示になる） */
+            groupName: gd?.name ?? item.data.groupName,
+            memoryPhotoUrl: gd?.memoryPhotoUrl ?? null,
+            status: gd?.status ?? "planning",
+            tripStartDate: gd?.tripStartDate ?? null,
+            tripEndDate: gd?.tripEndDate ?? null,
+            memoryPhotoVisible,
+          },
         },
-      },
-    ];
-  });
+      ];
+    }),
+  );
+
+  return enrichedRows.flat();
 }
 
 /** 旅行名（グループ名）を更新する（オーナーのみ・セキュリティルール側でも検証） */

@@ -299,7 +299,10 @@ export function GroupsClient() {
                 data={highlight.data}
                 today={today}
                 highlight
-                showThumbnail={Boolean(highlight.data.memoryPhotoUrl)}
+                showThumbnail={Boolean(
+                  highlight.data.memoryPhotoUrl &&
+                    highlight.data.memoryPhotoVisible,
+                )}
                 onDelete={
                   highlight.data.role === "owner"
                     ? () => handleDelete(highlight.groupId, highlight.data.groupName)
@@ -323,7 +326,9 @@ export function GroupsClient() {
                       groupId={groupId}
                       data={data}
                       today={today}
-                      showThumbnail={Boolean(data.memoryPhotoUrl)}
+                      showThumbnail={Boolean(
+                        data.memoryPhotoUrl && data.memoryPhotoVisible,
+                      )}
                       onDelete={
                         data.role === "owner"
                           ? () => handleDelete(groupId, data.groupName)
@@ -352,7 +357,9 @@ export function GroupsClient() {
                         groupId={groupId}
                         data={data}
                         today={today}
-                        showThumbnail={Boolean(data.memoryPhotoUrl)}
+                        showThumbnail={Boolean(
+                          data.memoryPhotoUrl && data.memoryPhotoVisible,
+                        )}
                         onDelete={
                           data.role === "owner"
                             ? () => handleDelete(groupId, data.groupName)
@@ -379,7 +386,9 @@ export function GroupsClient() {
                       groupId={groupId}
                       data={data}
                       today={today}
-                      showThumbnail={Boolean(data.memoryPhotoUrl)}
+                      showThumbnail={Boolean(
+                        data.memoryPhotoUrl && data.memoryPhotoVisible,
+                      )}
                       onDelete={
                         data.role === "owner"
                           ? () => handleDelete(groupId, data.groupName)
@@ -418,7 +427,9 @@ export function GroupsClient() {
                         groupId={groupId}
                         data={data}
                         today={today}
-                        showThumbnail={Boolean(data.memoryPhotoUrl)}
+                        showThumbnail={Boolean(
+                          data.memoryPhotoUrl && data.memoryPhotoVisible,
+                        )}
                         onDelete={
                           data.role === "owner"
                             ? () => handleDelete(groupId, data.groupName)

@@ -1,10 +1,8 @@
 "use client";
 
 import { useGroupRouteId } from "@/contexts/group-route-context";
-import {
-  listDestinationPolls,
-  normalizeDecidedNamesFromPollDoc,
-} from "@/lib/firestore/destination-votes";
+import { normalizeDecidedNamesFromPollDoc } from "@/lib/destination-poll-decided";
+import { listDestinationPolls } from "@/lib/firestore/destination-votes";
 import { getGroup } from "@/lib/firestore/groups";
 import { listScheduleCandidates } from "@/lib/firestore/schedule";
 import { listTripRoutes } from "@/lib/firestore/trip";

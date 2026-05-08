@@ -604,8 +604,159 @@ export function ScheduleClient() {
             まだ候補日がありません。オーナーまたは管理者が追加すると表示されます。
           </p>
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-700">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
+          <>
+            {/* モバイル: 候補ごとに縦並び（横スクロールなし） */}
+            <div className="mt-3 space-y-4 md:hidden">
+              {candidates.map(({ id, data }) => {
+                const counts = aggregateByCandidate.get(id);
+                const yes = counts?.yes ?? 0;
+                const maybe = counts?.maybe ?? 0;
+                const noCount = counts?.no ?? 0;
+                const un = counts?.unanswered ?? 0;
+                const rangeLabel = formatDateRangeLabel(
+                  data.startDate,
+                  data.endDate,
+                );
+                return (
+                  <div
+                    key={id}
+                    className="overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
+                  >
+                    <div className="border-b border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900/80">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                            {rangeLabel}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-emerald-800 dark:text-emerald-300">
+                            ○ {yes}
+                            <span className="text-zinc-400 dark:text-zinc-500">
+                              {" "}
+                              ·{" "}
+                            </span>
+                            <span className="text-amber-800 dark:text-amber-300">
+                              △ {maybe}
+                            </span>
+                            <span className="text-zinc-400 dark:text-zinc-500">
+                              {" "}
+                              ·{" "}
+                            </span>
+                            <span className="text-zinc-600 dark:text-zinc-400">
+                              × {noCount}
+                            </span>
+                            {un > 0 ? (
+                              <span className="text-zinc-500 dark:text-zinc-400">
+                                {" "}
+                                · 未回答 {un}
+                              </span>
+                            ) : null}
+                          </p>
+                        </div>
+                        {canManage ? (
+                          <span className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleConfirmWithDialog(
+                                  id,
+                                  data.startDate,
+                                  data.endDate,
+                                  rangeLabel,
+                                )
+                              }
+                              disabled={busy !== null}
+                              className="text-xs font-medium text-emerald-700 hover:underline disabled:opacity-50 dark:text-emerald-400"
+                            >
+                              確定
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCandidate(id)}
+                              disabled={busy !== null}
+                              className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                            >
+                              削除
+                            </button>
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {sortedMembers.map(({ userId, data: md }) => {
+                        const isMe = userId === user?.uid;
+                        const ans = responseMap.get(id)?.get(userId);
+                        const myPick = isMe
+                          ? myDraftAnswers[id] ?? savedMyAnswer(id)
+                          : undefined;
+                        return (
+                          <li
+                            key={userId}
+                            className={
+                              isMe
+                                ? "flex items-center justify-between gap-3 bg-emerald-50/80 px-3 py-2.5 dark:bg-emerald-950/30"
+                                : "flex items-center justify-between gap-3 px-3 py-2.5"
+                            }
+                          >
+                            <span className="min-w-0 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                              <span className="break-words">
+                                {md.displayName || userId.slice(0, 8) + "…"}
+                              </span>
+                              {userId === group.ownerId ? (
+                                <span className="ml-1 text-xs font-normal text-zinc-500">
+                                  （オーナー）
+                                </span>
+                              ) : null}
+                              {isMe ? (
+                                <span className="ml-1 text-xs font-normal text-emerald-700 dark:text-emerald-400">
+                                  あなた
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="shrink-0">
+                              {isMe && user ? (
+                                <div className="flex flex-nowrap justify-end gap-1">
+                                  {(
+                                    [
+                                      ["yes", "○"],
+                                      ["maybe", "△"],
+                                      ["no", "×"],
+                                    ] as const
+                                  ).map(([val, label]) => (
+                                    <button
+                                      key={val}
+                                      type="button"
+                                      onClick={() =>
+                                        setMyDraftForCandidate(id, val)
+                                      }
+                                      disabled={busy !== null}
+                                      className={`min-h-[2.25rem] min-w-[2.25rem] rounded-md px-2 py-1 text-sm font-semibold disabled:opacity-50 ${
+                                        myPick === val
+                                          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                                          : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-lg font-medium tabular-nums text-zinc-800 dark:text-zinc-200">
+                                  {answerSymbol(ans)}
+                                </span>
+                              )}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* md 以上: 表形式 */}
+            <div className="mt-3 hidden overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-700 md:block">
+              <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/80">
                   <th className="sticky left-0 z-10 border-r border-zinc-200 bg-zinc-50 px-3 py-2 text-left font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-zinc-300">
@@ -765,7 +916,8 @@ export function ScheduleClient() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </section>
     </div>

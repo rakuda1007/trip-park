@@ -15,6 +15,8 @@ import {
   updateGroupName,
   updateGroupTripDates,
 } from "@/lib/firestore/groups";
+import { listDestinationPolls, type PollItem } from "@/lib/firestore/destination-votes";
+import { listTripRoutes } from "@/lib/firestore/trip";
 import {
   createBulletinTopic,
   listBulletinTopicsWithReplyCounts,
@@ -23,7 +25,9 @@ import { listSharingItems, sharingSummaryStats } from "@/lib/firestore/sharing";
 import { sendNotification } from "@/lib/notify";
 import { saveLastTripId } from "@/lib/last-trip";
 import { uploadGroupMemoryPhoto } from "@/lib/storage/group-memory-photo";
+import { areAllTripWorkflowStepsComplete } from "@/lib/trip-workflow-all-complete";
 import type { GroupDoc, MemberDoc } from "@/types/group";
+import type { TripRouteDoc } from "@/types/trip";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
 import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
 import { BulletinExpandableBodyField } from "@/components/bulletin/bulletin-expandable-body-field";
@@ -47,7 +51,7 @@ import { SharingListPanel } from "@/app/groups/[groupId]/sharing/sharing-list-pa
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from "react";
 
 function formatTs(v: unknown): string {
   if (!v) return "—";
@@ -131,6 +135,11 @@ export function GroupDetailClient() {
   const [memoryPhotoPreview, setMemoryPhotoPreview] = useState<string | null>(null);
   const [memoryPhotoDraftFile, setMemoryPhotoDraftFile] = useState<File | null>(null);
   const [memoryPhotoDraftPreview, setMemoryPhotoDraftPreview] = useState<string | null>(null);
+  /** 思い出写真の解放条件（ステップナビと同一ロジック） */
+  const [workflowPolls, setWorkflowPolls] = useState<PollItem[]>([]);
+  const [workflowTripRoutes, setWorkflowTripRoutes] = useState<
+    { id: string; data: TripRouteDoc }[]
+  >([]);
 
   // トピック
   const [topics, setTopics] = useState<
@@ -168,9 +177,22 @@ export function GroupDetailClient() {
         setMembers([]);
         setTopics([]);
         setSharingSummary({ total: 0, unassigned: 0 });
+        setWorkflowPolls([]);
+        setWorkflowTripRoutes([]);
         return;
       }
       setGroup(g);
+      try {
+        const [polls, routes] = await Promise.all([
+          listDestinationPolls(groupId),
+          listTripRoutes(groupId),
+        ]);
+        setWorkflowPolls(polls);
+        setWorkflowTripRoutes(routes);
+      } catch {
+        setWorkflowPolls([]);
+        setWorkflowTripRoutes([]);
+      }
       // メンバーは必須。トピック・分担は個別に失敗しても旅行トップは表示する（権限未デプロイ等）
       try {
         setMembers(await listMembers(groupId));
@@ -202,6 +224,8 @@ export function GroupDetailClient() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
       setGroup(null);
+      setWorkflowPolls([]);
+      setWorkflowTripRoutes([]);
     }
   }, [groupId]);
 
@@ -276,6 +300,14 @@ export function GroupDetailClient() {
   }, [memoryPhotoDraftPreview]);
 
   const isOwner = user && group && user.uid === group.ownerId;
+  const memoryPhotoSectionUnlocked = useMemo(() => {
+    if (!group) return false;
+    return areAllTripWorkflowStepsComplete(
+      group,
+      workflowPolls,
+      workflowTripRoutes,
+    );
+  }, [group, workflowPolls, workflowTripRoutes]);
   // 未ユーザーでも開けるランディングURLを招待リンクとして使う
   const inviteUrl = group ? buildWelcomeUrl(group.inviteCode) : "";
 
@@ -661,7 +693,7 @@ export function GroupDetailClient() {
         </div>
       )}
 
-      {/* 思い出写真（1枚のみ） */}
+      {memoryPhotoSectionUnlocked ? (
       <section className="mt-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -734,6 +766,7 @@ export function GroupDetailClient() {
           </p>
         )}
       </section>
+      ) : null}
 
       {/* 日程編集フォーム（オーナーのみ） */}
       {editingDates && isOwner ? (

@@ -43,6 +43,8 @@ export type UserGroupRefDoc = {
   /** listMyGroups でグループ本体から取得してマージ */
   tripStartDate?: string | null;
   tripEndDate?: string | null;
+  /** 思い出サムネイルを一覧に出してよいか（日程・目的地・旅程・精算がすべて完了のとき true） */
+  memoryPhotoVisible?: boolean;
 };
 
 export type InviteCodeDoc = {
