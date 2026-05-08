@@ -39,13 +39,21 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+/** `/groups/new` などは旅行IDとして扱わない（AppHeader と同一） */
+const RESERVED_GROUP_PATH_SEGMENTS = new Set(["new"]);
+
+function parseCurrentGroupIdFromPath(pathname: string): string | undefined {
+  const m = pathname.match(/^\/groups\/([^/]+)/);
+  const seg = m?.[1];
+  if (!seg || RESERVED_GROUP_PATH_SEGMENTS.has(seg)) return undefined;
+  return seg;
+}
+
 export function TripSelector() {
   const { user } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  // useParams().groupId はネストしたルートで欠けることがあるため URL から取る（AppHeader と同じ）
-  const currentGroupId =
-    pathname.match(/^\/groups\/([^/]+)/)?.[1] ?? undefined;
+  const currentGroupId = parseCurrentGroupIdFromPath(pathname);
 
   const [trips, setTrips] = useState<TripItem[]>([]);
   const [open, setOpen] = useState(false);

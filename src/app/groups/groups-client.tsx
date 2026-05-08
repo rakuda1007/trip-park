@@ -181,7 +181,7 @@ export function GroupsClient() {
   const [items, setItems] = useState<GroupItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pastOpen, setPastOpen] = useState(false);
+  const [pastOpen, setPastOpen] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {

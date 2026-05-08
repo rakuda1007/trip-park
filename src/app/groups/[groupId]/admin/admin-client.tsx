@@ -3,7 +3,7 @@
 import { useAuth } from "@/contexts/auth-context";
 import { useGroupRouteId } from "@/contexts/group-route-context";
 import { getFirebaseAuth } from "@/lib/firebase/client";
-import { getGroup, listMembers } from "@/lib/firestore/groups";
+import { getGroup, listMembers, removeMember } from "@/lib/firestore/groups";
 import type { GroupDoc, GroupRole, MemberDoc } from "@/types/group";
 import type { NotifyStatusResponse } from "@/app/api/admin/notify-status/route";
 import { Timestamp } from "firebase/firestore";
@@ -66,6 +66,22 @@ export function AdminClient() {
   const [loading, setLoading] = useState(true);
   const [unauthorized, setUnauthorized] = useState(false);
   const [deviceCounts, setDeviceCounts] = useState<Record<string, number> | null>(null);
+  const [removeBusyUid, setRemoveBusyUid] = useState<string | null>(null);
+
+  async function handleRemoveMember(targetUid: string) {
+    if (!user || !group) return;
+    if (!confirm("このメンバーを旅行から外しますか？")) return;
+    setRemoveBusyUid(targetUid);
+    try {
+      await removeMember(user.uid, groupId, targetUid);
+      const ms = await listMembers(groupId);
+      setMembers(ms);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "失敗しました");
+    } finally {
+      setRemoveBusyUid(null);
+    }
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -175,6 +191,7 @@ export function AdminClient() {
                 <th className="px-4 py-2.5 font-medium text-zinc-600 dark:text-zinc-400 whitespace-nowrap">参加日時</th>
                 <th className="px-4 py-2.5 font-medium text-zinc-600 dark:text-zinc-400 whitespace-nowrap">最終アクセス</th>
                 <th className="px-4 py-2.5 font-medium text-zinc-600 dark:text-zinc-400 whitespace-nowrap">Push通知</th>
+                <th className="px-4 py-2.5 font-medium text-zinc-600 dark:text-zinc-400 whitespace-nowrap">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 bg-white dark:divide-zinc-700/60 dark:bg-zinc-900">
@@ -208,6 +225,20 @@ export function AdminClient() {
                   <td className="px-4 py-3">
                     <NotifyBadge count={deviceCounts?.[userId]} />
                   </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {group && user && group.ownerId === user.uid && userId !== group.ownerId ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveMember(userId)}
+                        disabled={removeBusyUid !== null}
+                        className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                      >
+                        {removeBusyUid === userId ? "処理中…" : "外す"}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-zinc-400">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -215,6 +246,7 @@ export function AdminClient() {
         </div>
         <p className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
           ※ 最終アクセスはグループページを開いたときに更新されます（セッション単位）。
+          オーナーのみ「外す」でメンバーを旅行から除外できます。
         </p>
       </section>
     </div>

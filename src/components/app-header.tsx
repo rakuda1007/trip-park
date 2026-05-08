@@ -6,20 +6,29 @@ import { isFirebaseConfigured } from "@/lib/firebase/env";
 import { clearLastTripId } from "@/lib/last-trip";
 import { TripSelector } from "@/components/trip-selector";
 import { VisibilityBadge } from "@/components/visibility-badge";
-import { getGroup, getMemberForUser } from "@/lib/firestore/groups";
+import { buildWelcomeUrl, getGroup, getMemberForUser } from "@/lib/firestore/groups";
+import type { GroupDoc } from "@/types/group";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { useState, useEffect, useRef } from "react";
+
+/** `/groups/new` などは旅行IDとして扱わない */
+const RESERVED_GROUP_PATH_SEGMENTS = new Set(["new"]);
+
+function parseCurrentGroupId(pathname: string): string | null {
+  const m = pathname.match(/^\/groups\/([^/]+)/);
+  const seg = m?.[1];
+  if (!seg || RESERVED_GROUP_PATH_SEGMENTS.has(seg)) return null;
+  return seg;
+}
 
 export function AppHeader() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
-  // /groups/[groupId]/... からgroupIdを抽出
-  const groupIdMatch = pathname.match(/^\/groups\/([^/]+)/);
-  const currentGroupId = groupIdMatch?.[1] ?? null;
+  const currentGroupId = parseCurrentGroupId(pathname);
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -27,15 +36,20 @@ export function AppHeader() {
   const [showAdminMenuLink, setShowAdminMenuLink] = useState<boolean | null>(
     null,
   );
+  /** メニュー内「招待」表示用（パスの旅行 = 選択中の旅行） */
+  const [groupForMenu, setGroupForMenu] = useState<GroupDoc | null>(null);
+  const [inviteCopied, setInviteCopied] = useState(false);
 
   // パス変化でメニューを閉じる
   useEffect(() => {
     setMenuOpen(false);
+    setInviteCopied(false);
   }, [pathname]);
 
   useEffect(() => {
     if (!user || !currentGroupId) {
       setShowAdminMenuLink(false);
+      setGroupForMenu(null);
       return;
     }
     let cancelled = false;
@@ -47,6 +61,7 @@ export function AppHeader() {
           getMemberForUser(currentGroupId, user.uid),
         ]);
         if (cancelled) return;
+        setGroupForMenu(g);
         if (!g) {
           setShowAdminMenuLink(false);
           return;
@@ -57,7 +72,10 @@ export function AppHeader() {
           m?.role === "owner";
         setShowAdminMenuLink(ok);
       } catch {
-        if (!cancelled) setShowAdminMenuLink(false);
+        if (!cancelled) {
+          setShowAdminMenuLink(false);
+          setGroupForMenu(null);
+        }
       }
     })();
     return () => {
@@ -76,6 +94,24 @@ export function AppHeader() {
     document.addEventListener("mousedown", onOutside);
     return () => document.removeEventListener("mousedown", onOutside);
   }, [menuOpen]);
+
+  async function copyCurrentInviteLink() {
+    if (
+      !groupForMenu ||
+      typeof navigator === "undefined" ||
+      !navigator.clipboard
+    ) {
+      return;
+    }
+    const url = buildWelcomeUrl(groupForMenu.inviteCode);
+    try {
+      await navigator.clipboard.writeText(url);
+      setInviteCopied(true);
+      window.setTimeout(() => setInviteCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  }
 
   async function handleLogout() {
     if (!isFirebaseConfigured()) return;
@@ -203,6 +239,17 @@ export function AppHeader() {
                         参加世帯
                       </Link>
                     ) : null}
+                    {currentGroupId ? (
+                      <Link
+                        href={`/groups/${currentGroupId}/sharing`}
+                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
+                          <path d="M3 3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H3Zm2 3h10v2H5V6Zm0 4h10v2H5v-2Zm0 4h7v2H5v-2Z" />
+                        </svg>
+                        買い出しリスト
+                      </Link>
+                    ) : null}
                     {/* 6. 管理者メニュー（オーナー・管理者のみ） */}
                     {currentGroupId && showAdminMenuLink === true ? (
                       <Link
@@ -227,6 +274,65 @@ export function AppHeader() {
                       公式ポータル
                     </Link>
                   </nav>
+
+                  {currentGroupId && groupForMenu ? (
+                    <div className="border-t border-zinc-100 px-4 py-3 dark:border-zinc-800">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                        選択中の旅行の招待
+                      </p>
+                      <p className="mt-1 truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                        {groupForMenu.name}
+                      </p>
+                      <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+                        招待コード{" "}
+                        <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                          {groupForMenu.inviteCode}
+                        </span>
+                      </p>
+                      <p className="mt-1 break-all text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                        {buildWelcomeUrl(groupForMenu.inviteCode)}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => void copyCurrentInviteLink()}
+                          className="rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                        >
+                          {inviteCopied ? "コピーしました ✓" : "リンクをコピー"}
+                        </button>
+                        <a
+                          href={`https://line.me/R/msg/text/?${encodeURIComponent(
+                            `「${groupForMenu.name}」の旅行に招待されました！\n参加はこちらから👇\n${buildWelcomeUrl(groupForMenu.inviteCode)}`,
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md bg-[#06C755] px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-[#05b34c]"
+                        >
+                          LINEで送る
+                        </a>
+                        {typeof navigator !== "undefined" &&
+                        "share" in navigator ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await navigator.share({
+                                  title: `「${groupForMenu.name}」への招待`,
+                                  text: `「${groupForMenu.name}」の旅行に招待されました！`,
+                                  url: buildWelcomeUrl(groupForMenu.inviteCode),
+                                });
+                              } catch {
+                                // キャンセルは無視
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          >
+                            その他で共有
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {/* ログアウト */}
                   <div className="border-t border-zinc-100 py-1 dark:border-zinc-800">
