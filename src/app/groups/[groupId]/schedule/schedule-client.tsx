@@ -467,98 +467,6 @@ export function ScheduleClient() {
         </div>
       ) : null}
 
-      {canManage ? (
-        <section className="mt-8 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-              候補日程の追加
-            </h2>
-            <VisibilityBadge kind="admin" />
-          </div>
-          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-            旅行のように複数日にわたる場合は、開始日と終了日を指定します。1日だけの候補は同じ日付を選んでください。
-          </p>
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
-              開始日
-              <input
-                type="date"
-                value={newStartDate}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setNewStartDate(v);
-                  setNewEndDate((prev) => {
-                    if (!prev || prev < v) return v;
-                    return prev;
-                  });
-                }}
-                className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
-              終了日
-              <input
-                type="date"
-                value={newEndDate}
-                min={newStartDate || undefined}
-                onChange={(e) => setNewEndDate(e.target.value)}
-                className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={handleAddCandidate}
-              disabled={busy !== null || !newStartDate || !newEndDate}
-              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
-            >
-              {busy === "add-candidate" ? "追加中…" : "候補を追加"}
-            </button>
-          </div>
-
-          {candidates.length > 0 ? (
-            <div className="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                  日程の確定
-                </h2>
-                <VisibilityBadge kind="admin" />
-              </div>
-              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                下の表で選んだ候補の日程を確定します。確定済みの場合は上部に表示されます。
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {candidates.map(({ id, data }) => {
-                  const rangeLabel = formatDateRangeLabel(
-                    data.startDate,
-                    data.endDate,
-                  );
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() =>
-                        handleConfirmWithDialog(
-                          id,
-                          data.startDate,
-                          data.endDate,
-                          rangeLabel,
-                        )
-                      }
-                      disabled={busy !== null}
-                      className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                    >
-                      {busy === "confirm"
-                        ? "…"
-                        : `${rangeLabel} を確定`}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
       <section className="mt-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
@@ -920,6 +828,98 @@ export function ScheduleClient() {
           </>
         )}
       </section>
+
+      {canManage ? (
+        <section className="mt-8 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              候補日程の追加
+            </h2>
+            <VisibilityBadge kind="admin" />
+          </div>
+          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+            旅行のように複数日にわたる場合は、開始日と終了日を指定します。1日だけの候補は同じ日付を選んでください。
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+              開始日
+              <input
+                type="date"
+                value={newStartDate}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setNewStartDate(v);
+                  setNewEndDate((prev) => {
+                    if (!prev || prev < v) return v;
+                    return prev;
+                  });
+                }}
+                className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+              終了日
+              <input
+                type="date"
+                value={newEndDate}
+                min={newStartDate || undefined}
+                onChange={(e) => setNewEndDate(e.target.value)}
+                className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={handleAddCandidate}
+              disabled={busy !== null || !newStartDate || !newEndDate}
+              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+            >
+              {busy === "add-candidate" ? "追加中…" : "候補を追加"}
+            </button>
+          </div>
+
+          {candidates.length > 0 ? (
+            <div className="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                  日程の確定
+                </h2>
+                <VisibilityBadge kind="admin" />
+              </div>
+              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                下の表で選んだ候補の日程を確定します。確定済みの場合は上部に表示されます。
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {candidates.map(({ id, data }) => {
+                  const rangeLabel = formatDateRangeLabel(
+                    data.startDate,
+                    data.endDate,
+                  );
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() =>
+                        handleConfirmWithDialog(
+                          id,
+                          data.startDate,
+                          data.endDate,
+                          rangeLabel,
+                        )
+                      }
+                      disabled={busy !== null}
+                      className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    >
+                      {busy === "confirm"
+                        ? "…"
+                        : `${rangeLabel} を確定`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }
