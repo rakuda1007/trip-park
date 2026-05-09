@@ -140,11 +140,13 @@ export function TripSelector() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className="flex max-w-full items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 sm:gap-1.5 sm:px-3"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="max-w-[120px] truncate sm:max-w-[180px]">{displayName}</span>
+        <span className="min-w-0 max-w-[5rem] truncate sm:max-w-[120px] md:max-w-[180px]">
+          {displayName}
+        </span>
         <svg
           className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`}
           fill="none"

@@ -129,7 +129,7 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90">
-      <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-4 sm:gap-3 sm:px-6">
         {/* ロゴ */}
         <Link
           href={!loading && user ? "/dashboard" : "/"}
@@ -138,41 +138,53 @@ export function AppHeader() {
           Trip Park
         </Link>
 
-        {/* ログイン済みなら旅行セレクターを中央に */}
+        {/* ログイン済みなら旅行セレクターを中央に（狭い画面では幅を抑えて右側のナビと共存） */}
         {!loading && user && (
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <TripSelector />
           </div>
         )}
 
-        {/* 右ナビ */}
-        <div className="ml-auto shrink-0">
+        {/* 右ナビ（旅行一覧はハンバーガーの横） */}
+        <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
           {!loading && user ? (
-            /* ── ハンバーガーメニュー ── */
-            <div ref={menuRef} className="relative">
-              <button
-                type="button"
-                aria-label="メニューを開く"
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen((v) => !v)}
-                className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+            <>
+              <Link
+                href="/groups"
+                aria-current={pathname === "/groups" ? "page" : undefined}
+                className={`shrink-0 whitespace-nowrap rounded-md px-2 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 sm:px-2.5 ${
+                  pathname === "/groups"
+                    ? "bg-zinc-100 dark:bg-zinc-800"
+                    : ""
+                }`}
               >
-                {menuOpen ? (
-                  /* × アイコン */
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-                    <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-                  </svg>
-                ) : (
-                  /* ≡ アイコン */
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-                    <path fillRule="evenodd" d="M2 4.75A.75.75 0 0 1 2.75 4h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.75ZM2 10a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 10Zm0 5.25a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </button>
+                旅行一覧
+              </Link>
+              {/* ── ハンバーガーメニュー ── */}
+              <div ref={menuRef} className="relative shrink-0">
+                <button
+                  type="button"
+                  aria-label="メニューを開く"
+                  aria-expanded={menuOpen}
+                  onClick={() => setMenuOpen((v) => !v)}
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                >
+                  {menuOpen ? (
+                    /* × アイコン */
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                      <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                    </svg>
+                  ) : (
+                    /* ≡ アイコン */
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                      <path fillRule="evenodd" d="M2 4.75A.75.75 0 0 1 2.75 4h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.75ZM2 10a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 10Zm0 5.25a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
 
-              {/* ドロップダウン */}
-              {menuOpen && (
-                <div className="absolute right-0 mt-2 min-w-[12rem] max-w-[min(100vw-2rem,20rem)] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                {/* ドロップダウン */}
+                {menuOpen && (
+                  <div className="absolute right-0 mt-2 min-w-[12rem] max-w-[min(100vw-2rem,20rem)] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
                   {/* ユーザー情報（小さく） */}
                   <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
                     <p className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">
@@ -351,7 +363,8 @@ export function AppHeader() {
                   </div>
                 </div>
               )}
-            </div>
+              </div>
+            </>
           ) : (
             /* 未ログイン */
             <nav className="flex items-center gap-2 text-sm">
