@@ -476,13 +476,6 @@ export function GroupDetailClient() {
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
-      <Link
-        href="/groups"
-        className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-      >
-        ← 旅行一覧
-      </Link>
-
       {/* 旅行名 + 日程バッジ */}
       {editingName && isOwner ? (
         <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">

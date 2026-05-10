@@ -679,12 +679,7 @@ export function TripClient() {
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
-      <Link href={`/groups/${groupId}`}
-        className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
-        ← 旅行詳細
-      </Link>
-
-      <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">旅程</h1>
+      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">旅程</h1>
       <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
         <Link
           href={`/groups/${groupId}`}
