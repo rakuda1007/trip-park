@@ -461,40 +461,17 @@ export function ScheduleClient() {
       ) : null}
 
       <section className="mt-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-              回答一覧
-            </h2>
-            {canManage ? (
-              <VisibilityBadge
-                kind="admin"
-                title="この一覧は全員に表示されます。候補ごとの「確定」「削除」リンクは管理者のみが使えます。"
-              />
-            ) : null}
-          </div>
-          {candidates.length > 0 && user && isMember ? (
-            <div className="flex flex-col items-stretch gap-2 sm:items-end">
-              {hasUnsavedMyAnswers ? (
-                <p className="text-xs text-amber-700 dark:text-amber-300">
-                  未保存の変更があります
-                </p>
-              ) : (
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  すべて保存済みです
-                </p>
-              )}
-              <button
-                type="button"
-                onClick={handleSaveMyAnswers}
-                disabled={busy !== null || !hasUnsavedMyAnswers}
-                className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
-              >
-                {busy === "save-answers" ? "保存中…" : "回答を保存"}
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+          回答一覧
+        </h2>
+        <p className="mt-1.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+          メンバー全員が各候補に ○ / △ / ×
+          で回答し、一覧を閲覧できます。候補ごとの
+          <span className="font-medium text-zinc-800 dark:text-zinc-200">
+            「確定」「削除」
+          </span>
+          だけがオーナー・管理者向けの操作です。
+        </p>
         {candidates.length > 0 ? (
           <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
             各候補の集計は「回答を保存」済みのデータのみです。未保存の変更は反映されません。
@@ -820,6 +797,27 @@ export function ScheduleClient() {
             </div>
           </>
         )}
+        {candidates.length > 0 && user && isMember ? (
+          <div className="mt-6 flex flex-col items-stretch gap-2 border-t border-zinc-200 pt-6 dark:border-zinc-700 sm:items-end">
+            {hasUnsavedMyAnswers ? (
+              <p className="text-xs text-amber-700 dark:text-amber-300 sm:text-right">
+                未保存の変更があります
+              </p>
+            ) : (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 sm:text-right">
+                すべて保存済みです
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleSaveMyAnswers}
+              disabled={busy !== null || !hasUnsavedMyAnswers}
+              className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-40 sm:ml-auto sm:w-auto dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+            >
+              {busy === "save-answers" ? "保存中…" : "回答を保存"}
+            </button>
+          </div>
+        ) : null}
       </section>
 
       {canManage ? (
