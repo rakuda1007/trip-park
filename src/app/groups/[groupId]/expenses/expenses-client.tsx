@@ -269,6 +269,45 @@ export function ExpensesClient() {
     [familyBalances],
   );
 
+  /**
+   * 精算サマリ
+   * - totalAmount: 全支出の総額
+   * - rows: 世帯（または未所属ユーザー）ごとの 請求額／立替額／差引精算額
+   * 差引精算 = 立替額 − 請求額（= familyBalances の値）
+   */
+  const settlementSummary = useMemo(() => {
+    const totalAmount = expenses.reduce(
+      (s, r) => s + (Number.isFinite(r.data.amount) ? r.data.amount : 0),
+      0,
+    );
+    const paidByKey = new Map<string, number>();
+    for (const { data: e } of expenses) {
+      let payerKey: string | null = null;
+      if (e.paidByFamilyId) {
+        payerKey = `family:${e.paidByFamilyId}`;
+      } else if (e.paidByUserId) {
+        const fid = userToFamilyId.get(e.paidByUserId);
+        payerKey = fid ? `family:${fid}` : `user:${e.paidByUserId}`;
+      }
+      if (payerKey) {
+        paidByKey.set(payerKey, (paidByKey.get(payerKey) ?? 0) + e.amount);
+      }
+    }
+    const allKeys = new Set<string>([
+      ...familyBalances.keys(),
+      ...paidByKey.keys(),
+    ]);
+    const rows = [...allKeys]
+      .sort((a, b) => a.localeCompare(b))
+      .map((key) => {
+        const paid = paidByKey.get(key) ?? 0;
+        const balance = familyBalances.get(key) ?? 0;
+        const charged = paid - balance;
+        return { key, paid, charged, balance };
+      });
+    return { totalAmount, rows };
+  }, [expenses, familyBalances, userToFamilyId]);
+
   const displayName = useCallback(
     (uid: string) => {
       const m = members.find((x) => x.userId === uid);
@@ -917,6 +956,77 @@ export function ExpensesClient() {
       </section>
   );
 
+  const settlementSummarySection = expenses.length === 0 ? null : (
+      <section className="mt-10">
+        <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+          精算サマリ
+        </h2>
+        <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50/80 p-4 dark:border-sky-900 dark:bg-sky-950/25">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-sky-900 dark:text-sky-200">
+              総額
+            </p>
+            <p className="text-lg font-semibold tabular-nums text-sky-950 dark:text-sky-100">
+              {formatYen(settlementSummary.totalAmount)}
+            </p>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-sky-200/80 text-[11px] uppercase tracking-wide text-sky-800 dark:border-sky-800 dark:text-sky-200">
+                  <th className="py-1 pr-3 font-medium">世帯</th>
+                  <th className="py-1 pr-3 text-right font-medium">請求額</th>
+                  <th className="py-1 pr-3 text-right font-medium">立替額</th>
+                  <th className="py-1 text-right font-medium">差引精算</th>
+                </tr>
+              </thead>
+              <tbody>
+                {settlementSummary.rows.map((r) => {
+                  const balance = Math.round(r.balance);
+                  const balanceLabel =
+                    balance > 0
+                      ? `${formatYen(balance)} 受取`
+                      : balance < 0
+                        ? `${formatYen(-balance)} 支払`
+                        : "±0";
+                  const balanceClass =
+                    balance > 0
+                      ? "text-emerald-700 dark:text-emerald-300"
+                      : balance < 0
+                        ? "text-rose-700 dark:text-rose-300"
+                        : "text-zinc-500 dark:text-zinc-400";
+                  return (
+                    <tr
+                      key={r.key}
+                      className="border-b border-sky-100/80 last:border-0 dark:border-sky-900/40"
+                    >
+                      <td className="py-1.5 pr-3 align-middle text-zinc-800 dark:text-zinc-200">
+                        {resolveSettlementUnitLabel(r.key, families, displayName)}
+                      </td>
+                      <td className="py-1.5 pr-3 align-middle text-right tabular-nums">
+                        {formatYen(Math.round(r.charged))}
+                      </td>
+                      <td className="py-1.5 pr-3 align-middle text-right tabular-nums">
+                        {formatYen(Math.round(r.paid))}
+                      </td>
+                      <td
+                        className={`py-1.5 align-middle text-right font-medium tabular-nums ${balanceClass}`}
+                      >
+                        {balanceLabel}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-[11px] text-sky-900/80 dark:text-sky-200/80">
+            差引精算 ＝ 立替額 － 請求額
+          </p>
+        </div>
+      </section>
+  );
+
   const settlementGuideSection = (
       <section className="mt-10">
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
@@ -1132,12 +1242,14 @@ export function ExpensesClient() {
       {hasExpenses ? (
         <>
           {expenseListSection}
+          {settlementSummarySection}
           {settlementGuideSection}
           {addExpenseFormSection}
         </>
       ) : (
         <>
           {addExpenseFormSection}
+          {settlementSummarySection}
           {settlementGuideSection}
           {expenseListSection}
         </>
