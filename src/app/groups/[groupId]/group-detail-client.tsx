@@ -158,6 +158,7 @@ export function GroupDetailClient() {
   const [memoryPhotoPreview, setMemoryPhotoPreview] = useState<string | null>(null);
   const [memoryPhotoDraftFile, setMemoryPhotoDraftFile] = useState<File | null>(null);
   const [memoryPhotoDraftPreview, setMemoryPhotoDraftPreview] = useState<string | null>(null);
+  const [isMemoryPhotoLightboxOpen, setIsMemoryPhotoLightboxOpen] = useState(false);
   /** 思い出写真の解放条件（ステップナビと同一ロジック） */
   const [workflowPolls, setWorkflowPolls] = useState<PollItem[]>([]);
   const [workflowTripRoutes, setWorkflowTripRoutes] = useState<
@@ -367,6 +368,15 @@ export function GroupDetailClient() {
       }
     };
   }, [memoryPhotoDraftPreview]);
+
+  useEffect(() => {
+    if (!isMemoryPhotoLightboxOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsMemoryPhotoLightboxOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isMemoryPhotoLightboxOpen]);
 
   const isOwner = user && group && user.uid === group.ownerId;
   const canManageSchedule = useMemo(() => {
@@ -876,14 +886,21 @@ export function GroupDetailClient() {
         </div>
         {memoryPhotoDraftPreview || memoryPhotoPreview ? (
           <div className="mt-3">
-            <Image
-              src={memoryPhotoDraftPreview ?? memoryPhotoPreview ?? ""}
-              alt="旅行の思い出写真"
-              width={960}
-              height={540}
-              unoptimized
-              className="h-44 w-full rounded-md object-cover sm:h-56"
-            />
+            <button
+              type="button"
+              onClick={() => setIsMemoryPhotoLightboxOpen(true)}
+              aria-label="思い出写真を拡大表示"
+              className="block w-full cursor-zoom-in overflow-hidden rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+            >
+              <Image
+                src={memoryPhotoDraftPreview ?? memoryPhotoPreview ?? ""}
+                alt="旅行の思い出写真"
+                width={960}
+                height={540}
+                unoptimized
+                className="h-44 w-full rounded-md object-cover transition-opacity hover:opacity-90 sm:h-56"
+              />
+            </button>
             {isOwner ? (
               <div className="mt-2 flex flex-wrap gap-2">
                 {memoryPhotoDraftFile ? (
@@ -923,6 +940,38 @@ export function GroupDetailClient() {
           </p>
         )}
       </section>
+      ) : null}
+
+      {isMemoryPhotoLightboxOpen &&
+      (memoryPhotoDraftPreview || memoryPhotoPreview) ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="思い出写真の拡大表示"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setIsMemoryPhotoLightboxOpen(false)}
+        >
+          <button
+            type="button"
+            aria-label="拡大表示を閉じる"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsMemoryPhotoLightboxOpen(false);
+            }}
+            className="absolute right-3 top-3 rounded-md bg-white/20 px-3 py-1.5 text-sm text-white hover:bg-white/30"
+          >
+            閉じる
+          </button>
+          <Image
+            src={memoryPhotoDraftPreview ?? memoryPhotoPreview ?? ""}
+            alt="旅行の思い出写真（拡大表示）"
+            width={1920}
+            height={1080}
+            unoptimized
+            className="max-h-[90vh] max-w-[95vw] rounded-md object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
       ) : null}
 
       {/* 日程編集フォーム（オーナーのみ） */}
