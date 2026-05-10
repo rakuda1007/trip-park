@@ -19,7 +19,7 @@ export function TripDashboardInsightsPanel({
 
   if (!insights) return null;
 
-  const { nextStepLine, statusLines, personalTasks } = insights;
+  const { nextStepLine, nextStepLink, statusLines, personalTasks } = insights;
 
   return (
     <section className="mt-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/50">
@@ -33,6 +33,16 @@ export function TripDashboardInsightsPanel({
         <p className="text-sm font-medium leading-snug text-zinc-900 dark:text-zinc-100">
           {nextStepLine}
         </p>
+        {nextStepLink ? (
+          <div className="mt-3">
+            <Link
+              href={nextStepLink.href}
+              className="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+            >
+              {nextStepLink.label}
+            </Link>
+          </div>
+        ) : null}
         {allWorkflowComplete ? (
           <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
             工程は一通り完了しています。下のトピックでやり取りを続けられます。

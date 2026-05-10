@@ -737,6 +737,7 @@ export function DestinationVotesClient() {
         )}
       </div>
 
+      <div id="destination-voting" className="scroll-mt-28">
       {bundles.length === 0 && !showNewPollForm ? (
         <p className="mt-4 rounded-lg border border-dashed border-zinc-300 px-4 py-6 text-center text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-400">
           まだ投票ブロックがありません。上のボタンから追加するか、候補がある場合はページを再読み込みしてください（旧データは自動で移行されます）。
@@ -784,6 +785,7 @@ export function DestinationVotesClient() {
           toggleVoters={toggleVoters}
         />
       ))}
+      </div>
     </div>
   );
 }

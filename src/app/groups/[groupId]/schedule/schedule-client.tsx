@@ -483,184 +483,150 @@ export function ScheduleClient() {
           </p>
         ) : (
           <>
-            {/* モバイル: 候補ごとに縦並び（横スクロールなし） */}
-            <div className="mt-3 space-y-4 md:hidden">
-              {candidates.map(({ id, data }) => {
-                const counts = aggregateByCandidate.get(id);
-                const yes = counts?.yes ?? 0;
-                const maybe = counts?.maybe ?? 0;
-                const noCount = counts?.no ?? 0;
-                const un = counts?.unanswered ?? 0;
-                const rangeLabel = formatDateRangeLabel(
-                  data.startDate,
-                  data.endDate,
-                );
-                return (
-                  <div
-                    key={id}
-                    className="overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
-                  >
-                    <div className="border-b border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900/80">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                            {rangeLabel}
-                          </p>
-                          <p className="mt-0.5 text-[11px] text-emerald-800 dark:text-emerald-300">
-                            ○ {yes}
-                            <span className="text-zinc-400 dark:text-zinc-500">
-                              {" "}
-                              ·{" "}
-                            </span>
-                            <span className="text-amber-800 dark:text-amber-300">
-                              △ {maybe}
-                            </span>
-                            <span className="text-zinc-400 dark:text-zinc-500">
-                              {" "}
-                              ·{" "}
-                            </span>
-                            <span className="text-zinc-600 dark:text-zinc-400">
-                              × {noCount}
-                            </span>
-                            {un > 0 ? (
-                              <span className="text-zinc-500 dark:text-zinc-400">
-                                {" "}
-                                · 未回答 {un}
-                              </span>
-                            ) : null}
-                          </p>
-                        </div>
-                        {canManage ? (
-                          <span className="flex shrink-0 items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleConfirmWithDialog(
-                                  id,
-                                  data.startDate,
-                                  data.endDate,
-                                  rangeLabel,
-                                )
-                              }
-                              disabled={busy !== null}
-                              className="text-xs font-medium text-emerald-700 hover:underline disabled:opacity-50 dark:text-emerald-400"
-                            >
-                              確定
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveCandidate(id)}
-                              disabled={busy !== null}
-                              className="text-xs text-red-600 hover:underline disabled:opacity-50"
-                            >
-                              削除
-                            </button>
+            {/* ── 集計のみ（投票ボタンとは分離） ── */}
+            <div id="schedule-summary" className="scroll-mt-28">
+              <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                集計結果（保存済みの回答）
+              </h3>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                ここでは保存済みの回答だけを数えています。下の「メンバー別」で
+                ○ / △ / × を選んでください。
+              </p>
+
+              <div className="mt-3 space-y-3 md:hidden">
+                {candidates.map(({ id, data }) => {
+                  const counts = aggregateByCandidate.get(id);
+                  const yes = counts?.yes ?? 0;
+                  const maybe = counts?.maybe ?? 0;
+                  const noCount = counts?.no ?? 0;
+                  const un = counts?.unanswered ?? 0;
+                  const rangeLabel = formatDateRangeLabel(
+                    data.startDate,
+                    data.endDate,
+                  );
+                  return (
+                    <div
+                      key={id}
+                      className="rounded-lg border border-zinc-200 bg-zinc-50/95 px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-900/70"
+                    >
+                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {rangeLabel}
+                      </p>
+                      <p className="mt-1 text-[11px] text-emerald-800 dark:text-emerald-300">
+                        ○ {yes}
+                        <span className="text-zinc-400 dark:text-zinc-500">
+                          {" "}
+                          ·{" "}
+                        </span>
+                        <span className="text-amber-800 dark:text-amber-300">
+                          △ {maybe}
+                        </span>
+                        <span className="text-zinc-400 dark:text-zinc-500">
+                          {" "}
+                          ·{" "}
+                        </span>
+                        <span className="text-zinc-600 dark:text-zinc-400">
+                          × {noCount}
+                        </span>
+                        {un > 0 ? (
+                          <span className="text-zinc-500 dark:text-zinc-400">
+                            {" "}
+                            · 未回答 {un}
                           </span>
                         ) : null}
-                      </div>
-                    </div>
-                    <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                      {sortedMembers.map(({ userId, data: md }) => {
-                        const isMe = userId === user?.uid;
-                        const ans = responseMap.get(id)?.get(userId);
-                        const myPick = isMe
-                          ? myDraftAnswers[id] ?? savedMyAnswer(id)
-                          : undefined;
-                        return (
-                          <li
-                            key={userId}
-                            className={
-                              isMe
-                                ? "flex items-center justify-between gap-3 bg-emerald-50/80 px-3 py-2.5 dark:bg-emerald-950/30"
-                                : "flex items-center justify-between gap-3 px-3 py-2.5"
-                            }
-                          >
-                            <span className="min-w-0 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                              <span className="break-words">
-                                {md.displayName || userId.slice(0, 8) + "…"}
-                              </span>
-                              {userId === group.ownerId ? (
-                                <span className="ml-1 text-xs font-normal text-zinc-500">
-                                  （オーナー）
-                                </span>
-                              ) : null}
-                              {isMe ? (
-                                <span className="ml-1 text-xs font-normal text-emerald-700 dark:text-emerald-400">
-                                  あなた
-                                </span>
-                              ) : null}
-                            </span>
-                            <span className="shrink-0">
-                              {isMe && user ? (
-                                <div className="flex flex-nowrap justify-end gap-1">
-                                  {(
-                                    [
-                                      ["yes", "○"],
-                                      ["maybe", "△"],
-                                      ["no", "×"],
-                                    ] as const
-                                  ).map(([val, label]) => (
-                                    <button
-                                      key={val}
-                                      type="button"
-                                      onClick={() =>
-                                        setMyDraftForCandidate(id, val)
-                                      }
-                                      disabled={busy !== null}
-                                      className={`min-h-[2.25rem] min-w-[2.25rem] rounded-md px-2 py-1 text-sm font-semibold disabled:opacity-50 ${
-                                        myPick === val
-                                          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                                          : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-lg font-medium tabular-nums text-zinc-800 dark:text-zinc-200">
-                                  {answerSymbol(ans)}
-                                </span>
-                              )}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* md 以上: 表形式 */}
-            <div className="mt-3 hidden overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-700 md:block">
-              <table className="w-full min-w-[640px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/80">
-                  <th className="sticky left-0 z-10 border-r border-zinc-200 bg-zinc-50 px-3 py-2 text-left font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-zinc-300">
-                    メンバー
-                  </th>
-                  {candidates.map(({ id, data }) => {
-                    const counts = aggregateByCandidate.get(id);
-                    const yes = counts?.yes ?? 0;
-                    const maybe = counts?.maybe ?? 0;
-                    const noCount = counts?.no ?? 0;
-                    const un = counts?.unanswered ?? 0;
-                    return (
-                      <th
-                        key={id}
-                        className="min-w-[7.5rem] px-2 py-2 text-center font-medium text-zinc-700 dark:text-zinc-300"
-                      >
-                        <div className="flex flex-col items-stretch gap-1.5">
-                          <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5">
-                            <span className="min-w-0 text-center text-[11px] font-medium leading-tight">
-                              {formatDateRangeLabel(
+                      </p>
+                      {canManage ? (
+                        <div className="mt-2 flex flex-wrap gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-700">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleConfirmWithDialog(
+                                id,
                                 data.startDate,
                                 data.endDate,
-                              )}
-                            </span>
-                            {canManage ? (
-                              <span className="flex shrink-0 items-center gap-1">
+                                rangeLabel,
+                              )
+                            }
+                            disabled={busy !== null}
+                            className="text-xs font-medium text-emerald-700 hover:underline disabled:opacity-50 dark:text-emerald-400"
+                          >
+                            この候補を確定
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCandidate(id)}
+                            disabled={busy !== null}
+                            className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                          >
+                            削除
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-3 hidden overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-700 md:block">
+                <table className="w-full min-w-[520px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/80">
+                      <th className="px-3 py-2 text-left font-medium text-zinc-700 dark:text-zinc-300">
+                        候補期間
+                      </th>
+                      <th className="px-2 py-2 text-center font-medium text-emerald-800 dark:text-emerald-300">
+                        ○
+                      </th>
+                      <th className="px-2 py-2 text-center font-medium text-amber-800 dark:text-amber-300">
+                        △
+                      </th>
+                      <th className="px-2 py-2 text-center font-medium text-zinc-700 dark:text-zinc-400">
+                        ×
+                      </th>
+                      <th className="px-2 py-2 text-center font-medium text-zinc-600 dark:text-zinc-400">
+                        未回答
+                      </th>
+                      {canManage ? (
+                        <th className="px-3 py-2 text-center font-medium text-zinc-700 dark:text-zinc-300">
+                          操作
+                        </th>
+                      ) : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {candidates.map(({ id, data }) => {
+                      const counts = aggregateByCandidate.get(id);
+                      const yes = counts?.yes ?? 0;
+                      const maybe = counts?.maybe ?? 0;
+                      const noCount = counts?.no ?? 0;
+                      const un = counts?.unanswered ?? 0;
+                      const rangeLabel = formatDateRangeLabel(
+                        data.startDate,
+                        data.endDate,
+                      );
+                      return (
+                        <tr
+                          key={id}
+                          className="border-b border-zinc-100 dark:border-zinc-800"
+                        >
+                          <td className="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-100">
+                            {rangeLabel}
+                          </td>
+                          <td className="px-2 py-2 text-center tabular-nums text-emerald-800 dark:text-emerald-300">
+                            {yes}
+                          </td>
+                          <td className="px-2 py-2 text-center tabular-nums text-amber-800 dark:text-amber-300">
+                            {maybe}
+                          </td>
+                          <td className="px-2 py-2 text-center tabular-nums text-zinc-700 dark:text-zinc-400">
+                            {noCount}
+                          </td>
+                          <td className="px-2 py-2 text-center tabular-nums text-zinc-500">
+                            {un}
+                          </td>
+                          {canManage ? (
+                            <td className="px-3 py-2 text-center">
+                              <span className="inline-flex flex-wrap justify-center gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -668,14 +634,11 @@ export function ScheduleClient() {
                                       id,
                                       data.startDate,
                                       data.endDate,
-                                      formatDateRangeLabel(
-                                        data.startDate,
-                                        data.endDate,
-                                      ),
+                                      rangeLabel,
                                     )
                                   }
                                   disabled={busy !== null}
-                                  className="text-[10px] font-medium text-emerald-700 hover:underline disabled:opacity-50 dark:text-emerald-400"
+                                  className="text-[11px] font-medium text-emerald-700 hover:underline disabled:opacity-50 dark:text-emerald-400"
                                 >
                                   確定
                                 </button>
@@ -683,141 +646,245 @@ export function ScheduleClient() {
                                   type="button"
                                   onClick={() => handleRemoveCandidate(id)}
                                   disabled={busy !== null}
-                                  className="text-[10px] text-red-600 hover:underline disabled:opacity-50"
+                                  className="text-[11px] text-red-600 hover:underline disabled:opacity-50"
                                 >
                                   削除
                                 </button>
                               </span>
-                            ) : null}
-                          </div>
-                          <div className="flex flex-col items-center gap-0.5 leading-tight">
-                            <span className="text-[10px] font-normal text-emerald-800 dark:text-emerald-300">
-                              ○ {yes}
-                              <span className="text-zinc-400 dark:text-zinc-500">
-                                {" "}
-                                ·{" "}
-                              </span>
-                              <span className="text-amber-800 dark:text-amber-300">
-                                △ {maybe}
-                              </span>
-                              <span className="text-zinc-400 dark:text-zinc-500">
-                                {" "}
-                                ·{" "}
-                              </span>
-                              <span className="text-zinc-600 dark:text-zinc-400">
-                                × {noCount}
-                              </span>
-                            </span>
-                            {un > 0 ? (
-                              <span className="text-[10px] font-normal text-zinc-500">
-                                未回答 {un}
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {sortedMembers.map(({ userId, data: md }) => {
-                  const isMe = userId === user?.uid;
+                            </td>
+                          ) : null}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* ── メンバー別の投票・回答（ダッシュボードからのリンク先アンカー） ── */}
+            <div
+              id="schedule-voting"
+              className="scroll-mt-28 border-t border-zinc-200 pt-6 mt-6 dark:border-zinc-700"
+            >
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                メンバー別の回答・投票
+              </h3>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                自分の行だけ ○ / △ / × をタップできます。変更後は一番下の「回答を保存」が必要です。
+              </p>
+
+              <div className="mt-3 space-y-4 md:hidden">
+                {candidates.map(({ id, data }) => {
+                  const rangeLabel = formatDateRangeLabel(
+                    data.startDate,
+                    data.endDate,
+                  );
                   return (
-                    <tr
-                      key={userId}
-                      className={
-                        isMe
-                          ? "border-b border-zinc-100 bg-emerald-50/80 dark:border-zinc-800 dark:bg-emerald-950/30"
-                          : "border-b border-zinc-100 dark:border-zinc-800"
-                      }
+                    <div
+                      key={id}
+                      className="overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
                     >
-                      <td className="sticky left-0 z-10 border-r border-zinc-200 bg-inherit px-3 py-2 font-medium text-zinc-900 dark:border-zinc-700 dark:text-zinc-100">
-                        {md.displayName || userId.slice(0, 8) + "…"}
-                        {userId === group.ownerId ? (
-                          <span className="ml-1 text-xs text-zinc-500">
-                            （オーナー）
-                          </span>
-                        ) : null}
-                        {isMe ? (
-                          <span className="ml-1 text-xs text-emerald-700 dark:text-emerald-400">
-                            あなた
-                          </span>
-                        ) : null}
-                      </td>
-                      {candidates.map(({ id: candId }) => {
-                        const ans = responseMap.get(candId)?.get(userId);
-                        const myPick = isMe
-                          ? myDraftAnswers[candId] ?? savedMyAnswer(candId)
-                          : undefined;
-                        return (
-                          <td
-                            key={candId}
-                            className="px-1 py-1 text-center align-middle"
-                          >
-                            {isMe && user ? (
-                              <div className="flex flex-wrap justify-center gap-0.5">
-                                {(
-                                  [
-                                    ["yes", "○"],
-                                    ["maybe", "△"],
-                                    ["no", "×"],
-                                  ] as const
-                                ).map(([val, label]) => (
-                                  <button
-                                    key={val}
-                                    type="button"
-                                    onClick={() =>
-                                      setMyDraftForCandidate(candId, val)
-                                    }
-                                    disabled={busy !== null}
-                                    className={`min-w-[1.75rem] rounded px-1 py-0.5 text-xs font-medium disabled:opacity-50 ${
-                                      myPick === val
-                                        ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                                        : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                                    }`}
-                                  >
-                                    {label}
-                                  </button>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-base text-zinc-800 dark:text-zinc-200">
-                                {answerSymbol(ans)}
+                      <div className="border-b border-zinc-200 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/90">
+                        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                          {rangeLabel}
+                        </p>
+                      </div>
+                      <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                        {sortedMembers.map(({ userId, data: md }) => {
+                          const isMe = userId === user?.uid;
+                          const ans = responseMap.get(id)?.get(userId);
+                          const myPick = isMe
+                            ? myDraftAnswers[id] ?? savedMyAnswer(id)
+                            : undefined;
+                          return (
+                            <li
+                              key={userId}
+                              className={
+                                isMe
+                                  ? "flex items-center justify-between gap-3 bg-emerald-50/80 px-3 py-2.5 dark:bg-emerald-950/30"
+                                  : "flex items-center justify-between gap-3 px-3 py-2.5"
+                              }
+                            >
+                              <span className="min-w-0 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                                <span className="break-words">
+                                  {md.displayName || userId.slice(0, 8) + "…"}
+                                </span>
+                                {userId === group.ownerId ? (
+                                  <span className="ml-1 text-xs font-normal text-zinc-500">
+                                    （オーナー）
+                                  </span>
+                                ) : null}
+                                {isMe ? (
+                                  <span className="ml-1 text-xs font-normal text-emerald-700 dark:text-emerald-400">
+                                    あなた
+                                  </span>
+                                ) : null}
                               </span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
+                              <span className="shrink-0">
+                                {isMe && user ? (
+                                  <div className="flex flex-nowrap justify-end gap-1">
+                                    {(
+                                      [
+                                        ["yes", "○"],
+                                        ["maybe", "△"],
+                                        ["no", "×"],
+                                      ] as const
+                                    ).map(([val, label]) => (
+                                      <button
+                                        key={val}
+                                        type="button"
+                                        onClick={() =>
+                                          setMyDraftForCandidate(id, val)
+                                        }
+                                        disabled={busy !== null}
+                                        className={`min-h-[2.25rem] min-w-[2.25rem] rounded-md px-2 py-1 text-sm font-semibold disabled:opacity-50 ${
+                                          myPick === val
+                                            ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                                            : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                        }`}
+                                      >
+                                        {label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-lg font-medium tabular-nums text-zinc-800 dark:text-zinc-200">
+                                    {answerSymbol(ans)}
+                                  </span>
+                                )}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+
+              <div className="mt-3 hidden overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-700 md:block">
+                <table className="w-full min-w-[640px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/80">
+                      <th className="sticky left-0 z-10 border-r border-zinc-200 bg-zinc-50 px-3 py-2 text-left font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-zinc-300">
+                        メンバー
+                      </th>
+                      {candidates.map(({ id, data }) => (
+                        <th
+                          key={id}
+                          className="min-w-[6.5rem] max-w-[10rem] px-2 py-2 text-center font-medium leading-tight text-zinc-700 dark:text-zinc-300"
+                        >
+                          <span className="block text-[11px]">
+                            {formatDateRangeLabel(
+                              data.startDate,
+                              data.endDate,
+                            )}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedMembers.map(({ userId, data: md }) => {
+                      const isMe = userId === user?.uid;
+                      return (
+                        <tr
+                          key={userId}
+                          className={
+                            isMe
+                              ? "border-b border-zinc-100 bg-emerald-50/80 dark:border-zinc-800 dark:bg-emerald-950/30"
+                              : "border-b border-zinc-100 dark:border-zinc-800"
+                          }
+                        >
+                          <td className="sticky left-0 z-10 border-r border-zinc-200 bg-inherit px-3 py-2 font-medium text-zinc-900 dark:border-zinc-700 dark:text-zinc-100">
+                            {md.displayName || userId.slice(0, 8) + "…"}
+                            {userId === group.ownerId ? (
+                              <span className="ml-1 text-xs text-zinc-500">
+                                （オーナー）
+                              </span>
+                            ) : null}
+                            {isMe ? (
+                              <span className="ml-1 text-xs text-emerald-700 dark:text-emerald-400">
+                                あなた
+                              </span>
+                            ) : null}
+                          </td>
+                          {candidates.map(({ id: candId }) => {
+                            const ans = responseMap.get(candId)?.get(userId);
+                            const myPick = isMe
+                              ? myDraftAnswers[candId] ??
+                                savedMyAnswer(candId)
+                              : undefined;
+                            return (
+                              <td
+                                key={candId}
+                                className="px-1 py-1 text-center align-middle"
+                              >
+                                {isMe && user ? (
+                                  <div className="flex flex-wrap justify-center gap-0.5">
+                                    {(
+                                      [
+                                        ["yes", "○"],
+                                        ["maybe", "△"],
+                                        ["no", "×"],
+                                      ] as const
+                                    ).map(([val, label]) => (
+                                      <button
+                                        key={val}
+                                        type="button"
+                                        onClick={() =>
+                                          setMyDraftForCandidate(candId, val)
+                                        }
+                                        disabled={busy !== null}
+                                        className={`min-w-[1.75rem] rounded px-1 py-0.5 text-xs font-medium disabled:opacity-50 ${
+                                          myPick === val
+                                            ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                                            : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                        }`}
+                                      >
+                                        {label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-base text-zinc-800 dark:text-zinc-200">
+                                    {answerSymbol(ans)}
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {candidates.length > 0 && user && isMember ? (
+                <div className="mt-6 flex flex-col items-stretch gap-2 border-t border-zinc-200 pt-6 dark:border-zinc-700 sm:items-end">
+                  {hasUnsavedMyAnswers ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-300 sm:text-right">
+                      未保存の変更があります
+                    </p>
+                  ) : (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 sm:text-right">
+                      すべて保存済みです
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleSaveMyAnswers}
+                    disabled={busy !== null || !hasUnsavedMyAnswers}
+                    className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-40 sm:ml-auto sm:w-auto dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                  >
+                    {busy === "save-answers" ? "保存中…" : "回答を保存"}
+                  </button>
+                </div>
+              ) : null}
             </div>
           </>
         )}
-        {candidates.length > 0 && user && isMember ? (
-          <div className="mt-6 flex flex-col items-stretch gap-2 border-t border-zinc-200 pt-6 dark:border-zinc-700 sm:items-end">
-            {hasUnsavedMyAnswers ? (
-              <p className="text-xs text-amber-700 dark:text-amber-300 sm:text-right">
-                未保存の変更があります
-              </p>
-            ) : (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 sm:text-right">
-                すべて保存済みです
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={handleSaveMyAnswers}
-              disabled={busy !== null || !hasUnsavedMyAnswers}
-              className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-40 sm:ml-auto sm:w-auto dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
-            >
-              {busy === "save-answers" ? "保存中…" : "回答を保存"}
-            </button>
-          </div>
-        ) : null}
       </section>
 
       {canManage ? (

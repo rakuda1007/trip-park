@@ -32,6 +32,8 @@ export type DashboardPersonalTask = {
 export type DashboardInsights = {
   /** ⑤ 次の一手（1行） */
   nextStepLine: string;
+  /** 次の一手に対応するページへの導線（迷わず遷移できるように） */
+  nextStepLink: { href: string; label: string } | null;
   /** ④ 自動のみ・旅行全体の状況（箇条書き） */
   statusLines: string[];
   /** ② あなたへのお願い（未対応があれば） */
@@ -173,26 +175,69 @@ export function computeDashboardInsights(params: {
     statusLines.push("旅行フェーズは「計画中」です（精算完了で締められます）。");
   }
 
+  const scheduleAnswersIncomplete =
+    !!userId &&
+    !datesDone &&
+    scheduleHasCandidates &&
+    !userHasScheduleAnswerForAllCandidates(
+      userId,
+      scheduleCandidateIds,
+      scheduleResponses,
+    );
+
+  /** 未確定ブロックのどこかでまだ「行きたい」票が 1 票も入っていない */
+  const destinationVotesIncomplete =
+    !!userId &&
+    !destDone &&
+    openDestinationPollVotes.some(
+      (row) => sumUserDestinationWantVotes(userId, row.votes) === 0,
+    );
+
   // ── 次の一手（優先順） ──
   let nextStepLine: string;
+  let nextStepLink: { href: string; label: string } | null = null;
+
   if (!datesDone) {
     nextStepLine = scheduleHasCandidates
       ? "次のステップ: 日程候補への回答を進めるか、管理者が日程を確定してください。"
       : "次のステップ: 日程候補を追加するか、旅行日を設定してください。";
+    nextStepLink = {
+      href: `/groups/${groupId}/schedule#schedule-voting`,
+      label: scheduleAnswersIncomplete
+        ? "日程調整で ○ / △ / × を選ぶ（投票エリアへ）"
+        : scheduleHasCandidates
+          ? "日程調整ページを開く（投票エリアへ）"
+          : "日程調整ページを開く",
+    };
   } else if (!destDone) {
     nextStepLine =
       "次のステップ: 目的地の投票に参加し、オーナー・管理者による確定を進めてください。";
+    nextStepLink = {
+      href: `/groups/${groupId}/destination-votes#destination-voting`,
+      label: destinationVotesIncomplete
+        ? "目的地で「行きたい」票を入れる（投票エリアへ）"
+        : "目的地の投票ページを開く（投票エリアへ）",
+    };
   } else if (!itinDone) {
     nextStepLine =
       "次のステップ: 旅程ページで各日のルートを埋め、確認済みにしてください。";
+    nextStepLink = {
+      href: `/groups/${groupId}/trip`,
+      label: "旅程ページへ",
+    };
   } else if (!settlementDone) {
     nextStepLine =
       tripStatus === "confirmed"
         ? "次のステップ: 支出・精算ページで清算を進め、旅行を完了にしてください。"
         : "次のステップ: 旅行を確定したうえで、支出・精算を進めてください。";
+    nextStepLink = {
+      href: `/groups/${groupId}/expenses`,
+      label: "支出・精算ページへ",
+    };
   } else {
     nextStepLine =
       "すべての主要な工程が一通り完了しています。トピックで連絡・共有を続けられます。";
+    nextStepLink = null;
   }
 
   // ── 個人タスク ──
@@ -208,7 +253,7 @@ export function computeDashboardInsights(params: {
         personalTasks.push({
           key: "schedule",
           label: "日程候補への回答がまだ終わっていません（○/△/×）。",
-          href: `/groups/${groupId}/schedule`,
+          href: `/groups/${groupId}/schedule#schedule-voting`,
         });
       }
     }
@@ -219,7 +264,7 @@ export function computeDashboardInsights(params: {
         personalTasks.push({
           key: `dest-${row.pollId}`,
           label: `目的地の投票「${row.pollTitle.slice(0, 48)}${row.pollTitle.length > 48 ? "…" : ""}」にまだ票が入っていません。`,
-          href: `/groups/${groupId}/destination-votes`,
+          href: `/groups/${groupId}/destination-votes#destination-voting`,
         });
       }
     }
@@ -240,5 +285,5 @@ export function computeDashboardInsights(params: {
     }
   }
 
-  return { nextStepLine, statusLines, personalTasks };
+  return { nextStepLine, nextStepLink, statusLines, personalTasks };
 }
