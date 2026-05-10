@@ -21,8 +21,21 @@ import {
 import { sendNotification } from "@/lib/notify";
 import { saveLastTripId } from "@/lib/last-trip";
 import { uploadGroupMemoryPhoto } from "@/lib/storage/group-memory-photo";
-import { areAllTripWorkflowStepsComplete } from "@/lib/trip-workflow-all-complete";
+import {
+  areAllTripWorkflowStepsComplete,
+} from "@/lib/trip-workflow-all-complete";
+import {
+  computeDashboardInsights,
+  isVoteOrDecisionTopic,
+} from "@/lib/trip-dashboard-insights";
+import { listScheduleCandidates, listScheduleResponses } from "@/lib/firestore/schedule";
+import { listRecipeVotes } from "@/lib/firestore/bulletin";
+import { listDestinationVotes } from "@/lib/firestore/destination-votes";
+import { normalizeDecidedNamesFromPollDoc } from "@/lib/destination-poll-decided";
 import type { GroupDoc } from "@/types/group";
+import type { ScheduleResponseDoc } from "@/types/schedule";
+import type { BulletinRecipeVoteDoc } from "@/types/bulletin";
+import type { VoteItem } from "@/lib/firestore/destination-votes";
 import type { TripRouteDoc } from "@/types/trip";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
 import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
@@ -31,6 +44,7 @@ import { BulletinImageAttachButton } from "@/components/bulletin/bulletin-image-
 import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
 import { useBulletinImagePaste } from "@/hooks/use-bulletin-image-paste";
 import { VisibilityBadge } from "@/components/visibility-badge";
+import { TripDashboardInsightsPanel } from "@/components/trip/trip-dashboard-insights-panel";
 import {
   BULLETIN_CATEGORY_LABELS,
   BULLETIN_CATEGORY_OPTIONS,
@@ -87,6 +101,22 @@ function excerptBulletinBody(data: BulletinTopicDoc, max = 120): string {
   if (t.length <= max) return t;
   return t.slice(0, max) + "…";
 }
+
+type DashboardExtrasState = {
+  scheduleCandidateIds: string[];
+  scheduleResponses: ScheduleResponseDoc[];
+  openRecipeVotes: {
+    topicId: string;
+    title: string;
+    candidateCount: number;
+    votes: { userId: string; data: BulletinRecipeVoteDoc }[];
+  }[];
+  openDestinationPollVotes: {
+    pollId: string;
+    pollTitle: string;
+    votes: VoteItem[];
+  }[];
+};
 
 export function GroupDetailClient() {
   const groupId = useGroupRouteId();
@@ -145,6 +175,10 @@ export function GroupDetailClient() {
     useState<BulletinImportance>("normal");
   const [newTags, setNewTags] = useState<BulletinTopicTag[]>([]);
 
+  const [dashboardExtras, setDashboardExtras] =
+    useState<DashboardExtrasState | null>(null);
+  const [topicFilter, setTopicFilter] = useState<"all" | "vote">("all");
+
   // 旅行ページを開いたら直近アクセス旅行として記録
   useEffect(() => {
     if (user && groupId) {
@@ -162,31 +196,90 @@ export function GroupDetailClient() {
         setTopics([]);
         setWorkflowPolls([]);
         setWorkflowTripRoutes([]);
+        setDashboardExtras(null);
         return;
       }
       setGroup(g);
+      let polls: Awaited<ReturnType<typeof listDestinationPolls>> = [];
+      let topicsList: Awaited<
+        ReturnType<typeof listBulletinTopicsWithReplyCounts>
+      > = [];
       try {
-        const [polls, routes] = await Promise.all([
+        const [p, routes] = await Promise.all([
           listDestinationPolls(groupId),
           listTripRoutes(groupId),
         ]);
+        polls = p;
         setWorkflowPolls(polls);
         setWorkflowTripRoutes(routes);
       } catch {
+        polls = [];
         setWorkflowPolls([]);
         setWorkflowTripRoutes([]);
       }
       try {
-        const t = await listBulletinTopicsWithReplyCounts(groupId);
-        setTopics(t);
+        topicsList = await listBulletinTopicsWithReplyCounts(groupId);
+        setTopics(topicsList);
       } catch {
+        topicsList = [];
         setTopics([]);
+      }
+      try {
+        const [cands, resps] = await Promise.all([
+          listScheduleCandidates(groupId),
+          listScheduleResponses(groupId),
+        ]);
+        const scheduleCandidateIds = cands.map((c) => c.id);
+        const scheduleResponses = resps.map((r) => r.data);
+
+        const recipeTopicsMeta = topicsList.filter(
+          (row) =>
+            row.data.category === "recipe_vote" &&
+            !row.data.recipePollResolution &&
+            (row.data.recipePoll?.candidates?.length ?? 0) > 0,
+        );
+        const openRecipeVotes = await Promise.all(
+          recipeTopicsMeta.map(async (row) => {
+            const n = row.data.recipePoll!.candidates!.length;
+            const vl = await listRecipeVotes(groupId, row.id);
+            return {
+              topicId: row.id,
+              title: row.data.title,
+              candidateCount: n,
+              votes: vl.map((x) => ({
+                userId: x.userId,
+                data: x.data,
+              })),
+            };
+          }),
+        );
+
+        const undecidedPolls = polls.filter(
+          (p) => normalizeDecidedNamesFromPollDoc(p.data).length === 0,
+        );
+        const openDestinationPollVotes = await Promise.all(
+          undecidedPolls.map(async (p) => ({
+            pollId: p.id,
+            pollTitle: (p.data.title?.trim() || "目的地投票").slice(0, 200),
+            votes: await listDestinationVotes(groupId, p.id),
+          })),
+        );
+
+        setDashboardExtras({
+          scheduleCandidateIds,
+          scheduleResponses,
+          openRecipeVotes,
+          openDestinationPollVotes,
+        });
+      } catch {
+        setDashboardExtras(null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
       setGroup(null);
       setWorkflowPolls([]);
       setWorkflowTripRoutes([]);
+      setDashboardExtras(null);
     }
   }, [groupId]);
 
@@ -269,6 +362,49 @@ export function GroupDetailClient() {
       workflowTripRoutes,
     );
   }, [group, workflowPolls, workflowTripRoutes]);
+
+  const allTripWorkflowComplete = useMemo(
+    () =>
+      !!group &&
+      areAllTripWorkflowStepsComplete(
+        group,
+        workflowPolls,
+        workflowTripRoutes,
+      ),
+    [group, workflowPolls, workflowTripRoutes],
+  );
+
+  const dashboardInsights = useMemo(() => {
+    if (!group || !groupId || !dashboardExtras) return null;
+    return computeDashboardInsights({
+      groupId,
+      group,
+      destinationPolls: workflowPolls,
+      tripRoutes: workflowTripRoutes,
+      scheduleCandidateIds: dashboardExtras.scheduleCandidateIds,
+      scheduleResponses: dashboardExtras.scheduleResponses,
+      openRecipeVotes: dashboardExtras.openRecipeVotes,
+      openDestinationPollVotes: dashboardExtras.openDestinationPollVotes,
+      userId: user?.uid ?? null,
+    });
+  }, [
+    group,
+    groupId,
+    dashboardExtras,
+    workflowPolls,
+    workflowTripRoutes,
+    user?.uid,
+  ]);
+
+  const voteTopics = useMemo(
+    () => topics.filter((x) => isVoteOrDecisionTopic(x.data)),
+    [topics],
+  );
+  const otherTopics = useMemo(
+    () => topics.filter((x) => !isVoteOrDecisionTopic(x.data)),
+    [topics],
+  );
+
   function startEditName() {
     if (!group) return;
     setDraftName(group.name);
@@ -444,6 +580,77 @@ export function GroupDetailClient() {
     }
   }
 
+  function renderTopicRow(row: {
+    id: string;
+    data: BulletinTopicDoc;
+    replyCount: number;
+  }) {
+    const { id, data, replyCount } = row;
+    const isImportant = data.importance === "important";
+    const showImportant = isImportant || data.pinned;
+    const tags = normalizeBulletinTopicTags(data);
+    return (
+      <li key={id}>
+        <Link
+          href={`/groups/${groupId}/bulletin/${id}`}
+          className={`block px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
+            isImportant
+              ? "mx-2 my-2 rounded-lg border-2 border-amber-500 bg-amber-50/90 shadow-sm ring-1 ring-amber-200/90 dark:border-amber-600 dark:bg-amber-950/35 dark:ring-amber-800/50"
+              : showImportant
+                ? "bg-amber-50/60 dark:bg-amber-950/15"
+                : ""
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              {data.pinned ? (
+                <p className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                  📌 ピン留め
+                </p>
+              ) : null}
+              <h3 className="mt-0.5 text-sm font-medium leading-snug text-zinc-700 dark:text-zinc-300">
+                {data.title}
+              </h3>
+              <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
+                {excerptBulletinBody(data)}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+                <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                  {BULLETIN_CATEGORY_LABELS[data.category]}
+                </span>
+                {tags.map((tg) => (
+                  <span
+                    key={tg}
+                    className={`rounded px-1.5 py-0.5 text-[10px] ${
+                      tg === "priority_top"
+                        ? "bg-rose-100 font-medium text-rose-900 dark:bg-rose-950/60 dark:text-rose-200"
+                        : "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200"
+                    }`}
+                  >
+                    {BULLETIN_TOPIC_TAG_LABELS[tg]}
+                  </span>
+                ))}
+                {data.importance === "important" ? (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-300 dark:bg-amber-900/45 dark:text-amber-100 dark:ring-amber-700">
+                    重要
+                  </span>
+                ) : null}
+                <span>
+                  {data.authorDisplayName ||
+                    data.authorUserId.slice(0, 8) + "…"}{" "}
+                  · {formatTs(data.createdAt)}
+                </span>
+              </div>
+            </div>
+            <span className="shrink-0 text-xs text-zinc-400">
+              返信 {replyCount} 件
+            </span>
+          </div>
+        </Link>
+      </li>
+    );
+  }
+
   if (group === undefined) {
     return (
       <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
@@ -616,6 +823,11 @@ export function GroupDetailClient() {
         </div>
       )}
 
+      <TripDashboardInsightsPanel
+        insights={dashboardInsights}
+        allWorkflowComplete={allTripWorkflowComplete}
+      />
+
       {memoryPhotoSectionUnlocked ? (
       <section className="mt-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
         <div className="flex items-start justify-between gap-3">
@@ -774,8 +986,14 @@ export function GroupDetailClient() {
         </div>
       ) : null}
 
-      {/* ── トピック（見出し帯と本文・一覧で色とレイアウトを分ける） ── */}
-      <section className="mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60">
+      {/* ── トピック（工程完了後はこちらを主役に見えるよう強調） ── */}
+      <section
+        className={`mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60 ${
+          allTripWorkflowComplete
+            ? "ring-1 ring-emerald-300/90 dark:ring-emerald-800/60"
+            : ""
+        }`}
+      >
         <div className="border-b border-emerald-100 bg-gradient-to-br from-emerald-50 via-emerald-50/95 to-white px-4 py-4 dark:border-emerald-900/45 dark:from-emerald-950/50 dark:via-emerald-950/35 dark:to-zinc-900/80">
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2.5">
@@ -948,80 +1166,86 @@ export function GroupDetailClient() {
           </div>
         )}
 
+        <div className="border-b border-zinc-100 bg-zinc-50/70 px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/40">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+              表示:
+            </span>
+            <button
+              type="button"
+              onClick={() => setTopicFilter("all")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                topicFilter === "all"
+                  ? "bg-emerald-800 text-white shadow-sm dark:bg-emerald-700"
+                  : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              }`}
+            >
+              すべて
+            </button>
+            <button
+              type="button"
+              onClick={() => setTopicFilter("vote")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                topicFilter === "vote"
+                  ? "bg-emerald-800 text-white shadow-sm dark:bg-emerald-700"
+                  : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              }`}
+            >
+              投票・決定系だけ
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+            「投票・決定系」にはレシピ投票・重要マーク・上位表示タグの話題が含まれます。
+          </p>
+        </div>
+
         {/* 話題一覧 */}
         <div className="bg-white pb-2 pt-1 dark:bg-transparent">
           {topics.length === 0 ? (
             <p className="px-4 pb-4 text-sm text-zinc-400 dark:text-zinc-500">
               まだ話題がありません。
             </p>
+          ) : topicFilter === "vote" ? (
+            voteTopics.length === 0 ? (
+              <p className="px-4 pb-4 text-sm text-zinc-500 dark:text-zinc-400">
+                該当する話題はありません。
+              </p>
+            ) : (
+              <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                {voteTopics.map((row) => renderTopicRow(row))}
+              </ul>
+            )
           ) : (
-            <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {topics.map(({ id, data, replyCount }) => {
-                const isImportant = data.importance === "important";
-                const showImportant = isImportant || data.pinned;
-                const tags = normalizeBulletinTopicTags(data);
-                return (
-                  <li key={id}>
-                    <Link
-                      href={`/groups/${groupId}/bulletin/${id}`}
-                      className={`block px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
-                        isImportant
-                          ? "mx-2 my-2 rounded-lg border-2 border-amber-500 bg-amber-50/90 shadow-sm ring-1 ring-amber-200/90 dark:border-amber-600 dark:bg-amber-950/35 dark:ring-amber-800/50"
-                          : showImportant
-                            ? "bg-amber-50/60 dark:bg-amber-950/15"
-                            : ""
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          {data.pinned ? (
-                            <p className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
-                              📌 ピン留め
-                            </p>
-                          ) : null}
-                          <h3 className="mt-0.5 text-sm font-medium leading-snug text-zinc-700 dark:text-zinc-300">
-                            {data.title}
-                          </h3>
-                          <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
-                            {excerptBulletinBody(data)}
-                          </p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
-                            <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                              {BULLETIN_CATEGORY_LABELS[data.category]}
-                            </span>
-                            {tags.map((t) => (
-                              <span
-                                key={t}
-                                className={`rounded px-1.5 py-0.5 text-[10px] ${
-                                  t === "priority_top"
-                                    ? "bg-rose-100 font-medium text-rose-900 dark:bg-rose-950/60 dark:text-rose-200"
-                                    : "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200"
-                                }`}
-                              >
-                                {BULLETIN_TOPIC_TAG_LABELS[t]}
-                              </span>
-                            ))}
-                            {data.importance === "important" ? (
-                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-300 dark:bg-amber-900/45 dark:text-amber-100 dark:ring-amber-700">
-                                重要
-                              </span>
-                            ) : null}
-                            <span>
-                              {data.authorDisplayName ||
-                                data.authorUserId.slice(0, 8) + "…"}{" "}
-                              · {formatTs(data.createdAt)}
-                            </span>
-                          </div>
-                        </div>
-                        <span className="shrink-0 text-xs text-zinc-400">
-                          返信 {replyCount} 件
-                        </span>
-                      </div>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+            <>
+              {voteTopics.length > 0 ? (
+                <>
+                  <h3 className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    進行中の投票・決まりかけ
+                  </h3>
+                  <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {voteTopics.map((row) => renderTopicRow(row))}
+                  </ul>
+                </>
+              ) : null}
+              {otherTopics.length > 0 ? (
+                <>
+                  <h3
+                    className={`px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 ${
+                      voteTopics.length > 0 ? "pt-5" : "pt-3"
+                    }`}
+                  >
+                    その他のトピック
+                  </h3>
+                  <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {otherTopics.map((row) => renderTopicRow(row))}
+                  </ul>
+                </>
+              ) : voteTopics.length === 0 ? (
+                <p className="px-4 pb-4 text-sm text-zinc-500 dark:text-zinc-400">
+                  表示する話題がありません。
+                </p>
+              ) : null}
+            </>
           )}
         </div>
       </section>
