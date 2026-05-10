@@ -2,7 +2,7 @@
 
 import type { DashboardInsights } from "@/lib/trip-dashboard-insights";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export function TripDashboardInsightsPanel({
   insights,
@@ -11,11 +11,8 @@ export function TripDashboardInsightsPanel({
   insights: DashboardInsights | null;
   allWorkflowComplete: boolean;
 }) {
-  const [expanded, setExpanded] = useState(!allWorkflowComplete);
-
-  useEffect(() => {
-    setExpanded(!allWorkflowComplete);
-  }, [allWorkflowComplete]);
+  /** 次のステップ・お願いで足りるため、進捗の詳細はデフォルト非表示 */
+  const [expanded, setExpanded] = useState(false);
 
   if (!insights) return null;
 

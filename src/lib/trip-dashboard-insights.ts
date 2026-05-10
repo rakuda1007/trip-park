@@ -250,31 +250,22 @@ export function computeDashboardInsights(params: {
   }
 
   // ── 個人タスク ──
+  /** 日程・目的地の催促は該当フェーズで「次のステップ」に出すため、同フェーズでは重複させない */
   const personalTasks: DashboardPersonalTask[] = [];
-  if (userId) {
-    if (!datesDone && scheduleHasCandidates) {
-      const ok = userHasScheduleAnswerForAllCandidates(
-        userId,
-        scheduleCandidateIds,
-        scheduleResponses,
-      );
-      if (!ok) {
-        personalTasks.push({
-          key: "schedule",
-          label: "日程候補への回答がまだ終わっていません（○/△/×）。",
-          href: `/groups/${groupId}/schedule#schedule-voting`,
-        });
-      }
-    }
+  /** `nextStepLine` が目的地のとき（日程済み・目的地未完了） */
+  const nextStepIsDestination = datesDone && !destDone;
 
-    for (const row of openDestinationPollVotes) {
-      const sum = sumUserDestinationWantVotes(userId, row.votes);
-      if (sum === 0) {
-        personalTasks.push({
-          key: `dest-${row.pollId}`,
-          label: `目的地の投票「${row.pollTitle.slice(0, 48)}${row.pollTitle.length > 48 ? "…" : ""}」にまだ票が入っていません。`,
-          href: `/groups/${groupId}/destination-votes#destination-voting`,
-        });
+  if (userId) {
+    if (!nextStepIsDestination) {
+      for (const row of openDestinationPollVotes) {
+        const sum = sumUserDestinationWantVotes(userId, row.votes);
+        if (sum === 0) {
+          personalTasks.push({
+            key: `dest-${row.pollId}`,
+            label: `目的地の投票「${row.pollTitle.slice(0, 48)}${row.pollTitle.length > 48 ? "…" : ""}」にまだ票が入っていません。`,
+            href: `/groups/${groupId}/destination-votes#destination-voting`,
+          });
+        }
       }
     }
 
