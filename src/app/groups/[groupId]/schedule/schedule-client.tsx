@@ -483,194 +483,13 @@ export function ScheduleClient() {
           </p>
         ) : (
           <>
-            {/* ── 集計のみ（投票ボタンとは分離） ── */}
-            <div id="schedule-summary" className="scroll-mt-28">
-              <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                集計結果（保存済みの回答）
-              </h3>
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                ここでは保存済みの回答だけを数えています。下の「メンバー別」で
-                ○ / △ / × を選んでください。
-              </p>
-
-              <div className="mt-3 space-y-3 md:hidden">
-                {candidates.map(({ id, data }) => {
-                  const counts = aggregateByCandidate.get(id);
-                  const yes = counts?.yes ?? 0;
-                  const maybe = counts?.maybe ?? 0;
-                  const noCount = counts?.no ?? 0;
-                  const un = counts?.unanswered ?? 0;
-                  const rangeLabel = formatDateRangeLabel(
-                    data.startDate,
-                    data.endDate,
-                  );
-                  return (
-                    <div
-                      key={id}
-                      className="rounded-lg border border-zinc-200 bg-zinc-50/95 px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-900/70"
-                    >
-                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {rangeLabel}
-                      </p>
-                      <p className="mt-1 text-[11px] text-emerald-800 dark:text-emerald-300">
-                        ○ {yes}
-                        <span className="text-zinc-400 dark:text-zinc-500">
-                          {" "}
-                          ·{" "}
-                        </span>
-                        <span className="text-amber-800 dark:text-amber-300">
-                          △ {maybe}
-                        </span>
-                        <span className="text-zinc-400 dark:text-zinc-500">
-                          {" "}
-                          ·{" "}
-                        </span>
-                        <span className="text-zinc-600 dark:text-zinc-400">
-                          × {noCount}
-                        </span>
-                        {un > 0 ? (
-                          <span className="text-zinc-500 dark:text-zinc-400">
-                            {" "}
-                            · 未回答 {un}
-                          </span>
-                        ) : null}
-                      </p>
-                      {canManage ? (
-                        <div className="mt-2 flex flex-wrap gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-700">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleConfirmWithDialog(
-                                id,
-                                data.startDate,
-                                data.endDate,
-                                rangeLabel,
-                              )
-                            }
-                            disabled={busy !== null}
-                            className="text-xs font-medium text-emerald-700 hover:underline disabled:opacity-50 dark:text-emerald-400"
-                          >
-                            この候補を確定
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveCandidate(id)}
-                            disabled={busy !== null}
-                            className="text-xs text-red-600 hover:underline disabled:opacity-50"
-                          >
-                            削除
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-3 hidden overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-700 md:block">
-                <table className="w-full min-w-[520px] border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/80">
-                      <th className="px-3 py-2 text-left font-medium text-zinc-700 dark:text-zinc-300">
-                        候補期間
-                      </th>
-                      <th className="px-2 py-2 text-center font-medium text-emerald-800 dark:text-emerald-300">
-                        ○
-                      </th>
-                      <th className="px-2 py-2 text-center font-medium text-amber-800 dark:text-amber-300">
-                        △
-                      </th>
-                      <th className="px-2 py-2 text-center font-medium text-zinc-700 dark:text-zinc-400">
-                        ×
-                      </th>
-                      <th className="px-2 py-2 text-center font-medium text-zinc-600 dark:text-zinc-400">
-                        未回答
-                      </th>
-                      {canManage ? (
-                        <th className="px-3 py-2 text-center font-medium text-zinc-700 dark:text-zinc-300">
-                          操作
-                        </th>
-                      ) : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {candidates.map(({ id, data }) => {
-                      const counts = aggregateByCandidate.get(id);
-                      const yes = counts?.yes ?? 0;
-                      const maybe = counts?.maybe ?? 0;
-                      const noCount = counts?.no ?? 0;
-                      const un = counts?.unanswered ?? 0;
-                      const rangeLabel = formatDateRangeLabel(
-                        data.startDate,
-                        data.endDate,
-                      );
-                      return (
-                        <tr
-                          key={id}
-                          className="border-b border-zinc-100 dark:border-zinc-800"
-                        >
-                          <td className="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-100">
-                            {rangeLabel}
-                          </td>
-                          <td className="px-2 py-2 text-center tabular-nums text-emerald-800 dark:text-emerald-300">
-                            {yes}
-                          </td>
-                          <td className="px-2 py-2 text-center tabular-nums text-amber-800 dark:text-amber-300">
-                            {maybe}
-                          </td>
-                          <td className="px-2 py-2 text-center tabular-nums text-zinc-700 dark:text-zinc-400">
-                            {noCount}
-                          </td>
-                          <td className="px-2 py-2 text-center tabular-nums text-zinc-500">
-                            {un}
-                          </td>
-                          {canManage ? (
-                            <td className="px-3 py-2 text-center">
-                              <span className="inline-flex flex-wrap justify-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleConfirmWithDialog(
-                                      id,
-                                      data.startDate,
-                                      data.endDate,
-                                      rangeLabel,
-                                    )
-                                  }
-                                  disabled={busy !== null}
-                                  className="text-[11px] font-medium text-emerald-700 hover:underline disabled:opacity-50 dark:text-emerald-400"
-                                >
-                                  確定
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveCandidate(id)}
-                                  disabled={busy !== null}
-                                  className="text-[11px] text-red-600 hover:underline disabled:opacity-50"
-                                >
-                                  削除
-                                </button>
-                              </span>
-                            </td>
-                          ) : null}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
             {/* ── メンバー別の投票・回答（ダッシュボードからのリンク先アンカー） ── */}
-            <div
-              id="schedule-voting"
-              className="scroll-mt-28 border-t border-zinc-200 pt-6 mt-6 dark:border-zinc-700"
-            >
+            <div id="schedule-voting" className="scroll-mt-28">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                 メンバー別の回答・投票
               </h3>
               <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                自分の行だけ ○ / △ / × をタップできます。変更後は一番下の「回答を保存」が必要です。
+                自分の行だけ ○ / △ / × をタップできます。変更後はこのセクションの一番下の「回答を保存」が必要です。
               </p>
 
               <div className="mt-3 space-y-4 md:hidden">
@@ -882,6 +701,186 @@ export function ScheduleClient() {
                   </button>
                 </div>
               ) : null}
+            </div>
+
+            {/* ── 集計のみ（投票ボタンとは分離） ── */}
+            <div
+              id="schedule-summary"
+              className="scroll-mt-28 border-t border-zinc-200 pt-6 mt-6 dark:border-zinc-700"
+            >
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                集計結果（保存済みの回答）
+              </h3>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                ここでは保存済みの回答だけを数えています。上の「メンバー別の回答・投票」で保存した回答が反映されます。
+              </p>
+
+              <div className="mt-3 space-y-3 md:hidden">
+                {candidates.map(({ id, data }) => {
+                  const counts = aggregateByCandidate.get(id);
+                  const yes = counts?.yes ?? 0;
+                  const maybe = counts?.maybe ?? 0;
+                  const noCount = counts?.no ?? 0;
+                  const un = counts?.unanswered ?? 0;
+                  const rangeLabel = formatDateRangeLabel(
+                    data.startDate,
+                    data.endDate,
+                  );
+                  return (
+                    <div
+                      key={id}
+                      className="rounded-lg border border-zinc-200 bg-zinc-50/95 px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-900/70"
+                    >
+                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {rangeLabel}
+                      </p>
+                      <p className="mt-1 text-[11px] text-emerald-800 dark:text-emerald-300">
+                        ○ {yes}
+                        <span className="text-zinc-400 dark:text-zinc-500">
+                          {" "}
+                          ·{" "}
+                        </span>
+                        <span className="text-amber-800 dark:text-amber-300">
+                          △ {maybe}
+                        </span>
+                        <span className="text-zinc-400 dark:text-zinc-500">
+                          {" "}
+                          ·{" "}
+                        </span>
+                        <span className="text-zinc-600 dark:text-zinc-400">
+                          × {noCount}
+                        </span>
+                        {un > 0 ? (
+                          <span className="text-zinc-500 dark:text-zinc-400">
+                            {" "}
+                            · 未回答 {un}
+                          </span>
+                        ) : null}
+                      </p>
+                      {canManage ? (
+                        <div className="mt-2 flex flex-wrap gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-700">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleConfirmWithDialog(
+                                id,
+                                data.startDate,
+                                data.endDate,
+                                rangeLabel,
+                              )
+                            }
+                            disabled={busy !== null}
+                            className="text-xs font-medium text-emerald-700 hover:underline disabled:opacity-50 dark:text-emerald-400"
+                          >
+                            この候補を確定
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCandidate(id)}
+                            disabled={busy !== null}
+                            className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                          >
+                            削除
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-3 hidden overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-700 md:block">
+                <table className="w-full min-w-[520px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/80">
+                      <th className="px-3 py-2 text-left font-medium text-zinc-700 dark:text-zinc-300">
+                        候補期間
+                      </th>
+                      <th className="px-2 py-2 text-center font-medium text-emerald-800 dark:text-emerald-300">
+                        ○
+                      </th>
+                      <th className="px-2 py-2 text-center font-medium text-amber-800 dark:text-amber-300">
+                        △
+                      </th>
+                      <th className="px-2 py-2 text-center font-medium text-zinc-700 dark:text-zinc-400">
+                        ×
+                      </th>
+                      <th className="px-2 py-2 text-center font-medium text-zinc-600 dark:text-zinc-400">
+                        未回答
+                      </th>
+                      {canManage ? (
+                        <th className="px-3 py-2 text-center font-medium text-zinc-700 dark:text-zinc-300">
+                          操作
+                        </th>
+                      ) : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {candidates.map(({ id, data }) => {
+                      const counts = aggregateByCandidate.get(id);
+                      const yes = counts?.yes ?? 0;
+                      const maybe = counts?.maybe ?? 0;
+                      const noCount = counts?.no ?? 0;
+                      const un = counts?.unanswered ?? 0;
+                      const rangeLabel = formatDateRangeLabel(
+                        data.startDate,
+                        data.endDate,
+                      );
+                      return (
+                        <tr
+                          key={id}
+                          className="border-b border-zinc-100 dark:border-zinc-800"
+                        >
+                          <td className="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-100">
+                            {rangeLabel}
+                          </td>
+                          <td className="px-2 py-2 text-center tabular-nums text-emerald-800 dark:text-emerald-300">
+                            {yes}
+                          </td>
+                          <td className="px-2 py-2 text-center tabular-nums text-amber-800 dark:text-amber-300">
+                            {maybe}
+                          </td>
+                          <td className="px-2 py-2 text-center tabular-nums text-zinc-700 dark:text-zinc-400">
+                            {noCount}
+                          </td>
+                          <td className="px-2 py-2 text-center tabular-nums text-zinc-500">
+                            {un}
+                          </td>
+                          {canManage ? (
+                            <td className="px-3 py-2 text-center">
+                              <span className="inline-flex flex-wrap justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleConfirmWithDialog(
+                                      id,
+                                      data.startDate,
+                                      data.endDate,
+                                      rangeLabel,
+                                    )
+                                  }
+                                  disabled={busy !== null}
+                                  className="text-[11px] font-medium text-emerald-700 hover:underline disabled:opacity-50 dark:text-emerald-400"
+                                >
+                                  確定
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveCandidate(id)}
+                                  disabled={busy !== null}
+                                  className="text-[11px] text-red-600 hover:underline disabled:opacity-50"
+                                >
+                                  削除
+                                </button>
+                              </span>
+                            </td>
+                          ) : null}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}

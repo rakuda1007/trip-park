@@ -2,6 +2,10 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import { mapAuthError } from "@/lib/auth/firebase-errors";
+import {
+  AUTH_RETURN_TO_KEY,
+  safeInternalPath,
+} from "@/lib/auth-return-to";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import { isFirebaseConfigured } from "@/lib/firebase/env";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -13,17 +17,31 @@ export function LoginForm() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnTo = searchParams.get("returnTo") ?? "";
+  const returnToRaw = searchParams.get("returnTo");
+  const returnToSafe = safeInternalPath(returnToRaw);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  /** URL の returnTo を確実に保持（useSearchParams の初期空振り対策）。URL に無いときは古い値を消す */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = safeInternalPath(
+      new URLSearchParams(window.location.search).get("returnTo"),
+    );
+    if (q) sessionStorage.setItem(AUTH_RETURN_TO_KEY, q);
+    else sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
+  }, []);
+
   useEffect(() => {
     if (!loading && user) {
-      router.replace(returnTo || "/dashboard");
+      const stored = safeInternalPath(sessionStorage.getItem(AUTH_RETURN_TO_KEY));
+      const target = returnToSafe ?? stored ?? "/dashboard";
+      sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
+      router.replace(target);
     }
-  }, [user, loading, router, returnTo]);
+  }, [user, loading, router, returnToSafe]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -109,7 +127,14 @@ export function LoginForm() {
       </button>
       <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
         アカウントをお持ちでない方は{" "}
-        <Link href="/signup" className="font-medium text-zinc-900 underline dark:text-zinc-100">
+        <Link
+          href={
+            returnToSafe
+              ? `/signup?returnTo=${encodeURIComponent(returnToSafe)}`
+              : "/signup"
+          }
+          className="font-medium text-zinc-900 underline dark:text-zinc-100"
+        >
           新規登録
         </Link>
       </p>

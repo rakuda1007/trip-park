@@ -92,6 +92,8 @@ export function computeDashboardInsights(params: {
   /** 未確定ブロックごとの全投票（個人集計用） */
   openDestinationPollVotes: { pollId: string; pollTitle: string; votes: VoteItem[] }[];
   userId: string | null;
+  /** 日程の確定・候補の追加など（オーナー／管理者）。メンバー向け文言と切り替える */
+  canManageSchedule: boolean;
 }): DashboardInsights {
   const {
     groupId,
@@ -103,6 +105,7 @@ export function computeDashboardInsights(params: {
     openRecipeVotes,
     openDestinationPollVotes,
     userId,
+    canManageSchedule,
   } = params;
 
   const datesDone = !!group.tripStartDate?.trim();
@@ -198,9 +201,15 @@ export function computeDashboardInsights(params: {
   let nextStepLink: { href: string; label: string } | null = null;
 
   if (!datesDone) {
-    nextStepLine = scheduleHasCandidates
-      ? "次のステップ: 日程候補への回答を進めるか、管理者が日程を確定してください。"
-      : "次のステップ: 日程候補を追加するか、旅行日を設定してください。";
+    if (scheduleHasCandidates) {
+      nextStepLine = canManageSchedule
+        ? "次のステップ: メンバーの日程回答を待つか、日程調整ページで旅行日を確定してください。"
+        : "次のステップ: 各候補に ○／△／× で回答してください。";
+    } else {
+      nextStepLine = canManageSchedule
+        ? "次のステップ: 日程候補を追加するか、旅行日を直接設定してください。"
+        : "次のステップ: オーナー・管理者が日程候補または旅行日を登録するまでお待ちください。";
+    }
     nextStepLink = {
       href: `/groups/${groupId}/schedule#schedule-voting`,
       label: scheduleAnswersIncomplete

@@ -59,6 +59,15 @@ export function JoinClient() {
         オーナーから共有された招待コードを入力してください。
       </p>
 
+      {user && code.length >= 4 ? (
+        <div
+          className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
+          role="status"
+        >
+          ログイン済みです。コードが正しければ、下の「参加する」を押すとこの旅行に参加できます。
+        </div>
+      ) : null}
+
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         <div>
           <label

@@ -5,6 +5,7 @@ import { useGroupRouteId } from "@/contexts/group-route-context";
 import {
   deleteGroup,
   getGroup,
+  getMemberForUser,
   leaveGroup,
   updateDestination,
   updateGroupDescription,
@@ -32,7 +33,7 @@ import { listScheduleCandidates, listScheduleResponses } from "@/lib/firestore/s
 import { listRecipeVotes } from "@/lib/firestore/bulletin";
 import { listDestinationVotes } from "@/lib/firestore/destination-votes";
 import { normalizeDecidedNamesFromPollDoc } from "@/lib/destination-poll-decided";
-import type { GroupDoc } from "@/types/group";
+import type { GroupDoc, MemberDoc } from "@/types/group";
 import type { ScheduleResponseDoc } from "@/types/schedule";
 import type { BulletinRecipeVoteDoc } from "@/types/bulletin";
 import type { VoteItem } from "@/lib/firestore/destination-votes";
@@ -177,6 +178,8 @@ export function GroupDetailClient() {
 
   const [dashboardExtras, setDashboardExtras] =
     useState<DashboardExtrasState | null>(null);
+  /** ダッシュボード文言（オーナー／管理者向け）用 */
+  const [myMember, setMyMember] = useState<MemberDoc | null>(null);
   const [topicFilter, setTopicFilter] = useState<"all" | "vote">("all");
 
   // 旅行ページを開いたら直近アクセス旅行として記録
@@ -197,9 +200,20 @@ export function GroupDetailClient() {
         setWorkflowPolls([]);
         setWorkflowTripRoutes([]);
         setDashboardExtras(null);
+        setMyMember(null);
         return;
       }
       setGroup(g);
+      if (user) {
+        try {
+          const m = await getMemberForUser(groupId, user.uid);
+          setMyMember(m);
+        } catch {
+          setMyMember(null);
+        }
+      } else {
+        setMyMember(null);
+      }
       let polls: Awaited<ReturnType<typeof listDestinationPolls>> = [];
       let topicsList: Awaited<
         ReturnType<typeof listBulletinTopicsWithReplyCounts>
@@ -280,8 +294,9 @@ export function GroupDetailClient() {
       setWorkflowPolls([]);
       setWorkflowTripRoutes([]);
       setDashboardExtras(null);
+      setMyMember(null);
     }
-  }, [groupId]);
+  }, [groupId, user]);
 
   async function handleCreateTopic() {
     if (!user || !groupId || !newTitle.trim()) return;
@@ -354,6 +369,11 @@ export function GroupDetailClient() {
   }, [memoryPhotoDraftPreview]);
 
   const isOwner = user && group && user.uid === group.ownerId;
+  const canManageSchedule = useMemo(() => {
+    if (!group || !user) return false;
+    if (user.uid === group.ownerId) return true;
+    return myMember?.role === "admin";
+  }, [group, user, myMember]);
   const memoryPhotoSectionUnlocked = useMemo(() => {
     if (!group) return false;
     return areAllTripWorkflowStepsComplete(
@@ -386,6 +406,7 @@ export function GroupDetailClient() {
       openRecipeVotes: dashboardExtras.openRecipeVotes,
       openDestinationPollVotes: dashboardExtras.openDestinationPollVotes,
       userId: user?.uid ?? null,
+      canManageSchedule,
     });
   }, [
     group,
@@ -394,6 +415,7 @@ export function GroupDetailClient() {
     workflowPolls,
     workflowTripRoutes,
     user?.uid,
+    canManageSchedule,
   ]);
 
   const voteTopics = useMemo(

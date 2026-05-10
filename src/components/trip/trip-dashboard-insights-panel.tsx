@@ -20,9 +20,36 @@ export function TripDashboardInsightsPanel({
   if (!insights) return null;
 
   const { nextStepLine, nextStepLink, statusLines, personalTasks } = insights;
+  const hasPersonal = personalTasks.length > 0;
 
   return (
     <section className="mt-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/50">
+      {hasPersonal ? (
+        <div className="border-b border-amber-200/80 bg-gradient-to-b from-amber-50 to-amber-50/60 px-4 py-4 dark:border-amber-900/40 dark:from-amber-950/35 dark:to-amber-950/20">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200">
+            あなたへのお願い（タップで移動）
+          </h3>
+          <ul className="mt-3 space-y-2.5">
+            {personalTasks.map((t) => (
+              <li key={t.key}>
+                <Link
+                  href={t.href}
+                  className="flex min-h-[3rem] items-center justify-between gap-3 rounded-xl border-2 border-amber-400/90 bg-white px-4 py-3 text-sm font-semibold text-amber-950 shadow-sm ring-1 ring-amber-200/80 transition hover:border-amber-500 hover:bg-amber-50 hover:shadow-md active:scale-[0.99] dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-50 dark:ring-amber-800 dark:hover:bg-amber-950/60"
+                >
+                  <span className="text-left leading-snug">{t.label}</span>
+                  <span
+                    className="shrink-0 rounded-md bg-amber-600 px-2.5 py-1 text-xs font-bold text-white dark:bg-amber-500"
+                    aria-hidden
+                  >
+                    開く
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div
         className={`border-b border-zinc-100 px-4 py-3 dark:border-zinc-800 ${
           allWorkflowComplete
@@ -79,27 +106,13 @@ export function TripDashboardInsightsPanel({
             </ul>
           </div>
 
-          {personalTasks.length > 0 ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-3 dark:border-amber-900/50 dark:bg-amber-950/30">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-300">
-                あなたへのお願い
-              </h3>
-              <ul className="mt-2 space-y-2">
-                {personalTasks.map((t) => (
-                  <li key={t.key}>
-                    <Link
-                      href={t.href}
-                      className="text-sm font-medium text-amber-950 underline-offset-2 hover:underline dark:text-amber-100"
-                    >
-                      {t.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
+          {!hasPersonal ? (
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               あなたの未対応の投票は、いまは検出されていません。
+            </p>
+          ) : (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              未対応は上の「あなたへのお願い」から開けます。
             </p>
           )}
         </div>

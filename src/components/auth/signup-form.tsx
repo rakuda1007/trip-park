@@ -2,6 +2,10 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import { mapAuthError } from "@/lib/auth/firebase-errors";
+import {
+  AUTH_RETURN_TO_KEY,
+  safeInternalPath,
+} from "@/lib/auth-return-to";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import { isFirebaseConfigured } from "@/lib/firebase/env";
 import { ensureUserDocument } from "@/lib/firestore/users";
@@ -14,7 +18,8 @@ export function SignupForm() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnTo = searchParams.get("returnTo") ?? "";
+  const returnToRaw = searchParams.get("returnTo");
+  const returnToSafe = safeInternalPath(returnToRaw);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,10 +27,22 @@ export function SignupForm() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = safeInternalPath(
+      new URLSearchParams(window.location.search).get("returnTo"),
+    );
+    if (q) sessionStorage.setItem(AUTH_RETURN_TO_KEY, q);
+    else sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
+  }, []);
+
+  useEffect(() => {
     if (!loading && user) {
-      router.replace(returnTo || "/dashboard");
+      const stored = safeInternalPath(sessionStorage.getItem(AUTH_RETURN_TO_KEY));
+      const target = returnToSafe ?? stored ?? "/dashboard";
+      sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
+      router.replace(target);
     }
-  }, [user, loading, router, returnTo]);
+  }, [user, loading, router, returnToSafe]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -51,7 +68,6 @@ export function SignupForm() {
         cred.user.email,
         name || cred.user.displayName,
       );
-      router.push(returnTo || "/dashboard");
       router.refresh();
     } catch (err: unknown) {
       const code =
@@ -139,7 +155,14 @@ export function SignupForm() {
       </button>
       <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
         既にアカウントがある方は{" "}
-        <Link href="/login" className="font-medium text-zinc-900 underline dark:text-zinc-100">
+        <Link
+          href={
+            returnToSafe
+              ? `/login?returnTo=${encodeURIComponent(returnToSafe)}`
+              : "/login"
+          }
+          className="font-medium text-zinc-900 underline dark:text-zinc-100"
+        >
           ログイン
         </Link>
       </p>
