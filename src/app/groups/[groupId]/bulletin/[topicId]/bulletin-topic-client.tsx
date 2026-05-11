@@ -1201,8 +1201,8 @@ export function BulletinTopicClient() {
                 onChange={(e) => setNewReplyBody(e.target.value)}
                 rows={1}
                 disabled={busy !== null}
-                className="min-h-[42px] min-w-0 flex-1 resize-none rounded-[18px] border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#06C755] focus:outline-none focus:ring-1 focus:ring-[#06C755]/40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
-                placeholder="メッセージ…（画像は貼り付け・ファイル可）"
+                aria-label="メッセージ"
+                className="h-10 min-h-10 max-h-10 min-w-0 flex-1 resize-none overflow-y-auto rounded-[18px] border border-zinc-300 bg-white px-3 py-2 text-sm leading-tight text-zinc-900 focus:border-[#06C755] focus:outline-none focus:ring-1 focus:ring-[#06C755]/40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                 onPaste={(e) =>
                   void pasteBulletinImage(e, newReplyBody, setNewReplyBody, true)
                 }
@@ -2203,8 +2203,9 @@ export function BulletinTopicClient() {
               value={newReplyBody}
               onChange={(e) => setNewReplyBody(e.target.value)}
               rows={1}
-              className="min-h-[42px] flex-1 resize-none rounded-[18px] border border-zinc-300 bg-white px-3 py-2.5 text-sm leading-snug placeholder:text-zinc-400 focus:border-[#06C755] focus:outline-none focus:ring-1 focus:ring-[#06C755]/40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
-              placeholder="メッセージを入力…（画像は貼り付け・ファイル可）"
+              disabled={busy !== null}
+              aria-label="メッセージ"
+              className="h-10 min-h-10 max-h-10 min-w-0 flex-1 resize-none overflow-y-auto rounded-[18px] border border-zinc-300 bg-white px-3 py-2 text-sm leading-tight text-zinc-900 focus:border-[#06C755] focus:outline-none focus:ring-1 focus:ring-[#06C755]/40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
               onPaste={(e) =>
                 void pasteBulletinImage(e, newReplyBody, setNewReplyBody, true)
               }

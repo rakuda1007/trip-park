@@ -16,6 +16,7 @@ import {
 import { listDestinationPolls, type PollItem } from "@/lib/firestore/destination-votes";
 import { listTripRoutes } from "@/lib/firestore/trip";
 import {
+  createBulletinReply,
   createBulletinTopic,
   listBulletinReplies,
   listBulletinTopicsWithReplyCounts,
@@ -135,7 +136,9 @@ export function GroupDetailClient() {
   });
 
   const newTopicBodyRef = useRef<HTMLTextAreaElement>(null);
+  const spotlightReplyComposerRef = useRef<HTMLTextAreaElement>(null);
   const bulletinImgDashTopicId = useId();
+  const bulletinImgSpotlightReplyId = useId();
 
   // 旅行名編集用
   const [editingName, setEditingName] = useState(false);
@@ -188,6 +191,8 @@ export function GroupDetailClient() {
   const [topicRepliesById, setTopicRepliesById] = useState<
     Record<string, { id: string; data: BulletinReplyDoc }[]>
   >({});
+  /** ダッシュボード「直近1件」表示内の返信下書き */
+  const [spotlightReplyDraft, setSpotlightReplyDraft] = useState("");
 
   // 旅行ページを開いたら直近アクセス旅行として記録
   useEffect(() => {
@@ -513,6 +518,46 @@ export function GroupDetailClient() {
       cancelled = true;
     };
   }, [groupId, visibleTopicRows]);
+
+  useEffect(() => {
+    setSpotlightReplyDraft("");
+  }, [spotlightRow?.id]);
+
+  async function handleSpotlightDashboardReply() {
+    if (!user || !groupId || !spotlightRow) return;
+    const body = spotlightReplyDraft.trim();
+    if (!body) return;
+    setBusy("dash-spotlight-reply");
+    setError(null);
+    try {
+      await createBulletinReply(
+        groupId,
+        spotlightRow.id,
+        user.uid,
+        user.displayName,
+        body,
+      );
+      setSpotlightReplyDraft("");
+      const t = spotlightRow.data;
+      if (t.authorUserId !== user.uid) {
+        sendNotification({
+          type: "bulletin_reply",
+          groupId,
+          groupName: group?.name ?? "",
+          topicId: spotlightRow.id,
+          topicTitle: t.title,
+          authorName: user.displayName ?? "メンバー",
+          authorUid: user.uid,
+          topicAuthorUid: t.authorUserId,
+        });
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "返信に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   function startEditName() {
     if (!group) return;
@@ -1423,6 +1468,59 @@ export function GroupDetailClient() {
             </ul>
           )}
         </div>
+        {topicView === "default" && spotlightRow && user && myMember ? (
+          <div className="border-t border-zinc-200 bg-zinc-50/90 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900/55">
+            <div className="flex items-center gap-2">
+              <textarea
+                ref={spotlightReplyComposerRef}
+                value={spotlightReplyDraft}
+                onChange={(e) => setSpotlightReplyDraft(e.target.value)}
+                rows={1}
+                disabled={busy !== null}
+                aria-label="メッセージ"
+                className="h-10 min-h-10 max-h-10 min-w-0 flex-1 resize-none overflow-y-auto rounded-[18px] border border-zinc-300 bg-white px-3 py-2 text-sm leading-tight text-zinc-900 focus:border-[#06C755] focus:outline-none focus:ring-1 focus:ring-[#06C755]/40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                onPaste={(e) =>
+                  void pasteBulletinImage(
+                    e,
+                    spotlightReplyDraft,
+                    setSpotlightReplyDraft,
+                    true,
+                  )
+                }
+                onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing) return;
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (spotlightReplyDraft.trim() && busy === null) {
+                      void handleSpotlightDashboardReply();
+                    }
+                  }
+                }}
+              />
+              <BulletinImageAttachButton
+                inputId={bulletinImgSpotlightReplyId}
+                disabled={busy !== null}
+                onFile={(f) =>
+                  void insertImageFromFile(
+                    f,
+                    spotlightReplyDraft,
+                    setSpotlightReplyDraft,
+                    spotlightReplyComposerRef,
+                    true,
+                  )
+                }
+              />
+              <button
+                type="button"
+                onClick={() => void handleSpotlightDashboardReply()}
+                disabled={busy !== null || !spotlightReplyDraft.trim()}
+                className="shrink-0 rounded-full bg-[#06C755] px-4 py-2 text-sm font-medium text-white hover:bg-[#05b34c] disabled:opacity-40"
+              >
+                {busy === "dash-spotlight-reply" ? "…" : "送信"}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {error ? (
