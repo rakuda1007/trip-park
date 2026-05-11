@@ -1109,9 +1109,6 @@ export function GroupDetailClient() {
               </Link>
             </div>
           </div>
-          <p className="mt-2 w-full min-w-0 text-left text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-            話題ごとにチャットでやり取りできます。
-          </p>
         </div>
 
         {/* 新規話題フォーム */}
@@ -1265,9 +1262,6 @@ export function GroupDetailClient() {
               投票・決定系だけ
             </button>
           </div>
-          <p className="mt-1.5 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
-            「投票・決定系」にはレシピ投票・重要マーク・上位表示タグの話題が含まれます。
-          </p>
         </div>
 
         {/* 話題一覧 */}

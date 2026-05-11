@@ -219,8 +219,7 @@ export function computeDashboardInsights(params: {
           : "日程調整ページを開く",
     };
   } else if (!destDone) {
-    nextStepLine =
-      "次のステップ: 目的地の投票に参加し、オーナー・管理者による確定を進めてください。";
+    nextStepLine = "次のステップ: 目的地の投票をしてください。";
     nextStepLink = {
       href: `/groups/${groupId}/destination-votes#destination-voting`,
       label: destinationVotesIncomplete
