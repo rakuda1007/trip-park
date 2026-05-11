@@ -8,11 +8,6 @@ import {
 } from "@/lib/firestore/bulletin";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
 import { sendNotification } from "@/lib/notify";
-import {
-  listSharingItems,
-  sharingSummaryStats,
-  type SharingItemRow,
-} from "@/lib/firestore/sharing";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
 import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
@@ -32,7 +27,6 @@ import {
   normalizeBulletinTopicTags,
 } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
-import { SharingListPanel } from "@/app/groups/[groupId]/sharing/sharing-list-panel";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
@@ -76,7 +70,6 @@ export function BulletinClient() {
   const [topics, setTopics] = useState<
     { id: string; data: BulletinTopicDoc; replyCount: number }[]
   >([]);
-  const [sharingItems, setSharingItems] = useState<SharingItemRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -92,7 +85,6 @@ export function BulletinClient() {
   const bulletinImgNewTopicId = useId();
 
   const [showForm, setShowForm] = useState(false);
-  const [shoppingOpen, setShoppingOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
   const [newCategory, setNewCategory] = useState<BulletinCategory>("general");
@@ -127,7 +119,6 @@ export function BulletinClient() {
         setGroup(null);
         setMembers([]);
         setTopics([]);
-        setSharingItems([]);
         return;
       }
       setGroup(g);
@@ -137,18 +128,12 @@ export function BulletinClient() {
         setError("メンバー一覧を読み込めませんでした。");
         setMembers([]);
         setTopics([]);
-        setSharingItems([]);
         return;
       }
       try {
         setTopics(await listBulletinTopicsWithReplyCounts(groupId));
       } catch {
         setTopics([]);
-      }
-      try {
-        setSharingItems(await listSharingItems(groupId));
-      } catch {
-        setSharingItems([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -258,8 +243,6 @@ export function BulletinClient() {
     );
   }
 
-  const shareStat = sharingSummaryStats(sharingItems);
-
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
       <div className="flex items-center justify-between gap-4">
@@ -284,35 +267,6 @@ export function BulletinClient() {
       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
         トピックごとにチャットでやりとりできます。
       </p>
-
-      <div className="mt-4">
-        <button
-          type="button"
-          onClick={() => setShoppingOpen((o) => !o)}
-          aria-expanded={shoppingOpen}
-          aria-controls="bulletin-sharing-panel"
-          className="text-left text-sm text-zinc-700 underline-offset-2 hover:text-zinc-900 hover:underline dark:text-zinc-300 dark:hover:text-zinc-100"
-        >
-          <span className="select-none" aria-hidden>
-            {shoppingOpen ? "▼" : "▶"}
-          </span>
-          買出しリスト（全{shareStat.total}項目、未割当{shareStat.unassigned}項目）
-        </button>
-        {shoppingOpen ? (
-          <div
-            id="bulletin-sharing-panel"
-            role="region"
-            className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50"
-          >
-            <SharingListPanel
-              variant="inline"
-              onDataChanged={() => {
-                void load();
-              }}
-            />
-          </div>
-        ) : null}
-      </div>
 
       {error ? (
         <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
