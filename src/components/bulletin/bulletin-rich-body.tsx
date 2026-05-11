@@ -154,45 +154,56 @@ export function BulletinRichBody({
           role="dialog"
           aria-modal="true"
           aria-label="拡大画像"
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4"
-          onClick={() => {
-            if (modalScale > 1.001) {
-              resetZoom();
-              return;
-            }
-            setZoomedImage(null);
-          }}
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setZoomedImage(null)}
         >
-          <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-md bg-black/55 p-1">
-            <button
-              type="button"
-              aria-label="拡大"
-              onClick={zoomIn}
-              className="rounded bg-white/15 px-2 py-1 text-sm text-white hover:bg-white/25"
-            >
-              ＋
-            </button>
-            <button
-              type="button"
-              aria-label="縮小"
-              onClick={zoomOut}
-              className="rounded bg-white/15 px-2 py-1 text-sm text-white hover:bg-white/25"
-            >
-              －
-            </button>
-            <button
-              type="button"
-              aria-label="拡大率をリセット"
-              onClick={resetZoom}
-              className="rounded bg-white/15 px-2 py-1 text-xs text-white hover:bg-white/25"
-            >
-              リセット
-            </button>
+          <div
+            className="absolute right-3 top-3 flex flex-wrap items-center justify-end gap-1.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-1 rounded-md bg-black/55 p-1">
+              <button
+                type="button"
+                aria-label="拡大"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  zoomIn();
+                }}
+                className="rounded bg-white/15 px-2 py-1 text-sm text-white hover:bg-white/25"
+              >
+                ＋
+              </button>
+              <button
+                type="button"
+                aria-label="縮小"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  zoomOut();
+                }}
+                className="rounded bg-white/15 px-2 py-1 text-sm text-white hover:bg-white/25"
+              >
+                －
+              </button>
+              <button
+                type="button"
+                aria-label="拡大率をリセット"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  resetZoom();
+                }}
+                className="rounded bg-white/15 px-2 py-1 text-xs text-white hover:bg-white/25"
+              >
+                リセット
+              </button>
+            </div>
             <button
               type="button"
               aria-label="拡大画像を閉じる"
-              onClick={() => setZoomedImage(null)}
-              className="rounded bg-white/20 px-2 py-1 text-sm text-white hover:bg-white/30"
+              onClick={(e) => {
+                e.stopPropagation();
+                setZoomedImage(null);
+              }}
+              className="rounded-md bg-white/20 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/30"
             >
               閉じる
             </button>

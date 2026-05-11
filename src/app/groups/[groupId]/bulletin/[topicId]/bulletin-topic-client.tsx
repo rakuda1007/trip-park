@@ -1137,20 +1137,28 @@ export function BulletinTopicClient() {
                               }
                             />
                           </div>
-                          <p
-                            className={`mt-1 text-[10px] leading-tight text-zinc-400 ${
-                              isOwn ? "text-right" : "text-left"
-                            }`}
-                          >
-                            {label} · {formatTs(data.createdAt)}
-                            {isUpdatedReply(data) ? (
-                              <span>（更新 {formatTs(data.updatedAt)}）</span>
-                            ) : null}
-                            <span className="text-zinc-500">
-                              {" "}
-                              · 既読 {readCount}
-                            </span>
-                          </p>
+                          {isOwn ? (
+                            <>
+                              <p className="mt-1 text-[10px] leading-tight text-zinc-400 text-right">
+                                {formatTs(data.createdAt)}
+                                {isUpdatedReply(data) ? (
+                                  <span>（更新 {formatTs(data.updatedAt)}）</span>
+                                ) : null}
+                              </p>
+                              {readCount > 0 ? (
+                                <p className="mt-0.5 text-[10px] leading-tight text-zinc-400 text-right">
+                                  既読 {readCount}
+                                </p>
+                              ) : null}
+                            </>
+                          ) : (
+                            <p className="mt-1 text-[10px] leading-tight text-zinc-400 text-left">
+                              {label} · {formatTs(data.createdAt)}
+                              {isUpdatedReply(data) ? (
+                                <span>（更新 {formatTs(data.updatedAt)}）</span>
+                              ) : null}
+                            </p>
+                          )}
                           <div
                             className={`mt-0.5 flex gap-2 ${
                               isOwn ? "justify-end" : "justify-start"
@@ -2148,17 +2156,28 @@ export function BulletinTopicClient() {
                           }
                         />
                       </div>
-                      <p
-                        className={`mt-1 text-[10px] leading-tight text-zinc-400 ${
-                          isOwn ? "text-right" : "text-left"
-                        }`}
-                      >
-                        {label} · {formatTs(data.createdAt)}
-                        {isUpdatedReply(data) ? (
-                          <span>（更新 {formatTs(data.updatedAt)}）</span>
-                        ) : null}
-                        <span className="text-zinc-500"> · 既読 {readCount}</span>
-                      </p>
+                      {isOwn ? (
+                        <>
+                          <p className="mt-1 text-[10px] leading-tight text-zinc-400 text-right">
+                            {formatTs(data.createdAt)}
+                            {isUpdatedReply(data) ? (
+                              <span>（更新 {formatTs(data.updatedAt)}）</span>
+                            ) : null}
+                          </p>
+                          {readCount > 0 ? (
+                            <p className="mt-0.5 text-[10px] leading-tight text-zinc-400 text-right">
+                              既読 {readCount}
+                            </p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <p className="mt-1 text-[10px] leading-tight text-zinc-400 text-left">
+                          {label} · {formatTs(data.createdAt)}
+                          {isUpdatedReply(data) ? (
+                            <span>（更新 {formatTs(data.updatedAt)}）</span>
+                          ) : null}
+                        </p>
+                      )}
                       <div
                         className={`mt-0.5 flex gap-2 ${
                           isOwn ? "justify-end" : "justify-start"

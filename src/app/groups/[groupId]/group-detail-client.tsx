@@ -16,10 +16,12 @@ import {
 import { listDestinationPolls, type PollItem } from "@/lib/firestore/destination-votes";
 import { listTripRoutes } from "@/lib/firestore/trip";
 import {
+  computeReplyReadCounts,
   createBulletinReply,
   createBulletinTopic,
   listBulletinReplies,
   listBulletinTopicsWithReplyCounts,
+  listTopicReplyReadProgress,
 } from "@/lib/firestore/bulletin";
 import { sendNotification } from "@/lib/notify";
 import { saveLastTripId } from "@/lib/last-trip";
@@ -43,6 +45,7 @@ import type { TripRouteDoc } from "@/types/trip";
 import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
 import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
 import { BulletinExpandableBodyField } from "@/components/bulletin/bulletin-expandable-body-field";
+import { BulletinRichBody } from "@/components/bulletin/bulletin-rich-body";
 import { BulletinImageAttachButton } from "@/components/bulletin/bulletin-image-attach-button";
 import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
 import { useBulletinImagePaste } from "@/hooks/use-bulletin-image-paste";
@@ -91,10 +94,6 @@ function formatDateRange(start: string, end?: string | null): string {
   if (sy === ey && sm === em) return `${sy}年${sm}月${sd}日 〜 ${ed}日`;
   if (sy === ey) return `${sy}年${sm}月${sd}日 〜 ${em}月${ed}日`;
   return `${sy}年${sm}月${sd}日 〜 ${ey}年${em}月${ed}日`;
-}
-
-function textFromBulletinBody(body: string): string {
-  return body.replace(/!\[[^\]]*\]\([^)]+\)/g, "[画像]").trim();
 }
 
 function tsToMs(v: unknown): number {
@@ -191,6 +190,10 @@ export function GroupDetailClient() {
   const [topicRepliesById, setTopicRepliesById] = useState<
     Record<string, { id: string; data: BulletinReplyDoc }[]>
   >({});
+  /** 直近1件トピックの返信既読（トピック詳細と同じ replyReadProgress） */
+  const [spotlightReplyReads, setSpotlightReplyReads] = useState<
+    { userId: string; lastReadReplyId: string | null }[]
+  >([]);
   /** ダッシュボード「直近1件」表示内の返信下書き */
   const [spotlightReplyDraft, setSpotlightReplyDraft] = useState("");
 
@@ -519,6 +522,29 @@ export function GroupDetailClient() {
     };
   }, [groupId, visibleTopicRows]);
 
+  const spotlightRepliesLen =
+    spotlightRow != null
+      ? (topicRepliesById[spotlightRow.id]?.length ?? 0)
+      : 0;
+
+  useEffect(() => {
+    if (topicView !== "default" || !groupId || !spotlightRow?.id) {
+      setSpotlightReplyReads([]);
+      return;
+    }
+    let cancelled = false;
+    void listTopicReplyReadProgress(groupId, spotlightRow.id)
+      .then((r) => {
+        if (!cancelled) setSpotlightReplyReads(r);
+      })
+      .catch(() => {
+        if (!cancelled) setSpotlightReplyReads([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [topicView, groupId, spotlightRow?.id, spotlightRepliesLen]);
+
   useEffect(() => {
     setSpotlightReplyDraft("");
   }, [spotlightRow?.id]);
@@ -552,6 +578,13 @@ export function GroupDetailClient() {
         });
       }
       await load();
+      try {
+        setSpotlightReplyReads(
+          await listTopicReplyReadProgress(groupId, spotlightRow.id),
+        );
+      } catch {
+        // ignore
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "返信に失敗しました");
     } finally {
@@ -744,15 +777,27 @@ export function GroupDetailClient() {
     const showImportant = isImportant || data.pinned;
     const tags = normalizeBulletinTopicTags(data);
     const replies = topicRepliesById[id] ?? [];
-    const rootBody = textFromBulletinBody(data.body);
     const latestTs =
       replies.length > 0
         ? replies[replies.length - 1]?.data.createdAt
         : data.createdAt;
+    const replyReadCountsForRow =
+      topicView === "default" && spotlightRow?.id === id
+        ? computeReplyReadCounts(
+            replies.map((r) => r.id),
+            spotlightReplyReads,
+          )
+        : null;
     return (
       <li key={id}>
         <Link
           href={`/groups/${groupId}/bulletin/${id}`}
+          onClick={(e) => {
+            const el = e.target as HTMLElement;
+            if (el.closest("button") || el.closest('[aria-modal="true"]')) {
+              e.preventDefault();
+            }
+          }}
           className={`block px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
             isImportant
               ? "mx-2 my-2 rounded-lg border-2 border-amber-500 bg-amber-50/90 shadow-sm ring-1 ring-amber-200/90 dark:border-amber-600 dark:bg-amber-950/35 dark:ring-amber-800/50"
@@ -772,20 +817,105 @@ export function GroupDetailClient() {
                 トピック: {data.title}
               </h3>
 
-              <div className="mt-2 flex flex-col gap-1.5">
-                {rootBody ? (
-                  <div className="mr-auto max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 text-xs leading-relaxed text-zinc-900 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100">
-                    {rootBody}
-                  </div>
-                ) : null}
-                {replies.map((reply) => (
-                  <div
-                    key={reply.id}
-                    className="ml-auto max-w-[min(92%,22rem)] rounded-[17px] rounded-tr-[5px] bg-[#06C755] px-3 py-2.5 text-xs leading-relaxed text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
-                  >
-                    {textFromBulletinBody(reply.data.body)}
-                  </div>
-                ))}
+              <div className="mt-2 flex flex-col gap-2">
+                <div className="mr-auto max-w-[min(92%,22rem)]">
+                  {data.category === "nearby_map" ? (
+                    <div className="rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800">
+                      {data.body.trim() ? (
+                        <BulletinRichBody
+                          body={data.body}
+                          className="text-xs leading-relaxed text-zinc-900 dark:text-zinc-100"
+                        />
+                      ) : null}
+                      {(data.nearbyMapSpots ?? []).length > 0 ? (
+                        <ul className="mt-2 space-y-1.5">
+                          {(data.nearbyMapSpots ?? []).map((spot, idx) => (
+                            <li
+                              key={`${spot.name}-${idx}`}
+                              className="flex items-center justify-between gap-2 rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-1.5 dark:border-zinc-600 dark:bg-zinc-900/60"
+                            >
+                              <span className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-100">
+                                {spot.name}
+                              </span>
+                              <a
+                                href={spot.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="shrink-0 rounded border border-zinc-200 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-white dark:border-zinc-600 dark:text-zinc-300"
+                              >
+                                地図
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800">
+                      <BulletinRichBody
+                        body={data.body}
+                        className="text-xs leading-relaxed text-zinc-900 dark:text-zinc-100"
+                      />
+                    </div>
+                  )}
+                </div>
+                {replies.map((reply, rIdx) => {
+                  const replyIsOwn = user?.uid === reply.data.authorUserId;
+                  const rc = replyReadCountsForRow?.[rIdx] ?? 0;
+                  const replyLabel =
+                    reply.data.authorDisplayName ||
+                    reply.data.authorUserId.slice(0, 8) + "…";
+                  return (
+                    <div
+                      key={reply.id}
+                      className={
+                        replyIsOwn
+                          ? "flex flex-col items-end gap-0.5"
+                          : "flex flex-col items-start gap-0.5"
+                      }
+                    >
+                      <div
+                        className={
+                          replyIsOwn
+                            ? "max-w-[min(92%,22rem)] rounded-[17px] rounded-tr-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+                            : "max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800"
+                        }
+                      >
+                        <BulletinRichBody
+                          body={reply.data.body}
+                          className="text-xs leading-relaxed"
+                          textClassName={
+                            replyIsOwn
+                              ? "text-white"
+                              : "text-zinc-900 dark:text-zinc-100"
+                          }
+                          imgClassName={
+                            replyIsOwn
+                              ? "border-white/30"
+                              : "border-zinc-200 dark:border-zinc-600"
+                          }
+                        />
+                      </div>
+                      {replyIsOwn ? (
+                        <>
+                          <p className="text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
+                            {formatTs(reply.data.createdAt)}
+                          </p>
+                          {rc > 0 ? (
+                            <p className="text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
+                              既読 {rc}
+                            </p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <p className="text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
+                          {replyLabel} · {formatTs(reply.data.createdAt)}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
