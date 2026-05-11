@@ -19,7 +19,6 @@ import {
   computeReplyReadCounts,
   computeTopicOpenReadCount,
   createBulletinReply,
-  createBulletinTopic,
   listBulletinReplies,
   listBulletinTopicsWithReplyCounts,
   listTopicReplyReadProgress,
@@ -44,25 +43,20 @@ import type { ScheduleResponseDoc } from "@/types/schedule";
 import type { BulletinRecipeVoteDoc } from "@/types/bulletin";
 import type { VoteItem } from "@/lib/firestore/destination-votes";
 import type { TripRouteDoc } from "@/types/trip";
-import { fetchRecipePollFromUrls } from "@/lib/recipe-preview-api";
-import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
-import { BulletinExpandableBodyField } from "@/components/bulletin/bulletin-expandable-body-field";
 import { BulletinRichBody } from "@/components/bulletin/bulletin-rich-body";
+import {
+  NearbyMapTopicDisplay,
+  formatNearbyMapTopicHeadingTitle,
+} from "@/components/bulletin/nearby-map-topic-display";
 import { BulletinImageAttachButton } from "@/components/bulletin/bulletin-image-attach-button";
-import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
 import { useBulletinImagePaste } from "@/hooks/use-bulletin-image-paste";
 import { VisibilityBadge } from "@/components/visibility-badge";
 import { TripDashboardInsightsPanel } from "@/components/trip/trip-dashboard-insights-panel";
 import {
   BULLETIN_CATEGORY_LABELS,
-  BULLETIN_CATEGORY_OPTIONS,
   BULLETIN_TOPIC_TAG_LABELS,
-  type BulletinCategory,
-  type BulletinImportance,
   type BulletinReplyDoc,
   type BulletinTopicDoc,
-  type BulletinTopicTag,
-  type RecipePollData,
   normalizeBulletinTopicTags,
 } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
@@ -172,13 +166,11 @@ export function GroupDetailClient() {
     setError,
   });
 
-  const newTopicBodyRef = useRef<HTMLTextAreaElement>(null);
   const spotlightReplyComposerRef = useRef<HTMLTextAreaElement>(null);
   /** ダッシュボード直近1件トピックのスレッド（末尾＝最新へスクロール） */
   const spotlightThreadScrollRef = useRef<HTMLDivElement>(null);
   /** 自動スクロール直後は既読更新を抑制（誤検知防止） */
   const spotlightThreadMarkReadLockUntilRef = useRef(0);
-  const bulletinImgDashTopicId = useId();
   const bulletinImgSpotlightReplyId = useId();
 
   // 旅行名編集用
@@ -211,14 +203,6 @@ export function GroupDetailClient() {
   const [topics, setTopics] = useState<
     { id: string; data: BulletinTopicDoc; replyCount: number }[]
   >([]);
-  const [showNewTopicForm, setShowNewTopicForm] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newBody, setNewBody] = useState("");
-  const [newCategory, setNewCategory] = useState<BulletinCategory>("general");
-  const [newImportance, setNewImportance] =
-    useState<BulletinImportance>("normal");
-  const [newTags, setNewTags] = useState<BulletinTopicTag[]>([]);
-
   const [dashboardExtras, setDashboardExtras] =
     useState<DashboardExtrasState | null>(null);
   /** ダッシュボード文言（オーナー／管理者向け）用 */
@@ -363,60 +347,6 @@ export function GroupDetailClient() {
       setMyMember(null);
     }
   }, [groupId, user]);
-
-  async function handleCreateTopic() {
-    if (!user || !groupId || !newTitle.trim()) return;
-    if (newCategory !== "recipe_vote" && !newBody.trim()) return;
-    if (
-      newCategory === "recipe_vote" &&
-      parseRecipeUrlLines(newBody).length === 0
-    ) {
-      return;
-    }
-    setBusy("create-topic");
-    setError(null);
-    try {
-      const savedTitle = newTitle.trim();
-      let recipePoll: RecipePollData | null = null;
-      if (newCategory === "recipe_vote") {
-        const urls = parseRecipeUrlLines(newBody);
-        recipePoll = await fetchRecipePollFromUrls(urls);
-      }
-      const topicId = await createBulletinTopic(
-        groupId,
-        user.uid,
-        user.displayName,
-        newTitle,
-        newBody,
-        newCategory,
-        newImportance,
-        recipePoll ?? undefined,
-        undefined,
-        newTags,
-      );
-      setNewTitle("");
-      setNewBody("");
-      setNewCategory("general");
-      setNewImportance("normal");
-      setNewTags([]);
-      setShowNewTopicForm(false);
-      await load();
-      // 通知送信（失敗しても続行）
-      sendNotification({
-        type: "bulletin_topic",
-        groupId,
-        groupName: group?.name ?? "",
-        topicId,
-        topicTitle: savedTitle,
-        authorName: user.displayName ?? "メンバー",
-        authorUid: user.uid,
-      });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "投稿に失敗しました");
-    } finally {
-      setBusy(null);
-    }
-  }
 
   useEffect(() => {
     load();
@@ -1065,7 +995,10 @@ export function GroupDetailClient() {
                 </p>
               ) : null}
               <h3 className="mt-0.5 text-sm font-semibold leading-snug text-zinc-700 dark:text-zinc-200">
-                トピック: {data.title}
+                トピック:{" "}
+                {data.category === "nearby_map"
+                  ? formatNearbyMapTopicHeadingTitle(data.title)
+                  : data.title}
               </h3>
 
               <div
@@ -1086,65 +1019,13 @@ export function GroupDetailClient() {
                   >
                     {data.category === "nearby_map" ? (
                       <div
-                        className={
-                          topicIsOwn
-                            ? "max-w-[min(92%,22rem)] rounded-[17px] rounded-br-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
-                            : "max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800"
-                        }
+                        className="w-full min-w-0 self-stretch"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        {data.body.trim() ? (
-                          <BulletinRichBody
-                            body={data.body}
-                            className="text-xs leading-relaxed"
-                            textClassName={
-                              topicIsOwn
-                                ? "text-white"
-                                : "text-zinc-900 dark:text-zinc-100"
-                            }
-                            imgClassName={
-                              topicIsOwn
-                                ? "border-white/30"
-                                : "border-zinc-200 dark:border-zinc-600"
-                            }
-                          />
-                        ) : null}
-                        {(data.nearbyMapSpots ?? []).length > 0 ? (
-                          <ul className="mt-2 space-y-1.5">
-                            {(data.nearbyMapSpots ?? []).map((spot, idx) => (
-                              <li
-                                key={`${spot.name}-${idx}`}
-                                className={`flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 ${
-                                  topicIsOwn
-                                    ? "border-white/25 bg-white/10"
-                                    : "border-zinc-200 bg-zinc-50/80 dark:border-zinc-600 dark:bg-zinc-900/60"
-                                }`}
-                              >
-                                <span
-                                  className={`truncate text-xs font-medium ${
-                                    topicIsOwn
-                                      ? "text-white"
-                                      : "text-zinc-800 dark:text-zinc-100"
-                                  }`}
-                                >
-                                  {spot.name}
-                                </span>
-                                <a
-                                  href={spot.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${
-                                    topicIsOwn
-                                      ? "border-white/35 text-white hover:bg-white/10"
-                                      : "border-zinc-200 text-zinc-600 hover:bg-white dark:border-zinc-600 dark:text-zinc-300"
-                                  }`}
-                                >
-                                  地図
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
+                        <NearbyMapTopicDisplay
+                          body={data.body}
+                          spots={data.nearbyMapSpots ?? []}
+                        />
                       </div>
                     ) : (
                       <div
@@ -1716,15 +1597,12 @@ export function GroupDetailClient() {
               </h2>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {!showNewTopicForm && (
-                <button
-                  type="button"
-                  onClick={() => setShowNewTopicForm(true)}
-                  className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                >
-                  ＋ 新しい話題
-                </button>
-              )}
+              <Link
+                href={`/groups/${groupId}/bulletin?new=1`}
+                className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                ＋ 新しい話題
+              </Link>
               <Link
                 href={`/groups/${groupId}/bulletin`}
                 className="text-xs text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
@@ -1795,7 +1673,11 @@ export function GroupDetailClient() {
                     <button
                       key={row.id}
                       type="button"
-                      title={row.data.title}
+                      title={
+                        row.data.category === "nearby_map"
+                          ? formatNearbyMapTopicHeadingTitle(row.data.title)
+                          : row.data.title
+                      }
                       onClick={() => {
                         setTopicView("default");
                         setSpotlightTopicId(row.id);
@@ -1806,7 +1688,9 @@ export function GroupDetailClient() {
                           : "border-emerald-200/90 bg-emerald-50/90 text-emerald-950 hover:border-emerald-400 hover:bg-emerald-100/90 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-100 dark:hover:border-emerald-600 dark:hover:bg-emerald-900/50"
                       }`}
                     >
-                      {row.data.title}
+                      {row.data.category === "nearby_map"
+                        ? formatNearbyMapTopicHeadingTitle(row.data.title)
+                        : row.data.title}
                     </button>
                   );
                 })}
@@ -1814,129 +1698,6 @@ export function GroupDetailClient() {
             ) : null}
           </div>
         </div>
-
-        {/* 新規話題フォーム */}
-        {showNewTopicForm && (
-          <div className="mx-4 mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
-            <p className="mb-3 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              新しい話題を立てる
-            </p>
-            <div className="space-y-2">
-              <input
-                type="text"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                maxLength={200}
-                placeholder="タイトル（件名）"
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-              />
-              <BulletinExpandableBodyField
-                label={
-                  newCategory === "recipe_vote"
-                    ? "レシピページのURL（1行に1件）"
-                    : newCategory === "nearby_map"
-                      ? "本文（任意）"
-                      : "本文"
-                }
-                leadingActions={
-                  newCategory !== "recipe_vote" ? (
-                    <BulletinImageAttachButton
-                      inputId={bulletinImgDashTopicId}
-                      disabled={busy !== null}
-                      onFile={(f) =>
-                        void insertImageFromFile(
-                          f,
-                          newBody,
-                          setNewBody,
-                          newTopicBodyRef,
-                          true,
-                        )
-                      }
-                    />
-                  ) : null
-                }
-                textareaRef={newTopicBodyRef}
-                value={newBody}
-                onChange={setNewBody}
-                rows={newCategory === "recipe_vote" ? 5 : 4}
-                placeholder={
-                  newCategory === "recipe_vote"
-                    ? "https://cookpad.com/jp/recipes/…"
-                    : newCategory === "nearby_map"
-                      ? "補足メモ（任意）"
-                      : "本文"
-                }
-                disabled={busy !== null}
-                onPaste={(e) =>
-                  void pasteBulletinImage(
-                    e,
-                    newBody,
-                    setNewBody,
-                    newCategory !== "recipe_vote",
-                  )
-                }
-              />
-              <div className="flex flex-wrap gap-3">
-                <select
-                  value={newCategory}
-                  onChange={(e) =>
-                    setNewCategory(e.target.value as BulletinCategory)
-                  }
-                  className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                >
-                  {BULLETIN_CATEGORY_OPTIONS.map((c) => (
-                    <option key={c} value={c}>
-                      {BULLETIN_CATEGORY_LABELS[c]}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={newImportance}
-                  onChange={(e) =>
-                    setNewImportance(e.target.value as BulletinImportance)
-                  }
-                  className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                >
-                  <option value="normal">通常</option>
-                  <option value="important">重要</option>
-                </select>
-              </div>
-              <BulletinTopicTagsField
-                value={newTags}
-                onChange={setNewTags}
-                disabled={busy !== null}
-              />
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleCreateTopic}
-                  disabled={
-                    busy !== null ||
-                    !newTitle.trim() ||
-                    (newCategory === "recipe_vote"
-                      ? parseRecipeUrlLines(newBody).length === 0
-                      : !newBody.trim())
-                  }
-                  className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-                >
-                  {busy === "create-topic" ? "作成中…" : "話題を作成"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowNewTopicForm(false);
-                    setNewTitle("");
-                    setNewBody("");
-                    setNewTags([]);
-                  }}
-                  className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400"
-                >
-                  キャンセル
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* 話題一覧 */}
         <div className="min-h-0 flex-1 bg-white pb-2 pt-1 dark:bg-transparent">

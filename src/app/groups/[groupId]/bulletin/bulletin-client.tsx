@@ -14,6 +14,7 @@ import { parseRecipeUrlLines } from "@/lib/recipe-url-input";
 import { useBulletinImagePaste } from "@/hooks/use-bulletin-image-paste";
 import { BulletinExpandableBodyField } from "@/components/bulletin/bulletin-expandable-body-field";
 import { BulletinImageAttachButton } from "@/components/bulletin/bulletin-image-attach-button";
+import { formatNearbyMapTopicHeadingTitle } from "@/components/bulletin/nearby-map-topic-display";
 import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
 import {
   BULLETIN_CATEGORY_LABELS,
@@ -28,7 +29,16 @@ import {
 } from "@/types/bulletin";
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 function formatTs(v: unknown): string {
   if (!v) return "—";
@@ -59,9 +69,12 @@ function excerptTopic(data: BulletinTopicDoc, max = 120): string {
   return t.slice(0, max) + "…";
 }
 
-export function BulletinClient() {
+function BulletinClientInner() {
   const groupId = useGroupRouteId();
   const { user } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const openedFromNewQueryRef = useRef(false);
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
   const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>(
@@ -96,6 +109,16 @@ export function BulletinClient() {
   const [newNearbyMapSpots, setNewNearbyMapSpots] = useState<NearbyMapSpot[]>(
     [],
   );
+
+  useLayoutEffect(() => {
+    if (!groupId || openedFromNewQueryRef.current) return;
+    const q = searchParams.get("new");
+    if (q === "1" || q === "true") {
+      openedFromNewQueryRef.current = true;
+      setShowForm(true);
+      router.replace(`/groups/${groupId}/bulletin`, { scroll: false });
+    }
+  }, [groupId, router, searchParams]);
 
   function isValidMapUrl(url: string): boolean {
     return /^https?:\/\/\S+/i.test(url.trim());
@@ -343,6 +366,9 @@ export function BulletinClient() {
                 <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
                   立ち寄り先の地図を登録
                 </p>
+                <p className="mt-2 text-xs leading-relaxed text-sky-900/95 dark:text-sky-100/90">
+                  地図は複数登録できます。1件ごとに「場所名」と「地図URL」を入力し「追加」を押してください。表示では<strong>場所名がラベル</strong>となり、その行の「地図を開く」がそのURLへのリンクになります。件名（タイトル）はトピック全体の見出し、場所名は各リンクの名前として使い分けられます。
+                </p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
                   <label className="text-xs text-zinc-600 dark:text-zinc-400">
                     場所名
@@ -491,7 +517,9 @@ export function BulletinClient() {
                     ) : null}
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <h3 className="text-lg font-semibold leading-snug text-zinc-900 dark:text-zinc-100">
-                        {data.title}
+                        {data.category === "nearby_map"
+                          ? formatNearbyMapTopicHeadingTitle(data.title)
+                          : data.title}
                       </h3>
                       <span className="shrink-0 text-xs text-zinc-500">
                         返信 {replyCount} 件
@@ -535,5 +563,19 @@ export function BulletinClient() {
         )}
       </section>
     </div>
+  );
+}
+
+export function BulletinClient() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
+          <p className="text-sm text-zinc-500">読み込み中…</p>
+        </div>
+      }
+    >
+      <BulletinClientInner />
+    </Suspense>
   );
 }

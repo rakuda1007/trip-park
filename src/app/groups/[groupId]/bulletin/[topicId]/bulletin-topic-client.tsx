@@ -38,6 +38,10 @@ import { sendNotification } from "@/lib/notify";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import { BulletinImageAttachButton } from "@/components/bulletin/bulletin-image-attach-button";
 import { BulletinRichBody } from "@/components/bulletin/bulletin-rich-body";
+import {
+  NearbyMapTopicDisplay,
+  formatNearbyMapTopicHeadingTitle,
+} from "@/components/bulletin/nearby-map-topic-display";
 import { BulletinTopicTagsField } from "@/components/bulletin-topic-tags-field";
 import { VisibilityBadge } from "@/components/visibility-badge";
 import {
@@ -872,7 +876,9 @@ export function BulletinTopicClient() {
             </p>
           ) : null}
           <h1 className="text-lg font-semibold leading-snug text-zinc-900 dark:text-zinc-50 sm:text-xl">
-            {topic.title}
+            {topic.category === "nearby_map"
+              ? formatNearbyMapTopicHeadingTitle(topic.title)
+              : topic.title}
           </h1>
           <div className="mt-1.5 flex flex-wrap gap-2 text-xs text-zinc-500">
             <span className="rounded bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800">
@@ -910,70 +916,21 @@ export function BulletinTopicClient() {
                   : "flex flex-col items-start gap-0.5"
               }
             >
-              <div
-                className={`max-w-[min(85%,22rem)] rounded-[17px] px-3 py-2 text-sm leading-relaxed shadow-sm ${
-                  isTopicAuthor
-                    ? "rounded-br-[5px] bg-[#06C755] text-white"
-                    : "rounded-bl-[5px] border border-zinc-200/90 bg-white text-zinc-900 shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-zinc-600/90 dark:bg-zinc-800/95 dark:text-zinc-100"
-                }`}
-              >
-                {topic.category === "nearby_map" ? (
-                  <div className="space-y-3">
-                    {topic.body.trim() ? (
-                      <BulletinRichBody
-                        body={topic.body}
-                        className="text-sm leading-relaxed"
-                        textClassName={
-                          isTopicAuthor
-                            ? "text-white"
-                            : "text-zinc-800 dark:text-zinc-200"
-                        }
-                        imgClassName={
-                          isTopicAuthor
-                            ? "border-white/30"
-                            : "border-zinc-200 dark:border-zinc-600"
-                        }
-                      />
-                    ) : null}
-                    <ul className="space-y-2">
-                      {(topic.nearbyMapSpots ?? []).map((spot, idx) => (
-                        <li
-                          key={`${spot.name}-${idx}`}
-                          className={`flex items-center justify-between rounded-md border px-3 py-2 ${
-                            isTopicAuthor
-                              ? "border-white/25 bg-white/10"
-                              : "border-zinc-200 bg-zinc-50/90 dark:border-zinc-600 dark:bg-zinc-900/50"
-                          }`}
-                        >
-                          <span
-                            className={`truncate text-sm font-medium ${
-                              isTopicAuthor
-                                ? "text-white"
-                                : "text-zinc-800 dark:text-zinc-100"
-                            }`}
-                          >
-                            {spot.name}
-                          </span>
-                          <a
-                            href={spot.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-xs ${
-                              isTopicAuthor
-                                ? "border-white/35 text-white hover:bg-white/10"
-                                : "border-zinc-200 text-zinc-600 hover:bg-white dark:border-zinc-600 dark:text-zinc-300"
-                            }`}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-                              <path fillRule="evenodd" d="m9.69 18.933.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 0 0 .281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 1 0 3 9c0 3.492 1.698 5.988 3.355 7.584a13.731 13.731 0 0 0 2.273 1.765 11.842 11.842 0 0 0 .953.524l.004.002.006.003ZM10 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" clipRule="evenodd" />
-                            </svg>
-                            地図
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : (
+              {topic.category === "nearby_map" ? (
+                <div className="w-full min-w-0 self-stretch">
+                  <NearbyMapTopicDisplay
+                    body={topic.body}
+                    spots={topic.nearbyMapSpots ?? []}
+                  />
+                </div>
+              ) : (
+                <div
+                  className={`max-w-[min(85%,22rem)] rounded-[17px] px-3 py-2 text-sm leading-relaxed shadow-sm ${
+                    isTopicAuthor
+                      ? "rounded-br-[5px] bg-[#06C755] text-white"
+                      : "rounded-bl-[5px] border border-zinc-200/90 bg-white text-zinc-900 shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-zinc-600/90 dark:bg-zinc-800/95 dark:text-zinc-100"
+                  }`}
+                >
                   <BulletinRichBody
                     body={topic.body}
                     className="text-sm leading-relaxed"
@@ -988,8 +945,8 @@ export function BulletinTopicClient() {
                         : "border-zinc-200 dark:border-zinc-600"
                     }
                   />
-                )}
-              </div>
+                </div>
+              )}
               {isTopicAuthor ? (
                 <>
                   <p className="px-1 text-right text-[11px] text-zinc-500 dark:text-zinc-400">
@@ -1537,7 +1494,9 @@ export function BulletinTopicClient() {
         ) : (
           <>
             <h1 className="text-lg font-semibold leading-snug text-zinc-900 dark:text-zinc-50 sm:text-xl">
-              {topic.title}
+              {topic.category === "nearby_map"
+                ? formatNearbyMapTopicHeadingTitle(topic.title)
+                : topic.title}
             </h1>
             <div className="mt-1.5 flex flex-wrap gap-2 text-xs text-zinc-500">
               <span className="rounded bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800">
@@ -1997,67 +1956,130 @@ export function BulletinTopicClient() {
                 </details>
               </div>
             ) : topic.category === "nearby_map" ? (
-              <div className="mt-3 space-y-3">
-                {topic.body.trim() ? (
-                  <BulletinRichBody
-                    body={topic.body}
-                    className="text-sm leading-relaxed text-zinc-800 dark:text-zinc-200"
-                  />
-                ) : null}
-                <ul className="space-y-2">
-                  {(topic.nearbyMapSpots ?? []).map((spot, idx) => (
-                    <li
-                      key={`${spot.name}-${idx}`}
-                      className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/60"
-                    >
-                      <span className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
-                        {spot.name}
-                      </span>
-                      <a
-                        href={spot.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-                          <path fillRule="evenodd" d="m9.69 18.933.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 0 0 .281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 1 0 3 9c0 3.492 1.698 5.988 3.355 7.584a13.731 13.731 0 0 0 2.273 1.765 11.842 11.842 0 0 0 .953.524l.004.002.006.003ZM10 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" clipRule="evenodd" />
-                        </svg>
-                        地図
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+              <div className="mt-3">
+                <div
+                  className={
+                    isTopicAuthor
+                      ? "flex flex-col items-end gap-0.5"
+                      : "flex flex-col items-start gap-0.5"
+                  }
+                >
+                  <div className="w-full min-w-0 self-stretch">
+                    <NearbyMapTopicDisplay
+                      body={topic.body}
+                      spots={topic.nearbyMapSpots ?? []}
+                    />
+                  </div>
+                  {isTopicAuthor ? (
+                    <>
+                      <p className="px-0.5 text-right text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {formatTs(topic.createdAt)}
+                        {isUpdatedTopic(topic) ? (
+                          <span>（更新: {formatTs(topic.updatedAt)}）</span>
+                        ) : null}
+                      </p>
+                      {topicOpenReadCount > 0 ? (
+                        <p className="px-0.5 text-right text-[10px] leading-tight text-zinc-400 dark:text-zinc-500">
+                          既読 {topicOpenReadCount}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="px-0.5 text-left text-[11px] text-zinc-500">
+                      {topic.authorDisplayName ||
+                        topic.authorUserId.slice(0, 8) + "…"}{" "}
+                      · {formatTs(topic.createdAt)}
+                      {isUpdatedTopic(topic) ? (
+                        <span>（更新: {formatTs(topic.updatedAt)}）</span>
+                      ) : null}
+                    </p>
+                  )}
+                </div>
               </div>
             ) : (
-              <BulletinRichBody
-                body={topic.body}
-                className="mt-3 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200"
-              />
+              <div className="mt-3">
+                <div
+                  className={
+                    isTopicAuthor
+                      ? "flex flex-col items-end gap-0.5"
+                      : "flex flex-col items-start gap-0.5"
+                  }
+                >
+                  <div
+                    className={
+                      isTopicAuthor
+                        ? "max-w-[min(92%,22rem)] rounded-[17px] rounded-br-[5px] bg-[#06C755] px-3 py-2.5 shadow-sm"
+                        : "max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800"
+                    }
+                  >
+                    <BulletinRichBody
+                      body={topic.body}
+                      className="text-sm leading-relaxed"
+                      textClassName={
+                        isTopicAuthor
+                          ? "text-white"
+                          : "text-zinc-800 dark:text-zinc-200"
+                      }
+                      imgClassName={
+                        isTopicAuthor
+                          ? "border-white/30"
+                          : "border-zinc-200 dark:border-zinc-600"
+                      }
+                    />
+                  </div>
+                  {isTopicAuthor ? (
+                    <>
+                      <p className="px-0.5 text-right text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {formatTs(topic.createdAt)}
+                        {isUpdatedTopic(topic) ? (
+                          <span>（更新: {formatTs(topic.updatedAt)}）</span>
+                        ) : null}
+                      </p>
+                      {topicOpenReadCount > 0 ? (
+                        <p className="px-0.5 text-right text-[10px] leading-tight text-zinc-400 dark:text-zinc-500">
+                          既読 {topicOpenReadCount}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="px-0.5 text-left text-[11px] text-zinc-500">
+                      {topic.authorDisplayName ||
+                        topic.authorUserId.slice(0, 8) + "…"}{" "}
+                      · {formatTs(topic.createdAt)}
+                      {isUpdatedTopic(topic) ? (
+                        <span>（更新: {formatTs(topic.updatedAt)}）</span>
+                      ) : null}
+                    </p>
+                  )}
+                </div>
+              </div>
             )}
-            {isTopicAuthor ? (
-              <>
-                <p className="mt-2 text-right text-[11px] text-zinc-500 dark:text-zinc-400">
-                  {formatTs(topic.createdAt)}
+            {topic.category === "recipe_vote" ? (
+              isTopicAuthor ? (
+                <>
+                  <p className="mt-2 text-right text-[11px] text-zinc-500 dark:text-zinc-400">
+                    {formatTs(topic.createdAt)}
+                    {isUpdatedTopic(topic) ? (
+                      <span>（更新: {formatTs(topic.updatedAt)}）</span>
+                    ) : null}
+                  </p>
+                  {topicOpenReadCount > 0 ? (
+                    <p className="text-right text-[10px] leading-tight text-zinc-400 dark:text-zinc-500">
+                      既読 {topicOpenReadCount}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="mt-2 text-[11px] text-zinc-500">
+                  {topic.authorDisplayName ||
+                    topic.authorUserId.slice(0, 8) + "…"}{" "}
+                  · {formatTs(topic.createdAt)}
                   {isUpdatedTopic(topic) ? (
                     <span>（更新: {formatTs(topic.updatedAt)}）</span>
                   ) : null}
                 </p>
-                {topicOpenReadCount > 0 ? (
-                  <p className="text-right text-[10px] leading-tight text-zinc-400 dark:text-zinc-500">
-                    既読 {topicOpenReadCount}
-                  </p>
-                ) : null}
-              </>
-            ) : (
-              <p className="mt-2 text-[11px] text-zinc-500">
-                {topic.authorDisplayName ||
-                  topic.authorUserId.slice(0, 8) + "…"}{" "}
-                · {formatTs(topic.createdAt)}
-                {isUpdatedTopic(topic) ? (
-                  <span>（更新: {formatTs(topic.updatedAt)}）</span>
-                ) : null}
-              </p>
-            )}
+              )
+            ) : null}
 
             {user && isMember ? (
               <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50/80 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
