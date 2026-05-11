@@ -262,14 +262,7 @@ export function BulletinClient() {
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
-      <Link
-        href={`/groups/${groupId}`}
-        className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-      >
-        ← {group.name}
-      </Link>
-
-      <div className="mt-4 flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
             掲示板
