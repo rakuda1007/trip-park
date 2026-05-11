@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { mapAuthError } from "@/lib/auth/firebase-errors";
 import {
   AUTH_RETURN_TO_KEY,
+  consumeAuthReturnToPath,
   safeInternalPath,
 } from "@/lib/auth-return-to";
 import { getFirebaseAuth } from "@/lib/firebase/client";
@@ -12,7 +13,7 @@ import { ensureUserDocument } from "@/lib/firestore/users";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function SignupForm() {
   const { user, loading } = useAuth();
@@ -25,6 +26,7 @@ export function SignupForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const suppressAuthSyncRedirect = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -36,13 +38,20 @@ export function SignupForm() {
   }, []);
 
   useEffect(() => {
+    if (!user) suppressAuthSyncRedirect.current = false;
+  }, [user]);
+
+  useEffect(() => {
     if (!loading && user) {
-      const stored = safeInternalPath(sessionStorage.getItem(AUTH_RETURN_TO_KEY));
-      const target = returnToSafe ?? stored ?? "/dashboard";
-      sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
-      router.replace(target);
+      if (suppressAuthSyncRedirect.current) {
+        suppressAuthSyncRedirect.current = false;
+        return;
+      }
+      router.replace(consumeAuthReturnToPath(returnToSafe));
     }
   }, [user, loading, router, returnToSafe]);
+
+  const SIGN_UP_TIMEOUT_MS = 60_000;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -54,11 +63,14 @@ export function SignupForm() {
     setSubmitting(true);
     try {
       const auth = getFirebaseAuth();
-      const cred = await createUserWithEmailAndPassword(
-        auth,
-        email.trim(),
-        password,
-      );
+      const cred = await Promise.race([
+        createUserWithEmailAndPassword(auth, email.trim(), password),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(Object.assign(new Error("timeout"), { code: "auth/timeout-client" }));
+          }, SIGN_UP_TIMEOUT_MS);
+        }),
+      ]);
       const name = displayName.trim();
       if (name) {
         await updateProfile(cred.user, { displayName: name });
@@ -68,7 +80,10 @@ export function SignupForm() {
         cred.user.email,
         name || cred.user.displayName,
       );
-      router.refresh();
+      suppressAuthSyncRedirect.current = true;
+      const target = consumeAuthReturnToPath(returnToSafe);
+      router.replace(target);
+      void router.refresh();
     } catch (err: unknown) {
       const code =
         err && typeof err === "object" && "code" in err

@@ -3,7 +3,6 @@
 import { useAuth } from "@/contexts/auth-context";
 import { useGroupRouteId } from "@/contexts/group-route-context";
 import {
-  deleteGroup,
   getGroup,
   getMemberForUser,
   leaveGroup,
@@ -913,28 +912,6 @@ export function GroupDetailClient() {
     }
   }
 
-  async function handleDeleteGroup() {
-    if (!user || !groupId) return;
-    if (
-      !confirm(
-        "旅行を削除します。メンバー全員がアクセスできなくなります。よろしいですか？",
-      )
-    ) {
-      return;
-    }
-    setBusy("delete");
-    setError(null);
-    try {
-      await deleteGroup(user.uid, groupId);
-      router.push("/groups");
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "削除に失敗しました");
-    } finally {
-      setBusy(null);
-    }
-  }
-
   function renderTopicRow(row: {
     id: string;
     data: BulletinTopicDoc;
@@ -1786,19 +1763,6 @@ export function GroupDetailClient() {
           >
             {busy === "leave" ? "処理中…" : "旅行から抜ける"}
           </button>
-        ) : null}
-        {isOwner ? (
-          <>
-            <VisibilityBadge kind="owner" />
-            <button
-              type="button"
-              onClick={handleDeleteGroup}
-              disabled={busy !== null}
-              className="rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-800 hover:bg-red-100 disabled:opacity-50 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200 dark:hover:bg-red-950/60"
-            >
-              {busy === "delete" ? "削除中…" : "旅行を削除"}
-            </button>
-          </>
         ) : null}
       </div>
     </div>

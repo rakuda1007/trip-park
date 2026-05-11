@@ -6,7 +6,12 @@ import { isFirebaseConfigured } from "@/lib/firebase/env";
 import { clearLastTripId } from "@/lib/last-trip";
 import { TripSelector } from "@/components/trip-selector";
 import { VisibilityBadge } from "@/components/visibility-badge";
-import { buildWelcomeUrl, getGroup, getMemberForUser } from "@/lib/firestore/groups";
+import {
+  buildWelcomeUrl,
+  deleteGroup,
+  getGroup,
+  getMemberForUser,
+} from "@/lib/firestore/groups";
 import type { GroupDoc } from "@/types/group";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
@@ -32,10 +37,13 @@ export function AppHeader() {
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  /** null: 未判定。管理者メニューは true のときだけ表示 */
+  /** null: 未判定。オーナー・管理者向けブロックは true のときだけ表示 */
   const [showAdminMenuLink, setShowAdminMenuLink] = useState<boolean | null>(
     null,
   );
+  /** 選択中の旅行の Firebase オーナー（旅行の削除はオーナーのみ） */
+  const [menuTripIsOwner, setMenuTripIsOwner] = useState(false);
+  const [deleteTripBusy, setDeleteTripBusy] = useState(false);
   /** メニュー内「招待」表示用（パスの旅行 = 選択中の旅行） */
   const [groupForMenu, setGroupForMenu] = useState<GroupDoc | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
@@ -49,6 +57,7 @@ export function AppHeader() {
   useEffect(() => {
     if (!user || !currentGroupId) {
       setShowAdminMenuLink(false);
+      setMenuTripIsOwner(false);
       setGroupForMenu(null);
       return;
     }
@@ -64,6 +73,7 @@ export function AppHeader() {
         setGroupForMenu(g);
         if (!g) {
           setShowAdminMenuLink(false);
+          setMenuTripIsOwner(false);
           return;
         }
         const ok =
@@ -71,9 +81,11 @@ export function AppHeader() {
           m?.role === "admin" ||
           m?.role === "owner";
         setShowAdminMenuLink(ok);
+        setMenuTripIsOwner(g.ownerId === user.uid);
       } catch {
         if (!cancelled) {
           setShowAdminMenuLink(false);
+          setMenuTripIsOwner(false);
           setGroupForMenu(null);
         }
       }
@@ -110,6 +122,28 @@ export function AppHeader() {
       window.setTimeout(() => setInviteCopied(false), 2000);
     } catch {
       // ignore
+    }
+  }
+
+  async function handleDeleteTripFromMenu() {
+    if (!user || !currentGroupId) return;
+    if (
+      !window.confirm(
+        "旅行を削除します。メンバー全員がアクセスできなくなります。よろしいですか？",
+      )
+    ) {
+      return;
+    }
+    setDeleteTripBusy(true);
+    setMenuOpen(false);
+    try {
+      await deleteGroup(user.uid, currentGroupId);
+      router.push("/groups");
+      router.refresh();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "削除に失敗しました");
+    } finally {
+      setDeleteTripBusy(false);
     }
   }
 
@@ -262,18 +296,39 @@ export function AppHeader() {
                         買い出しリスト
                       </Link>
                     ) : null}
-                    {/* 6. 管理者メニュー（オーナー・管理者のみ） */}
+                    {/* 6. オーナー・管理者（メンバー管理・旅行の削除など） */}
                     {currentGroupId && showAdminMenuLink === true ? (
-                      <Link
-                        href={`/groups/${currentGroupId}/admin`}
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
-                          <path fillRule="evenodd" d="M8.34 1.804A1 1 0 0 1 9.32 1h1.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l.962.962a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v1.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-.962.962a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H9.32a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-.962-.962a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 10.68V9.32a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l.962-.962A1 1 0 0 1 5.38 3.03l1.25.834a6.957 6.957 0 0 1 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clipRule="evenodd" />
-                        </svg>
-                        <span className="min-w-0 flex-1 leading-snug">管理者メニュー</span>
-                        <VisibilityBadge kind="admin" className="shrink-0" />
-                      </Link>
+                      <div className="border-t border-zinc-100 py-2 dark:border-zinc-800">
+                        <p className="px-4 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                          オーナー・管理者
+                        </p>
+                        <Link
+                          href={`/groups/${currentGroupId}/admin`}
+                          className="flex items-center gap-2 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
+                            <path fillRule="evenodd" d="M8.34 1.804A1 1 0 0 1 9.32 1h1.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l.962.962a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v1.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-.962.962a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H9.32a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-.962-.962a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 10.68V9.32a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l.962-.962A1 1 0 0 1 5.38 3.03l1.25.834a6.957 6.957 0 0 1 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clipRule="evenodd" />
+                          </svg>
+                          <span className="min-w-0 flex-1 leading-snug">管理ページ</span>
+                          <VisibilityBadge kind="admin" className="shrink-0" />
+                        </Link>
+                        {menuTripIsOwner ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteTripFromMenu()}
+                            disabled={deleteTripBusy}
+                            className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-red-700 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-red-500">
+                              <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
+                            </svg>
+                            <span className="min-w-0 flex-1 leading-snug">
+                              {deleteTripBusy ? "削除中…" : "旅行を削除"}
+                            </span>
+                            <VisibilityBadge kind="owner" className="shrink-0" />
+                          </button>
+                        ) : null}
+                      </div>
                     ) : null}
                     {/* 7. 公式ポータル */}
                     <Link

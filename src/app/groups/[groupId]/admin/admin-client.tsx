@@ -3,7 +3,12 @@
 import { useAuth } from "@/contexts/auth-context";
 import { useGroupRouteId } from "@/contexts/group-route-context";
 import { getFirebaseAuth } from "@/lib/firebase/client";
-import { getGroup, listMembers, removeMember } from "@/lib/firestore/groups";
+import {
+  deleteGroup,
+  getGroup,
+  listMembers,
+  removeMember,
+} from "@/lib/firestore/groups";
 import type { GroupDoc, GroupRole, MemberDoc } from "@/types/group";
 import type { NotifyStatusResponse } from "@/app/api/admin/notify-status/route";
 import { Timestamp } from "firebase/firestore";
@@ -67,6 +72,28 @@ export function AdminClient() {
   const [unauthorized, setUnauthorized] = useState(false);
   const [deviceCounts, setDeviceCounts] = useState<Record<string, number> | null>(null);
   const [removeBusyUid, setRemoveBusyUid] = useState<string | null>(null);
+  const [deleteTripBusy, setDeleteTripBusy] = useState(false);
+
+  async function handleDeleteTrip() {
+    if (!user || !group) return;
+    if (
+      !window.confirm(
+        "旅行を削除します。メンバー全員がアクセスできなくなります。よろしいですか？",
+      )
+    ) {
+      return;
+    }
+    setDeleteTripBusy(true);
+    try {
+      await deleteGroup(user.uid, groupId);
+      router.push("/groups");
+      router.refresh();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "削除に失敗しました");
+    } finally {
+      setDeleteTripBusy(false);
+    }
+  }
 
   async function handleRemoveMember(targetUid: string) {
     if (!user || !group) return;
@@ -147,7 +174,7 @@ export function AdminClient() {
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          管理者メニュー
+          オーナー・管理者メニュー
         </h1>
         <VisibilityBadge
           kind="admin"
@@ -155,7 +182,7 @@ export function AdminClient() {
         />
       </div>
       <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-        {group?.name} のメンバー状況を確認できます。
+        {group?.name} のメンバー・通知の確認、およびオーナーによる旅行の削除ができます。
       </p>
 
       {/* Push通知サマリー */}
@@ -249,6 +276,28 @@ export function AdminClient() {
           オーナーのみ「外す」でメンバーを旅行から除外できます。
         </p>
       </section>
+
+      {group && user && group.ownerId === user.uid ? (
+        <section className="mt-10 border-t border-red-200/80 pt-8 dark:border-red-900/50">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-red-900 dark:text-red-200">
+              旅行の削除（オーナーのみ）
+            </h2>
+            <VisibilityBadge kind="owner" />
+          </div>
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+            メンバー・日程・旅程・トピックなど、この旅行に紐づくデータはすべて削除されます。元に戻せません。
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleDeleteTrip()}
+            disabled={deleteTripBusy}
+            className="mt-4 rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-800 hover:bg-red-100 disabled:opacity-50 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200 dark:hover:bg-red-950/60"
+          >
+            {deleteTripBusy ? "削除中…" : "この旅行を削除する"}
+          </button>
+        </section>
+      ) : null}
     </div>
   );
 }

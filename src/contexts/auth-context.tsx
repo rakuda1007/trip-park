@@ -36,21 +36,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let unsub: (() => void) | undefined;
-    let resolved = false;
-
-    // Firebase Auth が応答しない場合のフォールバック（5秒でタイムアウト）
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        setLoading(false);
-      }
-    }, 5000);
 
     try {
       const auth = getFirebaseAuth();
       unsub = onAuthStateChanged(auth, (u) => {
-        if (!resolved) resolved = true;
-        clearTimeout(timeout);
         setUser(u);
         // 画面遷移を auth 文書作成の完了待ちでブロックしない
         setLoading(false);
@@ -61,13 +50,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       });
     } catch {
-      clearTimeout(timeout);
       setAuthUnavailable(true);
       setLoading(false);
     }
 
     return () => {
-      clearTimeout(timeout);
       unsub?.();
     };
   }, []);

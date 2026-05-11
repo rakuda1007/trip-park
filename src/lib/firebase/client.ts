@@ -1,12 +1,19 @@
 import "client-only";
 
 import { type FirebaseApp, getApps, initializeApp } from "firebase/app";
-import { type Auth, getAuth } from "firebase/auth";
+import {
+  type Auth,
+  browserLocalPersistence,
+  getAuth,
+  indexedDBLocalPersistence,
+  initializeAuth,
+} from "firebase/auth";
 import { type Firestore, getFirestore } from "firebase/firestore";
 import { type FirebaseStorage, getStorage } from "firebase/storage";
 import { getFirebasePublicConfig } from "./env";
 
 let app: FirebaseApp | undefined;
+let auth: Auth | undefined;
 
 /**
  * ブラウザ専用。Server Component から import しないこと。
@@ -26,8 +33,21 @@ export function getFirebaseApp(): FirebaseApp {
   return app ?? getApps()[0]!;
 }
 
+/**
+ * PWA／スタンドアロンでもセッションが読み取りやすいよう IndexedDB を優先し、
+ * 失敗時は従来のローカル永続化にフォールバックする。
+ */
 export function getFirebaseAuth(): Auth {
-  return getAuth(getFirebaseApp());
+  const firebaseApp = getFirebaseApp();
+  if (auth) return auth;
+  try {
+    auth = initializeAuth(firebaseApp, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+    });
+  } catch {
+    auth = getAuth(firebaseApp);
+  }
+  return auth;
 }
 
 export function getFirebaseFirestore(): Firestore {

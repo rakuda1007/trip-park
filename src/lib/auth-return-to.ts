@@ -11,3 +11,18 @@ export function safeInternalPath(raw: string | null | undefined): string | null 
   if (!t.startsWith("/") || t.startsWith("//")) return null;
   return t;
 }
+
+/**
+ * ログイン／登録直後の遷移先を決定し、sessionStorage に保存した returnTo を消費する。
+ * クエリの returnTo（検証済み）を優先し、なければ sessionStorage、なければ /dashboard。
+ */
+export function consumeAuthReturnToPath(returnToSafe: string | null): string {
+  const stored =
+    typeof window !== "undefined"
+      ? safeInternalPath(sessionStorage.getItem(AUTH_RETURN_TO_KEY))
+      : null;
+  if (typeof window !== "undefined") {
+    sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
+  }
+  return returnToSafe ?? stored ?? "/dashboard";
+}

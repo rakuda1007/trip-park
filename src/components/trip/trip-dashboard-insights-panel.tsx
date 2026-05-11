@@ -2,7 +2,6 @@
 
 import type { DashboardInsights } from "@/lib/trip-dashboard-insights";
 import Link from "next/link";
-import { useState } from "react";
 
 export function TripDashboardInsightsPanel({
   insights,
@@ -11,12 +10,9 @@ export function TripDashboardInsightsPanel({
   insights: DashboardInsights | null;
   allWorkflowComplete: boolean;
 }) {
-  /** 次のステップ・お願いで足りるため、進捗の詳細はデフォルト非表示 */
-  const [expanded, setExpanded] = useState(false);
-
   if (!insights) return null;
 
-  const { nextStepLine, nextStepLink, statusLines, personalTasks } = insights;
+  const { nextStepLine, nextStepLink, personalTasks } = insights;
   const hasPersonal = personalTasks.length > 0;
 
   return (
@@ -73,47 +69,6 @@ export function TripDashboardInsightsPanel({
           </p>
         ) : null}
       </div>
-
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-2 dark:border-zinc-800">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          {expanded ? "進捗の詳細" : "進捗の詳細を表示"}
-        </span>
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="rounded-md px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          aria-expanded={expanded}
-        >
-          {expanded ? "閉じる" : "開く"}
-        </button>
-      </div>
-
-      {expanded ? (
-        <div className="space-y-4 px-4 py-4">
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-              この旅行のいま（自動）
-            </h3>
-            <ul className="mt-2 list-inside list-disc space-y-1.5 text-sm text-zinc-700 dark:text-zinc-300">
-              {statusLines.map((line, i) => (
-                <li key={i} className="leading-relaxed">
-                  {line}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {!hasPersonal ? (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              あなたの未対応の投票は、いまは検出されていません。
-            </p>
-          ) : (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              未対応は上の「あなたへのお願い」から開けます。
-            </p>
-          )}
-        </div>
-      ) : null}
     </section>
   );
 }
