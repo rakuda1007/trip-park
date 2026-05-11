@@ -1383,35 +1383,39 @@ export function GroupDetailClient() {
           </div>
           <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
+              <span className="me-2.5 shrink-0 text-sm font-extrabold uppercase tracking-[0.08em] text-zinc-800 dark:text-zinc-100">
                 表示
               </span>
               <div
-                className="inline-flex rounded-lg border border-zinc-300/90 bg-white p-0.5 shadow-sm dark:border-zinc-600 dark:bg-zinc-900/90"
+                className="inline-flex items-stretch overflow-hidden rounded-lg border border-zinc-300/90 bg-white shadow-sm dark:border-zinc-600 dark:bg-zinc-900"
                 role="group"
                 aria-label="掲示板の表示切替"
               >
                 <button
                   type="button"
                   onClick={() => setTopicView("all")}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                  className={`px-3 py-1.5 text-xs font-semibold transition ${
                     topicView === "all"
-                      ? "bg-emerald-700 text-white shadow-sm dark:bg-emerald-600"
-                      : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      ? "bg-emerald-700 text-white dark:bg-emerald-600"
+                      : "text-zinc-700 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800/80"
                   }`}
                 >
-                  すべて表示
+                  すべて
                 </button>
+                <span
+                  className="w-px shrink-0 self-stretch bg-zinc-200 dark:bg-zinc-600"
+                  aria-hidden
+                />
                 <button
                   type="button"
                   onClick={() => setTopicView("vote")}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                  className={`px-3 py-1.5 text-xs font-semibold transition ${
                     topicView === "vote"
-                      ? "bg-emerald-700 text-white shadow-sm dark:bg-emerald-600"
-                      : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      ? "bg-emerald-700 text-white dark:bg-emerald-600"
+                      : "text-zinc-700 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800/80"
                   }`}
                 >
-                  決定系の表示
+                  決定系のみ
                 </button>
               </div>
               {(topicView !== "default" || spotlightTopicId) && (
@@ -1429,7 +1433,7 @@ export function GroupDetailClient() {
             </div>
             {quickPickTopics.length > 0 ? (
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 border-t border-emerald-200/60 pt-2.5 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0 dark:border-emerald-800/40">
-                <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-800 dark:text-emerald-300/90">
+                <span className="me-2 shrink-0 text-sm font-extrabold uppercase tracking-[0.06em] text-emerald-950 dark:text-emerald-50">
                   話題
                 </span>
                 {quickPickTopics.map((row) => {
