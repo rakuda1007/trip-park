@@ -20,9 +20,9 @@ export function TripDashboardInsightsPanel({
   const hasPersonal = personalTasks.length > 0;
 
   return (
-    <section className="mt-4 rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/50">
+    <section className="mt-2 rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/50">
       {hasPersonal ? (
-        <div className="border-b border-amber-200/80 bg-gradient-to-b from-amber-50 to-amber-50/60 px-4 py-4 dark:border-amber-900/40 dark:from-amber-950/35 dark:to-amber-950/20">
+        <div className="border-b border-amber-200/80 bg-gradient-to-b from-amber-50 to-amber-50/60 px-4 py-3 dark:border-amber-900/40 dark:from-amber-950/35 dark:to-amber-950/20">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200">
             あなたへのお願い（タップで移動）
           </h3>
@@ -48,7 +48,7 @@ export function TripDashboardInsightsPanel({
       ) : null}
 
       <div
-        className={`border-b border-zinc-100 px-4 py-3 dark:border-zinc-800 ${
+        className={`border-b border-zinc-100 px-4 py-2.5 dark:border-zinc-800 ${
           allWorkflowComplete
             ? "bg-emerald-50/80 dark:bg-emerald-950/25"
             : "bg-sky-50/80 dark:bg-sky-950/20"
@@ -58,7 +58,7 @@ export function TripDashboardInsightsPanel({
           {nextStepLine}
         </p>
         {nextStepLink ? (
-          <div className="mt-3">
+          <div className="mt-2">
             <Link
               href={nextStepLink.href}
               className="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"

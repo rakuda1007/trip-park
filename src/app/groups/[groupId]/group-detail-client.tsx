@@ -17,11 +17,13 @@ import { listDestinationPolls, type PollItem } from "@/lib/firestore/destination
 import { listTripRoutes } from "@/lib/firestore/trip";
 import {
   computeReplyReadCounts,
+  computeTopicOpenReadCount,
   createBulletinReply,
   createBulletinTopic,
   listBulletinReplies,
   listBulletinTopicsWithReplyCounts,
   listTopicReplyReadProgress,
+  setMyTopicReplyReadProgress,
 } from "@/lib/firestore/bulletin";
 import { sendNotification } from "@/lib/notify";
 import { saveLastTripId } from "@/lib/last-trip";
@@ -67,7 +69,17 @@ import { Timestamp } from "firebase/firestore";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 
 function formatTs(v: unknown): string {
   if (!v) return "—";
@@ -99,6 +111,32 @@ function formatDateRange(start: string, end?: string | null): string {
 function tsToMs(v: unknown): number {
   if (v instanceof Timestamp) return v.toMillis();
   return 0;
+}
+
+function isUpdatedTopic(data: BulletinTopicDoc): boolean {
+  const u = data.updatedAt;
+  const c = data.createdAt;
+  if (!u || !c) return false;
+  if (u instanceof Timestamp && c instanceof Timestamp) {
+    return u.seconds !== c.seconds || u.nanoseconds !== c.nanoseconds;
+  }
+  return u !== c;
+}
+
+/** 自分の lastRead の直後＝未読先頭の返信インデックス。未読なしなら null */
+function indexOfFirstUnreadReply(
+  replies: { id: string }[],
+  readerUid: string | undefined,
+  reads: { userId: string; lastReadReplyId: string | null }[],
+): number | null {
+  if (!readerUid || replies.length === 0) return null;
+  const mine = reads.find((r) => r.userId === readerUid);
+  const lastId = mine?.lastReadReplyId ?? null;
+  if (lastId == null) return 0;
+  const idx = replies.findIndex((r) => r.id === lastId);
+  if (idx === -1) return 0;
+  const next = idx + 1;
+  return next < replies.length ? next : null;
 }
 
 type DashboardExtrasState = {
@@ -136,6 +174,10 @@ export function GroupDetailClient() {
 
   const newTopicBodyRef = useRef<HTMLTextAreaElement>(null);
   const spotlightReplyComposerRef = useRef<HTMLTextAreaElement>(null);
+  /** ダッシュボード直近1件トピックのスレッド（末尾＝最新へスクロール） */
+  const spotlightThreadScrollRef = useRef<HTMLDivElement>(null);
+  /** 自動スクロール直後は既読更新を抑制（誤検知防止） */
+  const spotlightThreadMarkReadLockUntilRef = useRef(0);
   const bulletinImgDashTopicId = useId();
   const bulletinImgSpotlightReplyId = useId();
 
@@ -196,6 +238,15 @@ export function GroupDetailClient() {
   >([]);
   /** ダッシュボード「直近1件」表示内の返信下書き */
   const [spotlightReplyDraft, setSpotlightReplyDraft] = useState("");
+
+  const topicRepliesByIdRef = useRef<
+    Record<string, { id: string; data: BulletinReplyDoc }[]>
+  >({});
+  const spotlightReplyReadsRef = useRef<
+    { userId: string; lastReadReplyId: string | null }[]
+  >([]);
+  topicRepliesByIdRef.current = topicRepliesById;
+  spotlightReplyReadsRef.current = spotlightReplyReads;
 
   // 旅行ページを開いたら直近アクセス旅行として記録
   useEffect(() => {
@@ -549,6 +600,183 @@ export function GroupDetailClient() {
     setSpotlightReplyDraft("");
   }, [spotlightRow?.id]);
 
+  const scrollSpotlightThreadToBottom = useCallback(() => {
+    const el = spotlightThreadScrollRef.current;
+    if (!el) return;
+    spotlightThreadMarkReadLockUntilRef.current = Date.now() + 220;
+    el.scrollTop = el.scrollHeight;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (topicView !== "default" || !spotlightRow?.id) return;
+    scrollSpotlightThreadToBottom();
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollSpotlightThreadToBottom();
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [
+    topicView,
+    spotlightRow?.id,
+    spotlightRepliesLen,
+    scrollSpotlightThreadToBottom,
+  ]);
+
+  useEffect(() => {
+    if (topicView !== "default" || !spotlightRow?.id) return;
+    const el = spotlightThreadScrollRef.current;
+    if (!el) return;
+    const inner = el.firstElementChild as HTMLElement | null;
+    if (!inner) return;
+    const ro = new ResizeObserver(() => {
+      scrollSpotlightThreadToBottom();
+    });
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, [
+    topicView,
+    spotlightRow?.id,
+    spotlightRepliesLen,
+    scrollSpotlightThreadToBottom,
+  ]);
+
+  /** ダッシュボード内スクロール・表示範囲に応じて返信既読位置を更新 */
+  useEffect(() => {
+    if (topicView !== "default" || !groupId || !user?.uid || !spotlightRow?.id) {
+      return;
+    }
+    const root = spotlightThreadScrollRef.current;
+    if (!root) return;
+
+    let cancelled = false;
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    let maxReplyIdx = -1;
+
+    const replies = () =>
+      topicRepliesByIdRef.current[spotlightRow.id] ?? [];
+
+    const flushReadProgress = async () => {
+      flushTimer = null;
+      if (cancelled) return;
+      const list = replies();
+      if (list.length === 0 || maxReplyIdx < 0) return;
+      const targetId = list[maxReplyIdx]!.id;
+      const mine = spotlightReplyReadsRef.current.find((r) => r.userId === user.uid);
+      const prevId = mine?.lastReadReplyId ?? null;
+      const prevIdx = prevId
+        ? list.findIndex((r) => r.id === prevId)
+        : -1;
+      if (maxReplyIdx <= prevIdx) return;
+      try {
+        await setMyTopicReplyReadProgress(
+          groupId,
+          spotlightRow.id,
+          user.uid,
+          targetId,
+        );
+        if (cancelled) return;
+        setSpotlightReplyReads(
+          await listTopicReplyReadProgress(groupId, spotlightRow.id),
+        );
+      } catch {
+        // ignore
+      }
+    };
+
+    const scheduleFlush = () => {
+      if (flushTimer != null) clearTimeout(flushTimer);
+      flushTimer = setTimeout(() => void flushReadProgress(), 380);
+    };
+
+    const bumpMaxFromReplyId = (replyId: string | undefined) => {
+      if (!replyId) return;
+      const list = replies();
+      const idx = list.findIndex((r) => r.id === replyId);
+      if (idx < 0) return;
+      if (idx > maxReplyIdx) {
+        maxReplyIdx = idx;
+        scheduleFlush();
+      }
+    };
+
+    const onScrollOrResize = () => {
+      if (Date.now() < spotlightThreadMarkReadLockUntilRef.current) return;
+      const list = replies();
+      if (list.length === 0) return;
+      const { scrollTop, scrollHeight, clientHeight } = root;
+      const nearBottom = scrollTop + clientHeight >= scrollHeight - 48;
+      const noOverflow = scrollHeight <= clientHeight + 2;
+      if (nearBottom || noOverflow) {
+        maxReplyIdx = list.length - 1;
+        scheduleFlush();
+      }
+    };
+
+    let io: IntersectionObserver | null = null;
+    let attachRetryTimer: number | null = null;
+    const attachIo = () => {
+      if (attachRetryTimer != null) {
+        clearTimeout(attachRetryTimer);
+        attachRetryTimer = null;
+      }
+      io?.disconnect();
+      maxReplyIdx = -1;
+      const list = replies();
+      if (list.length === 0) {
+        onScrollOrResize();
+        return;
+      }
+      const nodes = root.querySelectorAll<HTMLElement>("[data-spotlight-reply]");
+      if (nodes.length === 0) {
+        attachRetryTimer = window.setTimeout(() => {
+          attachRetryTimer = null;
+          if (!cancelled) attachIo();
+        }, 100);
+        onScrollOrResize();
+        return;
+      }
+      io = new IntersectionObserver(
+        (entries) => {
+          if (Date.now() < spotlightThreadMarkReadLockUntilRef.current) return;
+          for (const e of entries) {
+            if (!e.isIntersecting || !(e.target instanceof HTMLElement)) continue;
+            bumpMaxFromReplyId(
+              e.target.getAttribute("data-spotlight-reply") ?? undefined,
+            );
+          }
+        },
+        {
+          root,
+          rootMargin: "0px 0px -8% 0px",
+          threshold: [0, 0.15, 0.35, 0.6, 1],
+        },
+      );
+      nodes.forEach((node) => io!.observe(node));
+      onScrollOrResize();
+    };
+
+    root.addEventListener("scroll", onScrollOrResize, { passive: true });
+    const ro = new ResizeObserver(() => onScrollOrResize());
+    ro.observe(root);
+
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(attachIo);
+    });
+
+    return () => {
+      cancelled = true;
+      if (attachRetryTimer != null) clearTimeout(attachRetryTimer);
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      root.removeEventListener("scroll", onScrollOrResize);
+      ro.disconnect();
+      io?.disconnect();
+      if (flushTimer != null) clearTimeout(flushTimer);
+    };
+  }, [topicView, groupId, user, spotlightRow?.id, spotlightRepliesLen]);
+
   async function handleSpotlightDashboardReply() {
     if (!user || !groupId || !spotlightRow) return;
     const body = spotlightReplyDraft.trim();
@@ -556,13 +784,23 @@ export function GroupDetailClient() {
     setBusy("dash-spotlight-reply");
     setError(null);
     try {
-      await createBulletinReply(
+      const newReplyId = await createBulletinReply(
         groupId,
         spotlightRow.id,
         user.uid,
         user.displayName,
         body,
       );
+      try {
+        await setMyTopicReplyReadProgress(
+          groupId,
+          spotlightRow.id,
+          user.uid,
+          newReplyId,
+        );
+      } catch {
+        // ignore
+      }
       setSpotlightReplyDraft("");
       const t = spotlightRow.data;
       if (t.authorUserId !== user.uid) {
@@ -788,6 +1026,19 @@ export function GroupDetailClient() {
             spotlightReplyReads,
           )
         : null;
+    const isDashSpotlightThread =
+      topicView === "default" && spotlightRow?.id === id;
+    const topicIsOwn = user?.uid === data.authorUserId;
+    const firstUnreadIdx =
+      isDashSpotlightThread && user?.uid
+        ? indexOfFirstUnreadReply(replies, user.uid, spotlightReplyReads)
+        : null;
+    const topicOpenReadCount = computeTopicOpenReadCount(
+      replies.map((r) => r.id),
+      topicView === "default" && spotlightRow?.id === id
+        ? spotlightReplyReads
+        : [],
+    );
     return (
       <li key={id}>
         <Link
@@ -817,105 +1068,206 @@ export function GroupDetailClient() {
                 トピック: {data.title}
               </h3>
 
-              <div className="mt-2 flex flex-col gap-2">
-                <div className="mr-auto max-w-[min(92%,22rem)]">
-                  {data.category === "nearby_map" ? (
-                    <div className="rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800">
-                      {data.body.trim() ? (
-                        <BulletinRichBody
-                          body={data.body}
-                          className="text-xs leading-relaxed text-zinc-900 dark:text-zinc-100"
-                        />
-                      ) : null}
-                      {(data.nearbyMapSpots ?? []).length > 0 ? (
-                        <ul className="mt-2 space-y-1.5">
-                          {(data.nearbyMapSpots ?? []).map((spot, idx) => (
-                            <li
-                              key={`${spot.name}-${idx}`}
-                              className="flex items-center justify-between gap-2 rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-1.5 dark:border-zinc-600 dark:bg-zinc-900/60"
-                            >
-                              <span className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-100">
-                                {spot.name}
-                              </span>
-                              <a
-                                href={spot.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="shrink-0 rounded border border-zinc-200 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-white dark:border-zinc-600 dark:text-zinc-300"
-                              >
-                                地図
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800">
-                      <BulletinRichBody
-                        body={data.body}
-                        className="text-xs leading-relaxed text-zinc-900 dark:text-zinc-100"
-                      />
-                    </div>
-                  )}
-                </div>
-                {replies.map((reply, rIdx) => {
-                  const replyIsOwn = user?.uid === reply.data.authorUserId;
-                  const rc = replyReadCountsForRow?.[rIdx] ?? 0;
-                  const replyLabel =
-                    reply.data.authorDisplayName ||
-                    reply.data.authorUserId.slice(0, 8) + "…";
-                  return (
-                    <div
-                      key={reply.id}
-                      className={
-                        replyIsOwn
-                          ? "flex flex-col items-end gap-0.5"
-                          : "flex flex-col items-start gap-0.5"
-                      }
-                    >
+              <div
+                ref={isDashSpotlightThread ? spotlightThreadScrollRef : undefined}
+                className={
+                  isDashSpotlightThread
+                    ? "touch-pan-y mt-2 max-h-[min(72vh,36rem)] min-h-[7rem] overflow-y-auto overflow-x-hidden overscroll-y-contain [-webkit-overflow-scrolling:touch]"
+                    : "mt-2"
+                }
+              >
+                <div className="flex flex-col gap-2">
+                  <div
+                    className={
+                      topicIsOwn
+                        ? "flex flex-col items-end gap-0.5"
+                        : "flex flex-col items-start gap-0.5"
+                    }
+                  >
+                    {data.category === "nearby_map" ? (
                       <div
                         className={
-                          replyIsOwn
-                            ? "max-w-[min(92%,22rem)] rounded-[17px] rounded-tr-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+                          topicIsOwn
+                            ? "max-w-[min(92%,22rem)] rounded-[17px] rounded-br-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+                            : "max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800"
+                        }
+                      >
+                        {data.body.trim() ? (
+                          <BulletinRichBody
+                            body={data.body}
+                            className="text-xs leading-relaxed"
+                            textClassName={
+                              topicIsOwn
+                                ? "text-white"
+                                : "text-zinc-900 dark:text-zinc-100"
+                            }
+                            imgClassName={
+                              topicIsOwn
+                                ? "border-white/30"
+                                : "border-zinc-200 dark:border-zinc-600"
+                            }
+                          />
+                        ) : null}
+                        {(data.nearbyMapSpots ?? []).length > 0 ? (
+                          <ul className="mt-2 space-y-1.5">
+                            {(data.nearbyMapSpots ?? []).map((spot, idx) => (
+                              <li
+                                key={`${spot.name}-${idx}`}
+                                className={`flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 ${
+                                  topicIsOwn
+                                    ? "border-white/25 bg-white/10"
+                                    : "border-zinc-200 bg-zinc-50/80 dark:border-zinc-600 dark:bg-zinc-900/60"
+                                }`}
+                              >
+                                <span
+                                  className={`truncate text-xs font-medium ${
+                                    topicIsOwn
+                                      ? "text-white"
+                                      : "text-zinc-800 dark:text-zinc-100"
+                                  }`}
+                                >
+                                  {spot.name}
+                                </span>
+                                <a
+                                  href={spot.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${
+                                    topicIsOwn
+                                      ? "border-white/35 text-white hover:bg-white/10"
+                                      : "border-zinc-200 text-zinc-600 hover:bg-white dark:border-zinc-600 dark:text-zinc-300"
+                                  }`}
+                                >
+                                  地図
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div
+                        className={
+                          topicIsOwn
+                            ? "max-w-[min(92%,22rem)] rounded-[17px] rounded-br-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
                             : "max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800"
                         }
                       >
                         <BulletinRichBody
-                          body={reply.data.body}
+                          body={data.body}
                           className="text-xs leading-relaxed"
                           textClassName={
-                            replyIsOwn
+                            topicIsOwn
                               ? "text-white"
                               : "text-zinc-900 dark:text-zinc-100"
                           }
                           imgClassName={
-                            replyIsOwn
+                            topicIsOwn
                               ? "border-white/30"
                               : "border-zinc-200 dark:border-zinc-600"
                           }
                         />
                       </div>
-                      {replyIsOwn ? (
-                        <>
-                          <p className="text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
-                            {formatTs(reply.data.createdAt)}
-                          </p>
-                          {rc > 0 ? (
-                            <p className="text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
-                              既読 {rc}
-                            </p>
+                    )}
+                    {topicIsOwn ? (
+                      <>
+                        <p className="px-0.5 text-right text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
+                          {formatTs(data.createdAt)}
+                          {isUpdatedTopic(data) ? (
+                            <span>（更新 {formatTs(data.updatedAt)}）</span>
                           ) : null}
-                        </>
-                      ) : (
-                        <p className="text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
-                          {replyLabel} · {formatTs(reply.data.createdAt)}
                         </p>
-                      )}
-                    </div>
-                  );
-                })}
+                        {topicOpenReadCount > 0 ? (
+                          <p className="px-0.5 text-right text-[10px] leading-tight text-zinc-400 dark:text-zinc-500">
+                            既読 {topicOpenReadCount}
+                          </p>
+                        ) : null}
+                      </>
+                    ) : (
+                      <p className="px-0.5 text-left text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
+                        {data.authorDisplayName ||
+                          data.authorUserId.slice(0, 8) + "…"}{" "}
+                        · {formatTs(data.createdAt)}
+                        {isUpdatedTopic(data) ? (
+                          <span>（更新 {formatTs(data.updatedAt)}）</span>
+                        ) : null}
+                      </p>
+                    )}
+                  </div>
+                  {replies.map((reply, rIdx) => {
+                    const replyIsOwn = user?.uid === reply.data.authorUserId;
+                    const rc = replyReadCountsForRow?.[rIdx] ?? 0;
+                    const replyLabel =
+                      reply.data.authorDisplayName ||
+                      reply.data.authorUserId.slice(0, 8) + "…";
+                    return (
+                      <Fragment key={reply.id}>
+                        {firstUnreadIdx !== null &&
+                        firstUnreadIdx === rIdx ? (
+                          <div
+                            className="flex justify-center py-1"
+                            role="separator"
+                            aria-label="未読メッセージの開始位置"
+                          >
+                            <span className="rounded-full bg-sky-100/95 px-3 py-1 text-[10px] font-semibold text-sky-900 shadow-sm ring-1 ring-sky-200/80 dark:bg-sky-950/50 dark:text-sky-100 dark:ring-sky-800/60">
+                              ここから未読
+                            </span>
+                          </div>
+                        ) : null}
+                        <div
+                          data-spotlight-reply={
+                            isDashSpotlightThread ? reply.id : undefined
+                          }
+                          className={
+                            replyIsOwn
+                              ? "flex flex-col items-end gap-0.5"
+                              : "flex flex-col items-start gap-0.5"
+                          }
+                        >
+                          <div
+                            className={
+                              replyIsOwn
+                                ? "max-w-[min(92%,22rem)] rounded-[17px] rounded-tr-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+                                : "max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800"
+                            }
+                          >
+                            <BulletinRichBody
+                              body={reply.data.body}
+                              className="text-xs leading-relaxed"
+                              textClassName={
+                                replyIsOwn
+                                  ? "text-white"
+                                  : "text-zinc-900 dark:text-zinc-100"
+                              }
+                              imgClassName={
+                                replyIsOwn
+                                  ? "border-white/30"
+                                  : "border-zinc-200 dark:border-zinc-600"
+                              }
+                            />
+                          </div>
+                          {replyIsOwn ? (
+                            <>
+                              <p className="text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
+                                {formatTs(reply.data.createdAt)}
+                              </p>
+                              {rc > 0 ? (
+                                <p className="text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
+                                  既読 {rc}
+                                </p>
+                              ) : null}
+                            </>
+                          ) : (
+                            <p className="text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
+                              {replyLabel} · {formatTs(reply.data.createdAt)}
+                            </p>
+                          )}
+                        </div>
+                      </Fragment>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
@@ -986,10 +1338,10 @@ export function GroupDetailClient() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
+    <div className="mx-auto w-full max-w-3xl flex-1 px-4 pb-10 pt-2 sm:pb-12 sm:pt-3">
       {/* 旅行名 + 日程バッジ */}
       {editingName && isOwner ? (
-        <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+        <div className="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
           <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
             旅行名
             <input
@@ -1021,7 +1373,7 @@ export function GroupDetailClient() {
           </div>
         </div>
       ) : (
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-1 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
             <Link
               href={`/groups/${groupId}`}
@@ -1102,7 +1454,7 @@ export function GroupDetailClient() {
           </div>
         </div>
       ) : (
-        <div className="mt-2 flex items-start gap-2">
+        <div className="mt-1.5 flex items-start gap-2">
           {group.description ? (
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
               {group.description}
@@ -1133,7 +1485,7 @@ export function GroupDetailClient() {
       />
 
       {memoryPhotoSectionUnlocked ? (
-      <section className="mt-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
+      <section className="mt-2 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
@@ -1331,7 +1683,7 @@ export function GroupDetailClient() {
 
       {/* ── トピック（工程完了後はこちらを主役に見えるよう強調） ── */}
       <section
-        className={`mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60 ${
+        className={`mt-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60 ${
           allTripWorkflowComplete
             ? "ring-1 ring-emerald-300/90 dark:ring-emerald-800/60"
             : ""
@@ -1587,7 +1939,7 @@ export function GroupDetailClient() {
         )}
 
         {/* 話題一覧 */}
-        <div className="bg-white pb-2 pt-1 dark:bg-transparent">
+        <div className="min-h-0 flex-1 bg-white pb-2 pt-1 dark:bg-transparent">
           {topics.length === 0 ? (
             <p className="px-4 pb-4 text-sm text-zinc-400 dark:text-zinc-500">
               まだ話題がありません。

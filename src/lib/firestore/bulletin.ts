@@ -458,6 +458,15 @@ export function computeReplyReadCounts(
   return counts;
 }
 
+/** トピック本文（開始投稿）の既読数。先頭返信まで既読位置が来ている人数と同一（返信が無いときは 0）。 */
+export function computeTopicOpenReadCount(
+  replyIdsOrdered: string[],
+  reads: { userId: string; lastReadReplyId: string | null }[],
+): number {
+  if (replyIdsOrdered.length === 0) return 0;
+  return computeReplyReadCounts(replyIdsOrdered, reads)[0] ?? 0;
+}
+
 export async function listTopicReplyReadProgress(
   groupId: string,
   topicId: string,

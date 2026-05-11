@@ -5,6 +5,7 @@ import { useGroupRouteId } from "@/contexts/group-route-context";
 import {
   clearAllRecipeVotes,
   computeReplyReadCounts,
+  computeTopicOpenReadCount,
   createBulletinReply,
   deleteBulletinReply,
   deleteBulletinTopic,
@@ -256,6 +257,15 @@ export function BulletinTopicClient() {
   const replyReadCounts = useMemo(
     () =>
       computeReplyReadCounts(
+        replies.map((x) => x.id),
+        replyReads,
+      ),
+    [replies, replyReads],
+  );
+
+  const topicOpenReadCount = useMemo(
+    () =>
+      computeTopicOpenReadCount(
         replies.map((x) => x.id),
         replyReads,
       ),
@@ -981,12 +991,19 @@ export function BulletinTopicClient() {
                 )}
               </div>
               {isTopicAuthor ? (
-                <p className="px-1 text-right text-[11px] text-zinc-500 dark:text-zinc-400">
-                  {formatTs(topic.createdAt)}
-                  {isUpdatedTopic(topic) ? (
-                    <span>（更新: {formatTs(topic.updatedAt)}）</span>
+                <>
+                  <p className="px-1 text-right text-[11px] text-zinc-500 dark:text-zinc-400">
+                    {formatTs(topic.createdAt)}
+                    {isUpdatedTopic(topic) ? (
+                      <span>（更新: {formatTs(topic.updatedAt)}）</span>
+                    ) : null}
+                  </p>
+                  {topicOpenReadCount > 0 ? (
+                    <p className="px-1 text-right text-[10px] leading-tight text-zinc-400 dark:text-zinc-500">
+                      既読 {topicOpenReadCount}
+                    </p>
                   ) : null}
-                </p>
+                </>
               ) : (
                 <p className="px-1 text-left text-[11px] text-zinc-500 dark:text-zinc-400">
                   {topic.authorDisplayName ||
@@ -2017,14 +2034,30 @@ export function BulletinTopicClient() {
                 className="mt-3 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200"
               />
             )}
-            <p className="mt-2 text-[11px] text-zinc-500">
-              {topic.authorDisplayName ||
-                topic.authorUserId.slice(0, 8) + "…"}{" "}
-              · {formatTs(topic.createdAt)}
-              {isUpdatedTopic(topic) ? (
-                <span>（更新: {formatTs(topic.updatedAt)}）</span>
-              ) : null}
-            </p>
+            {isTopicAuthor ? (
+              <>
+                <p className="mt-2 text-right text-[11px] text-zinc-500 dark:text-zinc-400">
+                  {formatTs(topic.createdAt)}
+                  {isUpdatedTopic(topic) ? (
+                    <span>（更新: {formatTs(topic.updatedAt)}）</span>
+                  ) : null}
+                </p>
+                {topicOpenReadCount > 0 ? (
+                  <p className="text-right text-[10px] leading-tight text-zinc-400 dark:text-zinc-500">
+                    既読 {topicOpenReadCount}
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p className="mt-2 text-[11px] text-zinc-500">
+                {topic.authorDisplayName ||
+                  topic.authorUserId.slice(0, 8) + "…"}{" "}
+                · {formatTs(topic.createdAt)}
+                {isUpdatedTopic(topic) ? (
+                  <span>（更新: {formatTs(topic.updatedAt)}）</span>
+                ) : null}
+              </p>
+            )}
 
             {user && isMember ? (
               <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50/80 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
