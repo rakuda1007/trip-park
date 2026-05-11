@@ -831,20 +831,13 @@ export function BulletinTopicClient() {
       <div
         className="fixed inset-x-0 bottom-0 z-20 flex flex-col overflow-hidden overscroll-y-contain bg-white pb-0 pt-2 dark:bg-zinc-950 sm:pt-3"
         style={{
-          top: "calc(env(safe-area-inset-top, 0px) + 3.5rem + 2.75rem)",
+          top: "calc(env(safe-area-inset-top, 0px) + 3.5rem)",
         }}
       >
         <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden px-4">
-        <Link
-          href={`/groups/${groupId}/bulletin`}
-          className="shrink-0 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-        >
-          ← トピック一覧
-        </Link>
-
         {error ? (
           <p
-            className="mt-2 shrink-0 text-sm text-red-600 dark:text-red-400"
+            className="shrink-0 pt-1 text-sm text-red-600 dark:text-red-400"
             role="alert"
           >
             {error}
@@ -852,7 +845,7 @@ export function BulletinTopicClient() {
         ) : null}
 
         <header
-          className={`mt-3 shrink-0 border-b px-3 py-2.5 sm:px-4 ${
+          className={`mt-2 shrink-0 border-b px-3 py-2.5 sm:px-4 ${
             detailAmberSurface
               ? "border-amber-300 bg-amber-50 shadow-sm ring-1 ring-amber-200/80 dark:border-amber-800/70 dark:bg-amber-950/90 dark:ring-amber-900/40"
               : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
@@ -1124,10 +1117,10 @@ export function BulletinTopicClient() {
                       ) : (
                         <>
                           <div
-                            className={`rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm ${
+                            className={`rounded-[17px] px-3 py-2 text-sm leading-relaxed shadow-sm ${
                               isOwn
-                                ? "rounded-br-sm bg-emerald-600 text-white dark:bg-emerald-700"
-                                : "rounded-bl-sm bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+                                ? "rounded-br-[5px] bg-[#06C755] text-white"
+                                : "rounded-bl-[5px] border border-zinc-200/90 bg-white text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
                             }`}
                           >
                             <BulletinRichBody
@@ -1208,7 +1201,7 @@ export function BulletinTopicClient() {
                 onChange={(e) => setNewReplyBody(e.target.value)}
                 rows={1}
                 disabled={busy !== null}
-                className="min-h-[42px] min-w-0 flex-1 resize-none rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+                className="min-h-[42px] min-w-0 flex-1 resize-none rounded-[18px] border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#06C755] focus:outline-none focus:ring-1 focus:ring-[#06C755]/40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
                 placeholder="メッセージ…（画像は貼り付け・ファイル可）"
                 onPaste={(e) =>
                   void pasteBulletinImage(e, newReplyBody, setNewReplyBody, true)
@@ -1240,7 +1233,7 @@ export function BulletinTopicClient() {
                 type="button"
                 onClick={handleCreateReply}
                 disabled={busy !== null || !newReplyBody.trim()}
-                className="shrink-0 rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-40 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                className="shrink-0 rounded-full bg-[#06C755] px-4 py-2 text-sm font-medium text-white hover:bg-[#05b34c] disabled:opacity-40"
               >
                 {busy === "reply" ? "…" : "送信"}
               </button>
@@ -1254,21 +1247,14 @@ export function BulletinTopicClient() {
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
-      <Link
-        href={`/groups/${groupId}/bulletin`}
-        className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-      >
-        ← トピック一覧
-      </Link>
-
       {error ? (
-        <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
+        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
           {error}
         </p>
       ) : null}
 
       <article
-        className={`mt-6 rounded-xl border p-3 sm:p-4 ${
+        className={`mt-4 rounded-xl border p-3 sm:p-4 ${
           detailAmberSurface
             ? "border-amber-300/90 bg-amber-50 shadow-sm ring-1 ring-amber-200/80 dark:border-amber-800/70 dark:bg-amber-950/35 dark:ring-amber-900/40"
             : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
@@ -2142,10 +2128,10 @@ export function BulletinTopicClient() {
                   ) : (
                     <>
                       <div
-                        className={`rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm ${
+                        className={`rounded-[17px] px-3 py-2 text-sm leading-relaxed shadow-sm ${
                           isOwn
-                            ? "rounded-br-sm bg-emerald-600 text-white dark:bg-emerald-700"
-                            : "rounded-bl-sm bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+                            ? "rounded-br-[5px] bg-[#06C755] text-white"
+                            : "rounded-bl-[5px] border border-zinc-200/90 bg-white text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
                         }`}
                       >
                         <BulletinRichBody
@@ -2217,7 +2203,7 @@ export function BulletinTopicClient() {
               value={newReplyBody}
               onChange={(e) => setNewReplyBody(e.target.value)}
               rows={1}
-              className="min-h-[42px] flex-1 resize-none rounded-2xl border border-zinc-300 bg-white px-3 py-2.5 text-sm leading-snug placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+              className="min-h-[42px] flex-1 resize-none rounded-[18px] border border-zinc-300 bg-white px-3 py-2.5 text-sm leading-snug placeholder:text-zinc-400 focus:border-[#06C755] focus:outline-none focus:ring-1 focus:ring-[#06C755]/40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
               placeholder="メッセージを入力…（画像は貼り付け・ファイル可）"
               onPaste={(e) =>
                 void pasteBulletinImage(e, newReplyBody, setNewReplyBody, true)
@@ -2247,7 +2233,7 @@ export function BulletinTopicClient() {
               type="button"
               onClick={handleCreateReply}
               disabled={busy !== null || !newReplyBody.trim()}
-              className="shrink-0 rounded-full bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-40 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+              className="shrink-0 rounded-full bg-[#06C755] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#05b34c] disabled:opacity-40"
             >
               {busy === "reply" ? "…" : "送信"}
             </button>

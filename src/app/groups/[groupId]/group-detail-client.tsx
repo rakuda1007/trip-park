@@ -17,6 +17,7 @@ import { listDestinationPolls, type PollItem } from "@/lib/firestore/destination
 import { listTripRoutes } from "@/lib/firestore/trip";
 import {
   createBulletinTopic,
+  listBulletinReplies,
   listBulletinTopicsWithReplyCounts,
 } from "@/lib/firestore/bulletin";
 import { sendNotification } from "@/lib/notify";
@@ -52,6 +53,7 @@ import {
   BULLETIN_TOPIC_TAG_LABELS,
   type BulletinCategory,
   type BulletinImportance,
+  type BulletinReplyDoc,
   type BulletinTopicDoc,
   type BulletinTopicTag,
   type RecipePollData,
@@ -90,17 +92,13 @@ function formatDateRange(start: string, end?: string | null): string {
   return `${sy}年${sm}月${sd}日 〜 ${ey}年${em}月${ed}日`;
 }
 
-/** トピック一覧・ダッシュボード共通の本文プレビュー */
-function excerptBulletinBody(data: BulletinTopicDoc, max = 120): string {
-  if (data.category === "recipe_vote" && data.recipePoll?.candidates?.length) {
-    return `候補 ${data.recipePoll.candidates.length}件のレシピ投票`;
-  }
-  const t = data.body
-    .replace(/!\[[^\]]*\]\([^)]+\)/g, "[画像]")
-    .trim()
-    .replace(/\s+/g, " ");
-  if (t.length <= max) return t;
-  return t.slice(0, max) + "…";
+function textFromBulletinBody(body: string): string {
+  return body.replace(/!\[[^\]]*\]\([^)]+\)/g, "[画像]").trim();
+}
+
+function tsToMs(v: unknown): number {
+  if (v instanceof Timestamp) return v.toMillis();
+  return 0;
 }
 
 type DashboardExtrasState = {
@@ -181,7 +179,15 @@ export function GroupDetailClient() {
     useState<DashboardExtrasState | null>(null);
   /** ダッシュボード文言（オーナー／管理者向け）用 */
   const [myMember, setMyMember] = useState<MemberDoc | null>(null);
-  const [topicFilter, setTopicFilter] = useState<"all" | "vote">("all");
+  /** default: 直近アクティブ1件のみ / all: 全件 / vote: 決定系のみ */
+  const [topicView, setTopicView] = useState<"default" | "all" | "vote">(
+    "default",
+  );
+  /** default 表示で見せるトピック（null なら更新日時が最新の1件を自動選択） */
+  const [spotlightTopicId, setSpotlightTopicId] = useState<string | null>(null);
+  const [topicRepliesById, setTopicRepliesById] = useState<
+    Record<string, { id: string; data: BulletinReplyDoc }[]>
+  >({});
 
   // 旅行ページを開いたら直近アクセス旅行として記録
   useEffect(() => {
@@ -432,10 +438,81 @@ export function GroupDetailClient() {
     () => topics.filter((x) => isVoteOrDecisionTopic(x.data)),
     [topics],
   );
-  const otherTopics = useMemo(
-    () => topics.filter((x) => !isVoteOrDecisionTopic(x.data)),
-    [topics],
+
+  const sortByActivityDesc = useCallback(
+    <T extends { data: BulletinTopicDoc }>(rows: T[]) =>
+      [...rows].sort(
+        (a, b) => tsToMs(b.data.updatedAt) - tsToMs(a.data.updatedAt),
+      ),
+    [],
   );
+
+  const allSortedByActivity = useMemo(
+    () => sortByActivityDesc(topics),
+    [topics, sortByActivityDesc],
+  );
+
+  const defaultSpotlightRow = useMemo(
+    () => allSortedByActivity[0] ?? null,
+    [allSortedByActivity],
+  );
+
+  const spotlightRow = useMemo(() => {
+    if (topicView !== "default") return null;
+    if (spotlightTopicId) {
+      return (
+        topics.find((t) => t.id === spotlightTopicId) ?? defaultSpotlightRow
+      );
+    }
+    return defaultSpotlightRow;
+  }, [topicView, spotlightTopicId, topics, defaultSpotlightRow]);
+
+  const visibleTopicRows = useMemo(() => {
+    if (topicView === "default") {
+      return spotlightRow ? [spotlightRow] : [];
+    }
+    if (topicView === "all") return allSortedByActivity;
+    return sortByActivityDesc(voteTopics);
+  }, [
+    topicView,
+    spotlightRow,
+    allSortedByActivity,
+    voteTopics,
+    sortByActivityDesc,
+  ]);
+
+  /** ボタン横: 直近アクティブのうち、いま表示中の1件以外から最大3件 */
+  const quickPickTopics = useMemo(() => {
+    const sid = spotlightRow?.id ?? allSortedByActivity[0]?.id;
+    return allSortedByActivity.filter((t) => t.id !== sid).slice(0, 3);
+  }, [allSortedByActivity, spotlightRow]);
+
+  useEffect(() => {
+    if (!groupId) return;
+    const ids = visibleTopicRows.map((row) => row.id);
+    if (ids.length === 0) {
+      setTopicRepliesById({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const replies = await listBulletinReplies(groupId, id);
+            return [id, replies] as const;
+          } catch {
+            return [id, []] as const;
+          }
+        }),
+      );
+      if (cancelled) return;
+      setTopicRepliesById(Object.fromEntries(entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, visibleTopicRows]);
 
   function startEditName() {
     if (!group) return;
@@ -621,6 +698,12 @@ export function GroupDetailClient() {
     const isImportant = data.importance === "important";
     const showImportant = isImportant || data.pinned;
     const tags = normalizeBulletinTopicTags(data);
+    const replies = topicRepliesById[id] ?? [];
+    const rootBody = textFromBulletinBody(data.body);
+    const latestTs =
+      replies.length > 0
+        ? replies[replies.length - 1]?.data.createdAt
+        : data.createdAt;
     return (
       <li key={id}>
         <Link
@@ -640,12 +723,26 @@ export function GroupDetailClient() {
                   📌 ピン留め
                 </p>
               ) : null}
-              <h3 className="mt-0.5 text-sm font-medium leading-snug text-zinc-700 dark:text-zinc-300">
-                {data.title}
+              <h3 className="mt-0.5 text-sm font-semibold leading-snug text-zinc-700 dark:text-zinc-200">
+                トピック: {data.title}
               </h3>
-              <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
-                {excerptBulletinBody(data)}
-              </p>
+
+              <div className="mt-2 flex flex-col gap-1.5">
+                {rootBody ? (
+                  <div className="mr-auto max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 text-xs leading-relaxed text-zinc-900 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100">
+                    {rootBody}
+                  </div>
+                ) : null}
+                {replies.map((reply) => (
+                  <div
+                    key={reply.id}
+                    className="ml-auto max-w-[min(92%,22rem)] rounded-[17px] rounded-tr-[5px] bg-[#06C755] px-3 py-2.5 text-xs leading-relaxed text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+                  >
+                    {textFromBulletinBody(reply.data.body)}
+                  </div>
+                ))}
+              </div>
+
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
                 <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
                   {BULLETIN_CATEGORY_LABELS[data.category]}
@@ -670,7 +767,7 @@ export function GroupDetailClient() {
                 <span>
                   {data.authorDisplayName ||
                     data.authorUserId.slice(0, 8) + "…"}{" "}
-                  · {formatTs(data.createdAt)}
+                  · 最新 {formatTs(latestTs)}
                 </span>
               </div>
             </div>
@@ -1109,6 +1206,82 @@ export function GroupDetailClient() {
               </Link>
             </div>
           </div>
+          <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
+                表示
+              </span>
+              <div
+                className="inline-flex rounded-lg border border-zinc-300/90 bg-white p-0.5 shadow-sm dark:border-zinc-600 dark:bg-zinc-900/90"
+                role="group"
+                aria-label="掲示板の表示切替"
+              >
+                <button
+                  type="button"
+                  onClick={() => setTopicView("all")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                    topicView === "all"
+                      ? "bg-emerald-700 text-white shadow-sm dark:bg-emerald-600"
+                      : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  }`}
+                >
+                  すべて表示
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTopicView("vote")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                    topicView === "vote"
+                      ? "bg-emerald-700 text-white shadow-sm dark:bg-emerald-600"
+                      : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  }`}
+                >
+                  決定系の表示
+                </button>
+              </div>
+              {(topicView !== "default" || spotlightTopicId) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTopicView("default");
+                    setSpotlightTopicId(null);
+                  }}
+                  className="text-xs font-medium text-zinc-500 underline-offset-2 hover:text-zinc-800 hover:underline dark:text-zinc-400 dark:hover:text-zinc-200"
+                >
+                  直近のみ
+                </button>
+              )}
+            </div>
+            {quickPickTopics.length > 0 ? (
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 border-t border-emerald-200/60 pt-2.5 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0 dark:border-emerald-800/40">
+                <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-800 dark:text-emerald-300/90">
+                  話題
+                </span>
+                {quickPickTopics.map((row) => {
+                  const active =
+                    topicView === "default" && spotlightRow?.id === row.id;
+                  return (
+                    <button
+                      key={row.id}
+                      type="button"
+                      title={row.data.title}
+                      onClick={() => {
+                        setTopicView("default");
+                        setSpotlightTopicId(row.id);
+                      }}
+                      className={`max-w-[11rem] truncate rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition ${
+                        active
+                          ? "border-emerald-600 bg-emerald-200/90 text-emerald-950 shadow-sm ring-1 ring-emerald-500/25 dark:border-emerald-500 dark:bg-emerald-900/55 dark:text-emerald-50"
+                          : "border-emerald-200/90 bg-emerald-50/90 text-emerald-950 hover:border-emerald-400 hover:bg-emerald-100/90 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-100 dark:hover:border-emerald-600 dark:hover:bg-emerald-900/50"
+                      }`}
+                    >
+                      {row.data.title}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {/* 新規話題フォーム */}
@@ -1234,83 +1407,20 @@ export function GroupDetailClient() {
           </div>
         )}
 
-        <div className="border-b border-zinc-100 bg-zinc-50/70 px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/40">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-              表示:
-            </span>
-            <button
-              type="button"
-              onClick={() => setTopicFilter("all")}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                topicFilter === "all"
-                  ? "bg-emerald-800 text-white shadow-sm dark:bg-emerald-700"
-                  : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              }`}
-            >
-              すべて
-            </button>
-            <button
-              type="button"
-              onClick={() => setTopicFilter("vote")}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                topicFilter === "vote"
-                  ? "bg-emerald-800 text-white shadow-sm dark:bg-emerald-700"
-                  : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              }`}
-            >
-              投票・決定系だけ
-            </button>
-          </div>
-        </div>
-
         {/* 話題一覧 */}
         <div className="bg-white pb-2 pt-1 dark:bg-transparent">
           {topics.length === 0 ? (
             <p className="px-4 pb-4 text-sm text-zinc-400 dark:text-zinc-500">
               まだ話題がありません。
             </p>
-          ) : topicFilter === "vote" ? (
-            voteTopics.length === 0 ? (
-              <p className="px-4 pb-4 text-sm text-zinc-500 dark:text-zinc-400">
-                該当する話題はありません。
-              </p>
-            ) : (
-              <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {voteTopics.map((row) => renderTopicRow(row))}
-              </ul>
-            )
+          ) : visibleTopicRows.length === 0 ? (
+            <p className="px-4 pb-4 text-sm text-zinc-500 dark:text-zinc-400">
+              該当する話題はありません。
+            </p>
           ) : (
-            <>
-              {voteTopics.length > 0 ? (
-                <>
-                  <h3 className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    進行中の投票・決まりかけ
-                  </h3>
-                  <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {voteTopics.map((row) => renderTopicRow(row))}
-                  </ul>
-                </>
-              ) : null}
-              {otherTopics.length > 0 ? (
-                <>
-                  <h3
-                    className={`px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 ${
-                      voteTopics.length > 0 ? "pt-5" : "pt-3"
-                    }`}
-                  >
-                    その他のトピック
-                  </h3>
-                  <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {otherTopics.map((row) => renderTopicRow(row))}
-                  </ul>
-                </>
-              ) : voteTopics.length === 0 ? (
-                <p className="px-4 pb-4 text-sm text-zinc-500 dark:text-zinc-400">
-                  表示する話題がありません。
-                </p>
-              ) : null}
-            </>
+            <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+              {visibleTopicRows.map((row) => renderTopicRow(row))}
+            </ul>
           )}
         </div>
       </section>
