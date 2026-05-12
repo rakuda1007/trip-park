@@ -902,6 +902,65 @@ export function BulletinTopicClient() {
               </span>
             ) : null}
           </div>
+
+          {user && isMember ? (
+            <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
+              <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
+                共有・再通知
+              </p>
+              <input
+                type="text"
+                value={remindComment}
+                onChange={(e) =>
+                  setRemindComment(e.target.value.slice(0, 300))
+                }
+                maxLength={300}
+                className="mt-2 w-full rounded-md border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                placeholder="一言メッセージ（任意・300文字まで）"
+                disabled={busy !== null}
+                aria-label="一言メッセージ（任意・300文字まで）"
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                {isTopicAuthor || canManage ? (
+                  <VisibilityBadge kind="authorOrAdmin" />
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleShareLine()}
+                    disabled={busy !== null}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-800/25 bg-[#06C755] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+                    aria-label="LINEで共有"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="h-4 w-4 shrink-0 opacity-95"
+                      aria-hidden
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.448-.39l1.395-5.087a.39.39 0 00-.297-.17 48.977 48.977 0 01-3.476-.383c-1.978-.292-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.678 3.348-3.97z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    {busy === "share-line" ? "開いています…" : "LINE"}
+                  </button>
+                  {isTopicAuthor || canManage ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleRemindPush()}
+                      disabled={busy !== null}
+                      className="rounded-md border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200/90 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                    >
+                      {busy === "remind-push" ? "送信中…" : "push通知"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </header>
 
         <div
@@ -973,72 +1032,6 @@ export function BulletinTopicClient() {
               )}
             </div>
 
-            <div
-              className={`rounded-xl border border-zinc-200/80 bg-white/95 p-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/75 sm:p-4 ${
-                detailAmberSurface
-                  ? "ring-1 ring-amber-200/90 dark:ring-amber-800/50"
-                  : ""
-              }`}
-            >
-            {user && isMember ? (
-              <div className="mt-0 rounded-lg border border-sky-200 bg-sky-50/80 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
-                <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
-                  共有・再通知
-                </p>
-                <input
-                  type="text"
-                  value={remindComment}
-                  onChange={(e) =>
-                    setRemindComment(e.target.value.slice(0, 300))
-                  }
-                  maxLength={300}
-                  className="mt-2 w-full rounded-md border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                  placeholder="一言メッセージ（任意・300文字まで）"
-                  disabled={busy !== null}
-                  aria-label="一言メッセージ（任意・300文字まで）"
-                />
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-                  {isTopicAuthor || canManage ? (
-                    <VisibilityBadge kind="authorOrAdmin" />
-                  ) : null}
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleShareLine()}
-                      disabled={busy !== null}
-                      className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-800/25 bg-[#06C755] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
-                      aria-label="LINEで共有"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        className="h-4 w-4 shrink-0 opacity-95"
-                        aria-hidden
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.448-.39l1.395-5.087a.39.39 0 00-.297-.17 48.977 48.977 0 01-3.476-.383c-1.978-.292-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.678 3.348-3.97z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      {busy === "share-line" ? "開いています…" : "LINE"}
-                    </button>
-                    {isTopicAuthor || canManage ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleRemindPush()}
-                        disabled={busy !== null}
-                        className="rounded-md border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200/90 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-                      >
-                        {busy === "remind-push" ? "送信中…" : "push通知"}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {(isTopicAuthor || canManage) ? (
                 <VisibilityBadge kind="authorOrAdmin" />
@@ -1077,7 +1070,6 @@ export function BulletinTopicClient() {
                 </button>
               )}
             </div>
-          </div>
 
           <section className="mt-4" aria-label="返信スレッド">
             <p className="mb-2 text-center text-[11px] text-zinc-400">
@@ -1520,6 +1512,64 @@ export function BulletinTopicClient() {
                 </span>
               ) : null}
             </div>
+
+            {user && isMember ? (
+              <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
+                <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
+                  共有・再通知
+                </p>
+                <input
+                  type="text"
+                  value={remindComment}
+                  onChange={(e) => setRemindComment(e.target.value.slice(0, 300))}
+                  maxLength={300}
+                  className="mt-2 w-full rounded-md border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                  placeholder="一言メッセージ（任意・300文字まで）"
+                  disabled={busy !== null}
+                  aria-label="一言メッセージ（任意・300文字まで）"
+                />
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                  {isTopicAuthor || canManage ? (
+                    <VisibilityBadge kind="authorOrAdmin" />
+                  ) : null}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleShareLine()}
+                      disabled={busy !== null}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-800/25 bg-[#06C755] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+                      aria-label="LINEで共有"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="h-4 w-4 shrink-0 opacity-95"
+                        aria-hidden
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.448-.39l1.395-5.087a.39.39 0 00-.297-.17 48.977 48.977 0 01-3.476-.383c-1.978-.292-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.678 3.348-3.97z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      {busy === "share-line" ? "開いています…" : "LINE"}
+                    </button>
+                    {isTopicAuthor || canManage ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleRemindPush()}
+                        disabled={busy !== null}
+                        className="rounded-md border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200/90 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                      >
+                        {busy === "remind-push" ? "送信中…" : "push通知"}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {topic.category === "recipe_vote" &&
             topic.recipePoll?.candidates?.length ? (
               <div className="mt-4 space-y-4">
@@ -2079,63 +2129,6 @@ export function BulletinTopicClient() {
                   ) : null}
                 </p>
               )
-            ) : null}
-
-            {user && isMember ? (
-              <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50/80 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
-                <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
-                  共有・再通知
-                </p>
-                <input
-                  type="text"
-                  value={remindComment}
-                  onChange={(e) => setRemindComment(e.target.value.slice(0, 300))}
-                  maxLength={300}
-                  className="mt-2 w-full rounded-md border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                  placeholder="一言メッセージ（任意・300文字まで）"
-                  disabled={busy !== null}
-                  aria-label="一言メッセージ（任意・300文字まで）"
-                />
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-                  {isTopicAuthor || canManage ? (
-                    <VisibilityBadge kind="authorOrAdmin" />
-                  ) : null}
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleShareLine()}
-                      disabled={busy !== null}
-                      className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-800/25 bg-[#06C755] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
-                      aria-label="LINEで共有"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        className="h-4 w-4 shrink-0 opacity-95"
-                        aria-hidden
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.448-.39l1.395-5.087a.39.39 0 00-.297-.17 48.977 48.977 0 01-3.476-.383c-1.978-.292-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.678 3.348-3.97z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      {busy === "share-line" ? "開いています…" : "LINE"}
-                    </button>
-                    {isTopicAuthor || canManage ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleRemindPush()}
-                        disabled={busy !== null}
-                        className="rounded-md border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200/90 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-                      >
-                        {busy === "remind-push" ? "送信中…" : "push通知"}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
             ) : null}
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
