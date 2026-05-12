@@ -188,14 +188,6 @@ export function computeDashboardInsights(params: {
       scheduleResponses,
     );
 
-  /** 未確定ブロックのどこかでまだ「行きたい」票が 1 票も入っていない */
-  const destinationVotesIncomplete =
-    !!userId &&
-    !destDone &&
-    openDestinationPollVotes.some(
-      (row) => sumUserDestinationWantVotes(userId, row.votes) === 0,
-    );
-
   // ── 次の一手（優先順） ──
   let nextStepLine: string;
   let nextStepLink: { href: string; label: string } | null = null;
@@ -222,9 +214,7 @@ export function computeDashboardInsights(params: {
     nextStepLine = "次のステップ: 目的地の投票をしてください。";
     nextStepLink = {
       href: `/groups/${groupId}/destination-votes#destination-voting`,
-      label: destinationVotesIncomplete
-        ? "目的地で「行きたい」票を入れる（投票エリアへ）"
-        : "目的地の投票ページを開く（投票エリアへ）",
+      label: "投票ページを開く",
     };
   } else if (!itinDone) {
     nextStepLine =
