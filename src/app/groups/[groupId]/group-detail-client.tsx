@@ -956,7 +956,7 @@ export function GroupDetailClient() {
               e.preventDefault();
             }
           }}
-          className={`block px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
+          className={`block ps-4 pe-2.5 py-3 transition hover:bg-zinc-50 sm:px-4 dark:hover:bg-zinc-800/40 ${
             isImportant
               ? "mx-2 my-2 rounded-lg border-2 border-amber-500 bg-amber-50/90 shadow-sm ring-1 ring-amber-200/90 dark:border-amber-600 dark:bg-amber-950/35 dark:ring-amber-800/50"
               : showImportant
@@ -964,19 +964,23 @@ export function GroupDetailClient() {
                 : ""
           }`}
         >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
+          <div className="min-w-0 w-full">
               {data.pinned ? (
                 <p className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
                   📌 ピン留め
                 </p>
               ) : null}
-              <h3 className="mt-0.5 text-sm font-semibold leading-snug text-zinc-700 dark:text-zinc-200">
-                トピック:{" "}
-                {data.category === "nearby_map"
-                  ? formatNearbyMapTopicHeadingTitle(data.title)
-                  : data.title}
-              </h3>
+              <div className="mt-0.5 flex items-start justify-between gap-2">
+                <h3 className="min-w-0 flex-1 text-sm font-semibold leading-snug text-zinc-700 dark:text-zinc-200">
+                  トピック:{" "}
+                  {data.category === "nearby_map"
+                    ? formatNearbyMapTopicHeadingTitle(data.title)
+                    : data.title}
+                </h3>
+                <span className="shrink-0 pt-0.5 text-xs text-zinc-400">
+                  返信 {replyCount} 件
+                </span>
+              </div>
 
               <div
                 ref={isDashSpotlightThread ? spotlightThreadScrollRef : undefined}
@@ -986,12 +990,12 @@ export function GroupDetailClient() {
                     : "mt-2"
                 }
               >
-                <div className="flex flex-col gap-2">
+                <div className="flex w-full min-w-0 flex-col gap-2">
                   <div
                     className={
                       topicIsOwn
-                        ? "flex flex-col items-end gap-0.5"
-                        : "flex flex-col items-start gap-0.5"
+                        ? "flex w-full min-w-0 flex-col items-end gap-0.5"
+                        : "flex w-full min-w-0 flex-col items-start gap-0.5"
                     }
                   >
                     {data.category === "nearby_map" ? (
@@ -1008,7 +1012,7 @@ export function GroupDetailClient() {
                       <div
                         className={
                           topicIsOwn
-                            ? "max-w-[min(92%,22rem)] rounded-[17px] rounded-br-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+                            ? "max-w-[min(100%,22rem)] rounded-[17px] rounded-br-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
                             : "max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800"
                         }
                       >
@@ -1030,14 +1034,14 @@ export function GroupDetailClient() {
                     )}
                     {topicIsOwn ? (
                       <>
-                        <p className="px-0.5 text-right text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
+                        <p className="w-full px-0.5 text-right text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
                           {formatTs(data.createdAt)}
                           {isUpdatedTopic(data) ? (
                             <span>（更新 {formatTs(data.updatedAt)}）</span>
                           ) : null}
                         </p>
                         {topicOpenReadCount > 0 ? (
-                          <p className="px-0.5 text-right text-[10px] leading-tight text-zinc-400 dark:text-zinc-500">
+                          <p className="w-full px-0.5 text-right text-[10px] leading-tight text-zinc-400 dark:text-zinc-500">
                             既読 {topicOpenReadCount}
                           </p>
                         ) : null}
@@ -1079,14 +1083,14 @@ export function GroupDetailClient() {
                           }
                           className={
                             replyIsOwn
-                              ? "flex flex-col items-end gap-0.5"
-                              : "flex flex-col items-start gap-0.5"
+                              ? "flex w-full min-w-0 flex-col items-end gap-0.5"
+                              : "flex w-full min-w-0 flex-col items-start gap-0.5"
                           }
                         >
                           <div
                             className={
                               replyIsOwn
-                                ? "max-w-[min(92%,22rem)] rounded-[17px] rounded-tr-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+                                ? "max-w-[min(100%,22rem)] rounded-[17px] rounded-tr-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
                                 : "max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800"
                             }
                           >
@@ -1107,11 +1111,11 @@ export function GroupDetailClient() {
                           </div>
                           {replyIsOwn ? (
                             <>
-                              <p className="text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
+                              <p className="w-full text-right text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
                                 {formatTs(reply.data.createdAt)}
                               </p>
                               {rc > 0 ? (
-                                <p className="text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
+                                <p className="w-full text-right text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
                                   既読 {rc}
                                 </p>
                               ) : null}
@@ -1156,10 +1160,6 @@ export function GroupDetailClient() {
                 </span>
               </div>
             </div>
-            <span className="shrink-0 text-xs text-zinc-400">
-              返信 {replyCount} 件
-            </span>
-          </div>
         </Link>
       </li>
     );
