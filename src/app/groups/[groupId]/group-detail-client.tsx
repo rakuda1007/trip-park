@@ -1012,7 +1012,7 @@ export function GroupDetailClient() {
                       <div
                         className={
                           topicIsOwn
-                            ? "max-w-[min(100%,22rem)] rounded-[17px] rounded-br-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+                            ? "max-w-[min(88%,22rem)] rounded-[17px] rounded-br-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
                             : "max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800"
                         }
                       >
@@ -1090,7 +1090,7 @@ export function GroupDetailClient() {
                           <div
                             className={
                               replyIsOwn
-                                ? "max-w-[min(100%,22rem)] rounded-[17px] rounded-tr-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+                                ? "max-w-[min(88%,22rem)] rounded-[17px] rounded-tr-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
                                 : "max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800"
                             }
                           >
