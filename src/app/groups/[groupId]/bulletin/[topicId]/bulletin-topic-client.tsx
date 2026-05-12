@@ -920,44 +920,75 @@ export function BulletinTopicClient() {
                 disabled={busy !== null}
                 aria-label="一言メッセージ（任意・300文字まで）"
               />
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-2">
                 {isTopicAuthor || canManage ? (
                   <VisibilityBadge kind="authorOrAdmin" />
                 ) : null}
-                <div className="flex items-center gap-2">
+                {canManage && !isTopicAuthor ? (
+                  <VisibilityBadge kind="admin" />
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void handleShareLine()}
+                  disabled={busy !== null}
+                  className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-800/25 bg-[#06C755] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+                  aria-label="LINEで共有"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="h-4 w-4 shrink-0 opacity-95"
+                    aria-hidden
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.448-.39l1.395-5.087a.39.39 0 00-.297-.17 48.977 48.977 0 01-3.476-.383c-1.978-.292-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.678 3.348-3.97z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  {busy === "share-line" ? "開いています…" : "LINE"}
+                </button>
+                {isTopicAuthor || canManage ? (
                   <button
                     type="button"
-                    onClick={() => void handleShareLine()}
+                    onClick={() => void handleRemindPush()}
                     disabled={busy !== null}
-                    className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-800/25 bg-[#06C755] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
-                    aria-label="LINEで共有"
+                    className="rounded-md border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200/90 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      className="h-4 w-4 shrink-0 opacity-95"
-                      aria-hidden
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.448-.39l1.395-5.087a.39.39 0 00-.297-.17 48.977 48.977 0 01-3.476-.383c-1.978-.292-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.678 3.348-3.97z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    {busy === "share-line" ? "開いています…" : "LINE"}
+                    {busy === "remind-push" ? "送信中…" : "push通知"}
                   </button>
-                  {isTopicAuthor || canManage ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleRemindPush()}
-                      disabled={busy !== null}
-                      className="rounded-md border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200/90 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-                    >
-                      {busy === "remind-push" ? "送信中…" : "push通知"}
-                    </button>
-                  ) : null}
-                </div>
+                ) : null}
+                {isTopicAuthor ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditingTopic(true)}
+                    disabled={busy !== null}
+                    className="text-xs text-zinc-700 underline dark:text-zinc-300"
+                  >
+                    編集
+                  </button>
+                ) : null}
+                {canManage ? (
+                  <button
+                    type="button"
+                    onClick={handleTogglePin}
+                    disabled={busy !== null}
+                    className="text-xs text-amber-800 underline dark:text-amber-200"
+                  >
+                    {topic.pinned ? "ピンを外す" : "ピン留め"}
+                  </button>
+                ) : null}
+                {(isTopicAuthor || canManage) && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteTopic}
+                    disabled={busy !== null}
+                    className="text-xs text-red-600 underline"
+                  >
+                    話題を削除
+                  </button>
+                )}
               </div>
             </div>
           ) : null}
@@ -1029,45 +1060,6 @@ export function BulletinTopicClient() {
                     <span>（更新: {formatTs(topic.updatedAt)}）</span>
                   ) : null}
                 </p>
-              )}
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {(isTopicAuthor || canManage) ? (
-                <VisibilityBadge kind="authorOrAdmin" />
-              ) : null}
-              {isTopicAuthor ? (
-                <button
-                  type="button"
-                  onClick={() => setEditingTopic(true)}
-                  disabled={busy !== null}
-                  className="text-xs text-zinc-700 underline dark:text-zinc-300"
-                >
-                  編集
-                </button>
-              ) : null}
-              {canManage ? (
-                <>
-                  <VisibilityBadge kind="admin" />
-                  <button
-                    type="button"
-                    onClick={handleTogglePin}
-                    disabled={busy !== null}
-                    className="text-xs text-amber-800 underline dark:text-amber-200"
-                  >
-                    {topic.pinned ? "ピンを外す" : "ピン留め"}
-                  </button>
-                </>
-              ) : null}
-              {(isTopicAuthor || canManage) && (
-                <button
-                  type="button"
-                  onClick={handleDeleteTopic}
-                  disabled={busy !== null}
-                  className="text-xs text-red-600 underline"
-                >
-                  話題を削除
-                </button>
               )}
             </div>
 
@@ -1528,44 +1520,75 @@ export function BulletinTopicClient() {
                   disabled={busy !== null}
                   aria-label="一言メッセージ（任意・300文字まで）"
                 />
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-2">
                   {isTopicAuthor || canManage ? (
                     <VisibilityBadge kind="authorOrAdmin" />
                   ) : null}
-                  <div className="flex items-center gap-2">
+                  {canManage && !isTopicAuthor ? (
+                    <VisibilityBadge kind="admin" />
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void handleShareLine()}
+                    disabled={busy !== null}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-800/25 bg-[#06C755] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+                    aria-label="LINEで共有"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="h-4 w-4 shrink-0 opacity-95"
+                      aria-hidden
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.448-.39l1.395-5.087a.39.39 0 00-.297-.17 48.977 48.977 0 01-3.476-.383c-1.978-.292-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.678 3.348-3.97z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    {busy === "share-line" ? "開いています…" : "LINE"}
+                  </button>
+                  {isTopicAuthor || canManage ? (
                     <button
                       type="button"
-                      onClick={() => void handleShareLine()}
+                      onClick={() => void handleRemindPush()}
                       disabled={busy !== null}
-                      className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-800/25 bg-[#06C755] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
-                      aria-label="LINEで共有"
+                      className="rounded-md border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200/90 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
                     >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        className="h-4 w-4 shrink-0 opacity-95"
-                        aria-hidden
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.448-.39l1.395-5.087a.39.39 0 00-.297-.17 48.977 48.977 0 01-3.476-.383c-1.978-.292-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.678 3.348-3.97z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      {busy === "share-line" ? "開いています…" : "LINE"}
+                      {busy === "remind-push" ? "送信中…" : "push通知"}
                     </button>
-                    {isTopicAuthor || canManage ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleRemindPush()}
-                        disabled={busy !== null}
-                        className="rounded-md border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200/90 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-                      >
-                        {busy === "remind-push" ? "送信中…" : "push通知"}
-                      </button>
-                    ) : null}
-                  </div>
+                  ) : null}
+                  {isTopicAuthor ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditingTopic(true)}
+                      disabled={busy !== null}
+                      className="text-xs text-zinc-700 underline dark:text-zinc-300"
+                    >
+                      編集
+                    </button>
+                  ) : null}
+                  {canManage ? (
+                    <button
+                      type="button"
+                      onClick={handleTogglePin}
+                      disabled={busy !== null}
+                      className="text-xs text-amber-800 underline dark:text-amber-200"
+                    >
+                      {topic.pinned ? "ピンを外す" : "ピン留め"}
+                    </button>
+                  ) : null}
+                  {(isTopicAuthor || canManage) && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteTopic}
+                      disabled={busy !== null}
+                      className="text-xs text-red-600 underline"
+                    >
+                      話題を削除
+                    </button>
+                  )}
                 </div>
               </div>
             ) : null}
@@ -2131,44 +2154,6 @@ export function BulletinTopicClient() {
               )
             ) : null}
 
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {(isTopicAuthor || canManage) ? (
-                <VisibilityBadge kind="authorOrAdmin" />
-              ) : null}
-              {isTopicAuthor ? (
-                <button
-                  type="button"
-                  onClick={() => setEditingTopic(true)}
-                  disabled={busy !== null}
-                  className="text-xs text-zinc-700 underline dark:text-zinc-300"
-                >
-                  編集
-                </button>
-              ) : null}
-              {canManage ? (
-                <>
-                  <VisibilityBadge kind="admin" />
-                  <button
-                    type="button"
-                    onClick={handleTogglePin}
-                    disabled={busy !== null}
-                    className="text-xs text-amber-800 underline dark:text-amber-200"
-                  >
-                    {topic.pinned ? "ピンを外す" : "ピン留め"}
-                  </button>
-                </>
-              ) : null}
-              {(isTopicAuthor || canManage) && (
-                <button
-                  type="button"
-                  onClick={handleDeleteTopic}
-                  disabled={busy !== null}
-                  className="text-xs text-red-600 underline"
-                >
-                  話題を削除
-                </button>
-              )}
-            </div>
           </>
         )}
       </article>
