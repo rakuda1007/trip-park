@@ -991,6 +991,54 @@ export function GroupDetailClient() {
                 }
               >
                 <div className="flex w-full min-w-0 flex-col gap-2">
+                  {data.category === "recipe_vote" ? (
+                    <div className="w-full min-w-0 rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 dark:border-emerald-800/60 dark:bg-emerald-950/35">
+                      <p className="text-sm font-semibold text-emerald-950 dark:text-emerald-50">
+                        レシピ投票
+                        {data.recipePoll?.candidates?.length
+                          ? `（候補 ${data.recipePoll.candidates.length} 件）`
+                          : null}
+                      </p>
+                      <p className="mt-1 text-xs text-emerald-900/80 dark:text-emerald-100/80">
+                        タップして投票画面を開く
+                      </p>
+                      {data.recipePoll?.candidates?.length ? (
+                        <div className="mt-2.5 flex gap-2 overflow-x-auto pb-0.5">
+                          {data.recipePoll.candidates.slice(0, 4).map((c, i) => (
+                            <div
+                              key={`${c.url}-${i}`}
+                              className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800"
+                            >
+                              {c.imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={c.imageUrl}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {topicIsOwn ? (
+                        <button
+                          type="button"
+                          className="mt-2.5 text-xs font-medium text-emerald-900 underline underline-offset-2 dark:text-emerald-100"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            router.push(
+                              `/groups/${groupId}/bulletin/${id}?edit=1`,
+                            );
+                          }}
+                        >
+                          投稿を編集
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : (
                   <div
                     className={
                       topicIsOwn
@@ -1057,7 +1105,9 @@ export function GroupDetailClient() {
                       </p>
                     )}
                   </div>
-                  {replies.map((reply, rIdx) => {
+                  )}
+                  {data.category !== "recipe_vote" &&
+                    replies.map((reply, rIdx) => {
                     const replyIsOwn = user?.uid === reply.data.authorUserId;
                     const rc = replyReadCountsForRow?.[rIdx] ?? 0;
                     const replyLabel =
@@ -1656,6 +1706,13 @@ export function GroupDetailClient() {
                           : row.data.title
                       }
                       onClick={() => {
+                        // レシピ投票は簡易プレビューではなく本番UIへ
+                        if (row.data.category === "recipe_vote") {
+                          router.push(
+                            `/groups/${groupId}/bulletin/${row.id}`,
+                          );
+                          return;
+                        }
                         setTopicView("default");
                         setSpotlightTopicId(row.id);
                       }}
@@ -1692,7 +1749,11 @@ export function GroupDetailClient() {
             </ul>
           )}
         </div>
-        {topicView === "default" && spotlightRow && user && myMember ? (
+        {topicView === "default" &&
+        spotlightRow &&
+        spotlightRow.data.category !== "recipe_vote" &&
+        user &&
+        myMember ? (
           <div className="border-t border-zinc-200 bg-zinc-50/90 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900/55">
             <div className="flex items-center gap-2">
               <textarea

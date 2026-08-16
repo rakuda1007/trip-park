@@ -63,7 +63,7 @@ import {
 import { serverTimestamp, Timestamp } from "firebase/firestore";
 import { useBulletinImagePaste } from "@/hooks/use-bulletin-image-paste";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -138,6 +138,8 @@ export function BulletinTopicClient() {
   const topicId = params.topicId as string;
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const openEditFromQuery = searchParams.get("edit") === "1";
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
   const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>(
@@ -243,6 +245,14 @@ export function BulletinTopicClient() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /** ダッシュボード等から ?edit=1 で開いたとき、作者なら編集モードを開始 */
+  useEffect(() => {
+    if (!openEditFromQuery || !topic || !user) return;
+    if (user.uid !== topic.authorUserId) return;
+    setEditingTopic(true);
+    router.replace(`/groups/${groupId}/bulletin/${topicId}`, { scroll: false });
+  }, [openEditFromQuery, topic, user, groupId, topicId, router]);
 
   const isMember = Boolean(
     user && members.some((x) => x.userId === user.uid),
