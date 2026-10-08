@@ -2,8 +2,11 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import { LoadingScreen } from "@/components/loading-screen";
-import { listMyGroupsForRouting } from "@/lib/firestore/groups";
-import { loadLastTripId } from "@/lib/last-trip";
+import {
+  getMemberForUser,
+  listMyGroupsForRouting,
+} from "@/lib/firestore/groups";
+import { clearLastTripId, loadLastTripId } from "@/lib/last-trip";
 import type { UserGroupRefDoc } from "@/types/group";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -68,6 +71,27 @@ function pickBestTripId(
   );
 }
 
+async function routeToBestTrip(
+  uid: string,
+  router: ReturnType<typeof useRouter>,
+): Promise<"empty" | "navigated"> {
+  const items = await listMyGroupsForRouting(uid);
+  if (items.length === 0) return "empty";
+
+  const incomplete = items.filter((x) => x.data.status !== "completed");
+  if (incomplete.length > 0) {
+    const today = getTodayISO();
+    const bestId = pickBestTripId(incomplete, today);
+    if (bestId) {
+      router.replace(`/groups/${bestId}`);
+      return "navigated";
+    }
+  }
+
+  router.replace("/groups?pastOpen=1");
+  return "navigated";
+}
+
 export function DashboardHome() {
   const { user } = useAuth();
   const router = useRouter();
@@ -79,36 +103,25 @@ export function DashboardHome() {
 
     let cancelled = false;
 
-    // 直近旅行は Firestore 待ちなしで即遷移（二重待ちを減らす）
-    // 無効・削除済みは旅行ホーム側で案内する
-    const lastTripId = loadLastTripId(user.uid);
-    if (lastTripId) {
-      router.replace(`/groups/${lastTripId}`);
-      return;
-    }
-
     (async () => {
       try {
-        const items = await listMyGroupsForRouting(user.uid);
-        if (cancelled) return;
-
-        if (items.length === 0) {
-          setChecked(true);
-          return;
-        }
-
-        const incomplete = items.filter((x) => x.data.status !== "completed");
-
-        if (incomplete.length > 0) {
-          const today = getTodayISO();
-          const bestId = pickBestTripId(incomplete, today);
-          if (bestId) {
-            router.replace(`/groups/${bestId}`);
+        // 直近旅行は membership を軽く確認してから遷移（削除・脱退後のループ防止）
+        const lastTripId = loadLastTripId(user.uid);
+        if (lastTripId) {
+          const member = await getMemberForUser(lastTripId, user.uid).catch(
+            () => null,
+          );
+          if (cancelled) return;
+          if (member) {
+            router.replace(`/groups/${lastTripId}`);
             return;
           }
+          clearLastTripId(user.uid);
         }
 
-        router.replace("/groups?pastOpen=1");
+        const result = await routeToBestTrip(user.uid, router);
+        if (cancelled) return;
+        if (result === "empty") setChecked(true);
       } catch {
         if (!cancelled) setChecked(true);
       }

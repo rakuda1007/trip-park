@@ -106,7 +106,7 @@ export async function joinGroupWithCode(
   uid: string,
   displayName: string | null,
   rawCode: string,
-): Promise<string> {
+): Promise<{ groupId: string; alreadyMember: boolean }> {
   const db = getFirebaseFirestore();
   const code = rawCode.trim().toUpperCase();
   if (code.length < 4) {
@@ -123,8 +123,9 @@ export async function joinGroupWithCode(
   const memberRef = doc(db, COLLECTIONS.groups, groupId, SUB.members, uid);
 
   const existing = await getDoc(memberRef);
+  // 既参加はエラーにせず旅行ホームへソフトランディング
   if (existing.exists()) {
-    throw new Error("すでにこの旅行に参加しています。");
+    return { groupId, alreadyMember: true };
   }
 
   const groupName = nameFromInvite || "旅行";
@@ -150,7 +151,7 @@ export async function joinGroupWithCode(
     code: deleteField(),
   });
 
-  return groupId;
+  return { groupId, alreadyMember: false };
 }
 
 async function listUserGroupRefs(

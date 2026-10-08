@@ -18,7 +18,7 @@ import {
   listRecipeVotes,
 } from "@/lib/firestore/bulletin";
 import { listFamilies } from "@/lib/firestore/families";
-import { saveLastTripId } from "@/lib/last-trip";
+import { clearLastTripId, loadLastTripId, saveLastTripId } from "@/lib/last-trip";
 import { uploadGroupMemoryPhoto } from "@/lib/storage/group-memory-photo";
 import { areAllTripWorkflowStepsComplete } from "@/lib/trip-workflow-all-complete";
 import { computeDashboardInsights } from "@/lib/trip-dashboard-insights";
@@ -119,12 +119,20 @@ export function GroupDetailClient() {
   /** 旅行ホームの次の一手文言（オーナー／管理者向け）用 */
   const [myMember, setMyMember] = useState<MemberDoc | null>(null);
 
-  // 旅行ページを開いたら直近アクセス旅行として記録
+  // 開けた旅行だけ直近として記録（見つからない URL では保存しない）
   useEffect(() => {
-    if (user && groupId) {
+    if (user && groupId && group) {
       saveLastTripId(user.uid, groupId);
     }
-  }, [user, groupId]);
+  }, [user, groupId, group]);
+
+  // 削除・権限なしなどで開けないとき、壊れた直近 ID を捨ててループを防ぐ
+  useEffect(() => {
+    if (group !== null || group === undefined || !user || !groupId) return;
+    if (loadLastTripId(user.uid) === groupId) {
+      clearLastTripId(user.uid);
+    }
+  }, [group, user, groupId]);
 
   const load = useCallback(async () => {
     if (!groupId) return;
@@ -443,7 +451,10 @@ export function GroupDetailClient() {
     setError(null);
     try {
       await leaveGroup(user.uid, groupId);
-      router.push("/groups");
+      if (loadLastTripId(user.uid) === groupId) {
+        clearLastTripId(user.uid);
+      }
+      router.push("/dashboard");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "失敗しました");
@@ -463,7 +474,9 @@ export function GroupDetailClient() {
   if (group === null) {
     return (
       <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
-        <p className="text-sm text-zinc-600">旅行が見つかりません。</p>
+        <p className="text-sm text-zinc-600">
+          この旅行は削除されたか、参加していないため開けません。
+        </p>
         {error ? (
           <p
             className="mt-2 text-sm text-red-600 dark:text-red-400"
@@ -472,12 +485,20 @@ export function GroupDetailClient() {
             {error}
           </p>
         ) : null}
-        <Link
-          href="/groups"
-          className="mt-4 inline-block text-sm text-zinc-900 underline"
-        >
-          旅行一覧へ
-        </Link>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Link
+            href="/dashboard"
+            className="inline-flex rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            別の旅行を開く
+          </Link>
+          <Link
+            href="/groups"
+            className="inline-flex rounded-md border border-zinc-300 px-4 py-2 text-sm text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            旅行一覧へ
+          </Link>
+        </div>
       </div>
     );
   }
