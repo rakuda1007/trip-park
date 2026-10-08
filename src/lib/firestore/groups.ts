@@ -7,7 +7,17 @@ import {
 } from "@/lib/firestore/collections";
 import { listTripRoutes } from "@/lib/firestore/trip";
 import { areAllTripWorkflowStepsComplete } from "@/lib/trip-workflow-all-complete";
-import type { GroupDoc, InviteCodeDoc, MemberDoc, TripStatus, UserGroupRefDoc } from "@/types/group";
+import { defaultsForCreate } from "@/lib/plan-shape";
+import type {
+  GroupDoc,
+  InviteCodeDoc,
+  MemberDoc,
+  PlaceFixed,
+  PlaceMode,
+  PlanShape,
+  TripStatus,
+  UserGroupRefDoc,
+} from "@/types/group";
 import {
   collection,
   deleteDoc,
@@ -46,15 +56,25 @@ async function ensureUniqueInviteCode(db: Firestore): Promise<string> {
   throw new Error("招待コードの生成に失敗しました。もう一度お試しください。");
 }
 
+export type CreateGroupOptions = {
+  planShape?: PlanShape;
+  placeMode?: PlaceMode;
+  tripStartDate?: string | null;
+  tripEndDate?: string | null;
+  memoryPhotoUrl?: string | null;
+};
+
 export async function createGroup(
   uid: string,
   displayName: string | null,
   name: string,
   description: string | null,
-  tripStartDate?: string | null,
-  tripEndDate?: string | null,
-  memoryPhotoUrl?: string | null,
+  options: CreateGroupOptions = {},
 ): Promise<string> {
+  const planShape: PlanShape = options.planShape ?? "trip";
+  const shapeDefaults = defaultsForCreate(planShape);
+  const placeMode = options.placeMode ?? shapeDefaults.placeMode;
+
   const db = getFirebaseFirestore();
   const code = await ensureUniqueInviteCode(db);
   const groupRef = doc(collection(db, COLLECTIONS.groups));
@@ -67,21 +87,25 @@ export async function createGroup(
   await setDoc(groupRef, {
     name,
     description: description ?? null,
-    memoryPhotoUrl: memoryPhotoUrl ?? null,
+    memoryPhotoUrl: options.memoryPhotoUrl ?? null,
     ownerId: uid,
     inviteCode: code,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-    tripStartDate: tripStartDate ?? null,
-    tripEndDate: tripEndDate ?? null,
+    tripStartDate: options.tripStartDate ?? null,
+    tripEndDate: options.tripEndDate ?? null,
     destination: null,
     status: "planning",
+    planShape,
+    placeMode,
+    placeFixed: null,
   });
 
   const batch = writeBatch(db);
   batch.set(inviteRef, {
     groupId,
     groupName: name,
+    planShape,
     createdAt: serverTimestamp(),
   });
   batch.set(memberRef, {
@@ -245,6 +269,7 @@ export async function listMyGroups(uid: string): Promise<
             tripStartDate: gd?.tripStartDate ?? null,
             tripEndDate: gd?.tripEndDate ?? null,
             memoryPhotoVisible,
+            planShape: gd?.planShape ?? "trip",
           },
         },
       ];
@@ -530,7 +555,15 @@ export async function getInviteCodeInfo(
   const ref = doc(db, COLLECTIONS.inviteCodes, code.trim().toUpperCase());
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
-  return snap.data() as InviteCodeDoc;
+  const data = snap.data() as InviteCodeDoc;
+  if (data.planShape) return data;
+  // 旧招待コードは group から形を補完
+  try {
+    const g = await getGroup(data.groupId);
+    return { ...data, planShape: g?.planShape ?? "trip" };
+  } catch {
+    return { ...data, planShape: "trip" };
+  }
 }
 
 /** 旅行フェーズを更新する（オーナーのみ） */
@@ -590,6 +623,65 @@ export async function updateDestination(
   const db = getFirebaseFirestore();
   await updateDoc(doc(db, COLLECTIONS.groups, groupId), {
     destination,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** 予定の形を更新する（オーナー / 管理者）。招待コード側の形も同期する */
+export async function updatePlanShape(
+  groupId: string,
+  planShape: PlanShape,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  const group = await getGroup(groupId);
+  if (!group) throw new Error("旅行が見つかりません。");
+  const { placeMode } = defaultsForCreate(planShape);
+
+  const groupRef = doc(db, COLLECTIONS.groups, groupId);
+  const inviteRef = doc(db, COLLECTIONS.inviteCodes, group.inviteCode);
+  const inviteSnap = await getDoc(inviteRef);
+
+  const batch = writeBatch(db);
+  batch.update(groupRef, {
+    planShape,
+    placeMode,
+    updatedAt: serverTimestamp(),
+  });
+  if (inviteSnap.exists()) {
+    batch.update(inviteRef, { planShape });
+  }
+  await batch.commit();
+}
+
+/** 場所の決め方を更新する（オーナー / 管理者） */
+export async function updatePlaceMode(
+  groupId: string,
+  placeMode: PlaceMode,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  await updateDoc(doc(db, COLLECTIONS.groups, groupId), {
+    placeMode,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** 決まっている場所（お店／目的地）を登録する */
+export async function updatePlaceFixed(
+  groupId: string,
+  placeFixed: PlaceFixed | null,
+): Promise<void> {
+  const db = getFirebaseFirestore();
+  const name = placeFixed?.name?.trim() || null;
+  await updateDoc(doc(db, COLLECTIONS.groups, groupId), {
+    placeFixed: placeFixed
+      ? {
+          name: name ?? "",
+          mapUrl: placeFixed.mapUrl?.trim() || null,
+          note: placeFixed.note?.trim() || null,
+        }
+      : null,
+    destination: name,
+    placeMode: "fixed",
     updatedAt: serverTimestamp(),
   });
 }

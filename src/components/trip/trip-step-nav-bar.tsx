@@ -1,25 +1,23 @@
 "use client";
 
 import { useGroupRouteId } from "@/contexts/group-route-context";
-import { normalizeDecidedNamesFromPollDoc } from "@/lib/destination-poll-decided";
 import { listDestinationPolls } from "@/lib/firestore/destination-votes";
 import { getGroup } from "@/lib/firestore/groups";
 import { listScheduleCandidates } from "@/lib/firestore/schedule";
 import { listTripRoutes } from "@/lib/firestore/trip";
+import {
+  isStepVisible,
+  resolvePlanConfig,
+} from "@/lib/plan-shape";
+import {
+  isDestinationStepCompleteForGroup,
+  isItineraryCompleteForGroup,
+} from "@/lib/trip-workflow-all-complete";
 import type { GroupDoc } from "@/types/group";
 import type { TripRouteDoc } from "@/types/trip";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-
-/** 旅程ページ（trip-client）と同じ日数計算 */
-function calcNumDays(start: string | null, end: string | null): number {
-  if (!start) return 0;
-  const s = new Date(start);
-  const e = end ? new Date(end) : s;
-  const diff = Math.round((e.getTime() - s.getTime()) / 86_400_000);
-  return Math.max(1, diff + 1);
-}
 
 /** layout.tsx から直接使えるラッパー（groupId は GroupRouteProvider から） */
 export function TripStepNavBarWrapper() {
@@ -89,16 +87,12 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
         setTripRoutes(routes);
         setScheduleHasCandidates(candidates.length > 0);
 
-        let destDone: boolean;
-        if (polls.length === 0) {
-          destDone = !!g.destination?.trim();
-        } else {
-          destDone = polls.every(
-            (p) => normalizeDecidedNamesFromPollDoc(p.data).length > 0,
-          );
-        }
+        const destDone = isDestinationStepCompleteForGroup(g, polls);
         setDestStepDone(destDone);
-        setDestinationInProgress(!destDone && polls.length > 0);
+        const cfg = resolvePlanConfig(g, polls.length);
+        setDestinationInProgress(
+          cfg.placeMode === "vote" && !destDone && polls.length > 0,
+        );
       } catch {
         if (!cancelled) {
           setGroup(null);
@@ -114,34 +108,22 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
     };
   }, [groupId, pathname]);
 
-  /** 旅程ページと同様: 日程からの日数と登録済み最大Dayの大きい方 */
-  const numTripDays = useMemo(() => {
-    const fromDates = calcNumDays(
-      group?.tripStartDate ?? null,
-      group?.tripEndDate ?? null,
-    );
-    const maxRoute = tripRoutes.reduce(
-      (m, r) => Math.max(m, r.data.dayNumber),
-      0,
-    );
-    return Math.max(fromDates, maxRoute, 1);
-  }, [group, tripRoutes]);
+  const planConfig = useMemo(
+    () => resolvePlanConfig(group),
+    [group],
+  );
 
-  /** Day1〜Day(numTripDays): 各日に旅程があり、かつその日の全旅程ブロックが完了(isDone)のときのみ完了 */
-  const itinDone = useMemo(() => {
-    for (let d = 1; d <= numTripDays; d++) {
-      const forDay = tripRoutes.filter((r) => r.data.dayNumber === d);
-      if (forDay.length === 0) return false;
-      if (forDay.some((r) => !r.data.isDone)) return false;
-    }
-    return true;
-  }, [tripRoutes, numTripDays]);
+  const itinDone = useMemo(
+    () => isItineraryCompleteForGroup(group, tripRoutes),
+    [group, tripRoutes],
+  );
 
   /** いずれかの Day が完了済みだが全体は未完了のとき進行中 */
   const itinInProgress = useMemo(() => {
     if (itinDone) return false;
+    if (!isStepVisible(planConfig.itinerary)) return false;
     return tripRoutes.some((r) => r.data.isDone);
-  }, [itinDone, tripRoutes]);
+  }, [itinDone, tripRoutes, planConfig.itinerary]);
 
   // 旅行配下のページ以外では非表示
   if (!isGroupPage(pathname, groupId)) return null;
@@ -152,12 +134,16 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
   const datesDone = !!group?.tripStartDate;
   const destDone = destStepDone;
   const status = group?.status ?? "planning";
+  const labels = planConfig.labels;
 
-  const scheduleStatus: StepStatus = datesDone
-    ? "done"
-    : scheduleHasCandidates
-      ? "in_progress"
-      : "pending";
+  const scheduleStatus: StepStatus =
+    planConfig.schedule === "optional" && !datesDone && !scheduleHasCandidates
+      ? "pending"
+      : datesDone
+        ? "done"
+        : scheduleHasCandidates
+          ? "in_progress"
+          : "pending";
 
   const destinationStatus: StepStatus = destDone
     ? "done"
@@ -179,42 +165,48 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
         : "pending";
 
   const steps = [
-    {
-      key: "schedule",
-      label: "日程",
-      status: scheduleStatus,
-      href: `/groups/${groupId}/schedule`,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-          <path fillRule="evenodd" d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z" clipRule="evenodd" />
-        </svg>
-      ),
-    },
-    {
-      key: "destination",
-      label: "目的地",
-      status: destinationStatus,
-      href: `/groups/${groupId}/destination-votes`,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-          <path fillRule="evenodd" d="m9.69 18.933.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 0 0 .281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 1 0 3 9c0 3.492 1.698 5.988 3.355 7.584a13.731 13.731 0 0 0 2.273 1.765 11.842 11.842 0 0 0 .953.524l.004.002.006.003ZM10 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" clipRule="evenodd" />
-        </svg>
-      ),
-    },
-    {
-      key: "trip",
-      label: "旅程",
-      status: tripStatus,
-      href: `/groups/${groupId}/trip`,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-          <path fillRule="evenodd" d="M8.157 2.176a1.5 1.5 0 0 0-1.147 0l-4.084 1.69A1.5 1.5 0 0 0 2 5.25v10.877a.75.75 0 0 0 1.29.523 2.25 2.25 0 0 1 3.162-.044l.093.09a2.25 2.25 0 0 0 2.81.197l.042-.028a2.25 2.25 0 0 1 2.51 0l.042.028a2.25 2.25 0 0 0 2.81-.197l.093-.09a2.25 2.25 0 0 1 3.162.044.75.75 0 0 0 1.29-.523V5.25a1.5 1.5 0 0 0-.926-1.384l-4.084-1.69a1.5 1.5 0 0 0-1.147 0l-1.023.423a.75.75 0 0 1-.573 0L8.157 2.176Z" clipRule="evenodd" />
-        </svg>
-      ),
-    },
+    isStepVisible(planConfig.schedule)
+      ? {
+          key: "schedule",
+          label: labels.schedule,
+          status: scheduleStatus,
+          href: `/groups/${groupId}/schedule`,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+              <path fillRule="evenodd" d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z" clipRule="evenodd" />
+            </svg>
+          ),
+        }
+      : null,
+    isStepVisible(planConfig.place)
+      ? {
+          key: "destination",
+          label: labels.place,
+          status: destinationStatus,
+          href: `/groups/${groupId}/destination-votes`,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+              <path fillRule="evenodd" d="m9.69 18.933.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 0 0 .281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 1 0 3 9c0 3.492 1.698 5.988 3.355 7.584a13.731 13.731 0 0 0 2.273 1.765 11.842 11.842 0 0 0 .953.524l.004.002.006.003ZM10 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" clipRule="evenodd" />
+            </svg>
+          ),
+        }
+      : null,
+    isStepVisible(planConfig.itinerary)
+      ? {
+          key: "trip",
+          label: labels.itinerary,
+          status: tripStatus,
+          href: `/groups/${groupId}/trip`,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+              <path fillRule="evenodd" d="M8.157 2.176a1.5 1.5 0 0 0-1.147 0l-4.084 1.69A1.5 1.5 0 0 0 2 5.25v10.877a.75.75 0 0 0 1.29.523 2.25 2.25 0 0 1 3.162-.044l.093.09a2.25 2.25 0 0 0 2.81.197l.042-.028a2.25 2.25 0 0 1 2.51 0l.042.028a2.25 2.25 0 0 0 2.81-.197l.093-.09a2.25 2.25 0 0 1 3.162.044.75.75 0 0 0 1.29-.523V5.25a1.5 1.5 0 0 0-.926-1.384l-4.084-1.69a1.5 1.5 0 0 0-1.147 0l-1.023.423a.75.75 0 0 1-.573 0L8.157 2.176Z" clipRule="evenodd" />
+            </svg>
+          ),
+        }
+      : null,
     {
       key: "expenses",
-      label: "精算",
+      label: labels.settlement,
       status: settlementStatus,
       href: `/groups/${groupId}/expenses?tab=settle`,
       icon: (
@@ -223,7 +215,7 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
         </svg>
       ),
     },
-  ];
+  ].filter((s): s is NonNullable<typeof s> => s != null);
 
   const tools = [
     {
@@ -236,17 +228,19 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
         </svg>
       ),
     },
-    {
-      key: "sharing" as const,
-      label: "買い出し",
-      href: `/groups/${groupId}/sharing`,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-          <path d="M3 3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H3Zm2 3h10v2H5V6Zm0 4h10v2H5v-2Zm0 4h7v2H5v-2Z" />
-        </svg>
-      ),
-    },
-  ];
+    planConfig.sharingEnabled
+      ? {
+          key: "sharing" as const,
+          label: "買い出し",
+          href: `/groups/${groupId}/sharing`,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+              <path d="M3 3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H3Zm2 3h10v2H5V6Zm0 4h10v2H5v-2Zm0 4h7v2H5v-2Z" />
+            </svg>
+          ),
+        }
+      : null,
+  ].filter((t): t is NonNullable<typeof t> => t != null);
 
   return (
     <div className="shrink-0 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">

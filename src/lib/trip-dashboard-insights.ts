@@ -10,6 +10,11 @@ import type { GroupDoc } from "@/types/group";
 import type { TripRouteDoc } from "@/types/trip";
 import type { BulletinRecipeVoteDoc } from "@/types/bulletin";
 import {
+  isStepRequired,
+  isStepVisible,
+  resolvePlanConfig,
+} from "@/lib/plan-shape";
+import {
   isDestinationStepCompleteForGroup,
   isItineraryCompleteForGroup,
 } from "@/lib/trip-workflow-all-complete";
@@ -103,38 +108,56 @@ export function computeDashboardInsights(params: {
     familyCount = 0,
   } = params;
 
+  const plan = resolvePlanConfig(group, destinationPolls.length);
   const datesDone = !!group.tripStartDate?.trim();
   const scheduleHasCandidates = scheduleCandidateIds.length > 0;
+  const scheduleNeeded =
+    isStepVisible(plan.schedule) && isStepRequired(plan.schedule);
   const destDone = isDestinationStepCompleteForGroup(group, destinationPolls);
   const itinDone = isItineraryCompleteForGroup(group, tripRoutes);
   const tripStatus = group.status ?? "planning";
   const settlementDone = tripStatus === "completed";
+  const shape = plan.planShape;
 
   const statusLines: string[] = [];
 
   // ── 日程 ──
-  if (!datesDone) {
+  if (!isStepVisible(plan.schedule)) {
+    statusLines.push(`${plan.labels.schedule}の工程はこの予定では使いません。`);
+  } else if (!datesDone) {
     if (scheduleHasCandidates) {
       statusLines.push(
-        `日程は候補が ${scheduleCandidateIds.length} 件あり、メンバーからの回答を募集中です（確定はオーナー・管理者）。`,
+        `${plan.labels.schedule}は候補が ${scheduleCandidateIds.length} 件あり、メンバーからの回答を募集中です（確定はオーナー・管理者）。`,
+      );
+    } else if (isStepRequired(plan.schedule)) {
+      statusLines.push(
+        `${plan.labels.schedule}はまだ確定していません。候補の追加または日付の直接設定が必要です。`,
       );
     } else {
       statusLines.push(
-        "日程はまだ旅行日として確定していません。候補の追加または日程の直接設定が必要です。",
+        `${plan.labels.schedule}は任意です（未設定でも精算へ進めます）。`,
       );
     }
   } else {
     statusLines.push(
-      `日程は ${formatScheduleShort(group.tripStartDate, group.tripEndDate)} が登録されています。`,
+      `${plan.labels.schedule}は ${formatScheduleShort(group.tripStartDate, group.tripEndDate)} が登録されています。`,
     );
   }
 
-  // ── 目的地 ──
-  if (destinationPolls.length === 0) {
+  // ── 場所 ──
+  if (!isStepVisible(plan.place)) {
+    statusLines.push(`${plan.labels.place}の工程はこの予定では使いません。`);
+  } else if (plan.placeMode === "fixed") {
     statusLines.push(
       group.destination?.trim()
-        ? `目的地は「${group.destination.trim()}」として記録されています（投票ブロックなし）。`
-        : "目的地は投票ブロックがまだなく、旅行の目的地欄も未設定です。",
+        ? `${plan.labels.place}は「${group.destination.trim()}」として登録されています。`
+        : `${plan.labels.place}はまだ登録されていません。`,
+    );
+  } else if (destinationPolls.length === 0) {
+    statusLines.push(
+      group.destination?.trim()
+        ? `${plan.labels.place}は「${group.destination.trim()}」として記録されています（投票ブロックなし）。`
+        : `${plan.labels.place}は投票ブロックがまだなく、登録も未設定です。`,
     );
   } else {
     const undecided = destinationPolls.filter(
@@ -143,39 +166,41 @@ export function computeDashboardInsights(params: {
     const decided = destinationPolls.length - undecided.length;
     if (undecided.length > 0) {
       statusLines.push(
-        `目的地は投票ブロック ${destinationPolls.length} 件のうち、${undecided.length} 件が未確定です（確定済み ${decided} 件）。`,
+        `${plan.labels.place}は投票ブロック ${destinationPolls.length} 件のうち、${undecided.length} 件が未確定です（確定済み ${decided} 件）。`,
       );
     } else {
       statusLines.push(
-        `目的地は ${destinationPolls.length} 件のブロックすべて確定済みです。`,
+        `${plan.labels.place}は ${destinationPolls.length} 件のブロックすべて確定済みです。`,
       );
     }
   }
 
   // ── 旅程 ──
-  if (!itinDone) {
+  if (!isStepVisible(plan.itinerary)) {
+    statusLines.push(`${plan.labels.itinerary}の工程はこの予定では使いません。`);
+  } else if (!itinDone) {
     const anyDone = tripRoutes.some((r) => r.data.isDone);
     statusLines.push(
       anyDone
-        ? "旅程は一部の日でルート確認が済んでいません。"
-        : "旅程はまだ登録・確認が終わっていない日があります。",
+        ? `${plan.labels.itinerary}は一部の日でルート確認が済んでいません。`
+        : `${plan.labels.itinerary}はまだ登録・確認が終わっていない日があります。`,
     );
   } else {
-    statusLines.push("旅程は全日の確認が済んでいます。");
+    statusLines.push(`${plan.labels.itinerary}は全日の確認が済んでいます。`);
   }
 
-  // ── 旅行の段階（計画中 / 旅行確定 / 精算完了） ──
+  // ── 段階 ──
   if (tripStatus === "completed") {
     statusLines.push(
-      `いまの段階は「${tripStatusLabel("completed")}」です。支出の精算まで終えて旅行を締めました。`,
+      `いまの段階は「${tripStatusLabel("completed", shape)}」です。支出の精算まで終えて締めました。`,
     );
   } else if (tripStatus === "confirmed") {
     statusLines.push(
-      `いまの段階は「${tripStatusLabel("confirmed")}」です。支出の記録と精算を進め、最後に締めます。`,
+      `いまの段階は「${tripStatusLabel("confirmed", shape)}」です。支出の記録と精算を進め、最後に締めます。`,
     );
   } else {
     statusLines.push(
-      `いまの段階は「${tripStatusLabel("planning")}」です。準備ができたら支出・精算へ進み、精算完了で締められます。`,
+      `いまの段階は「${tripStatusLabel("planning", shape)}」です。準備ができたら支出・精算へ進み、精算完了で締められます。`,
     );
   }
 
@@ -193,42 +218,47 @@ export function computeDashboardInsights(params: {
   let nextStepLine: string;
   let nextStepLink: { href: string; label: string } | null = null;
 
-  if (!datesDone) {
+  if (scheduleNeeded && !datesDone) {
     if (scheduleHasCandidates) {
       nextStepLine = canManageSchedule
-        ? "次のステップ: メンバーの日程回答を待つか、日程調整ページで旅行日を確定してください。"
+        ? `次のステップ: メンバーの回答を待つか、${plan.labels.schedule}を確定してください。`
         : "次のステップ: 各候補に ○／△／× で回答してください。";
     } else {
       nextStepLine = canManageSchedule
-        ? "次のステップ: 日程候補を追加するか、旅行日を直接設定してください。"
-        : "次のステップ: オーナー・管理者が日程候補または旅行日を登録するまでお待ちください。";
+        ? `次のステップ: ${plan.labels.schedule}の候補を追加するか、日付を直接設定してください。`
+        : `次のステップ: オーナー・管理者が${plan.labels.schedule}を登録するまでお待ちください。`;
     }
     nextStepLink = {
       href: `/groups/${groupId}/schedule#schedule-voting`,
       label: scheduleAnswersIncomplete
-        ? "日程調整で ○ / △ / × を選ぶ（投票エリアへ）"
-        : scheduleHasCandidates
-          ? "日程調整ページを開く（投票エリアへ）"
-          : "日程調整ページを開く",
+        ? `${plan.labels.schedule}で ○ / △ / × を選ぶ`
+        : `${plan.labels.schedule}ページを開く`,
     };
-  } else if (!destDone) {
-    nextStepLine = "次のステップ: 目的地の投票をしてください。";
+  } else if (isStepVisible(plan.place) && !destDone) {
+    nextStepLine =
+      plan.placeMode === "fixed"
+        ? `次のステップ: ${plan.labels.place}を登録してください。`
+        : `次のステップ: ${plan.labels.place}の投票をしてください。`;
     nextStepLink = {
       href: `/groups/${groupId}/destination-votes#destination-voting`,
-      label: "投票ページを開く",
+      label:
+        plan.placeMode === "fixed"
+          ? `${plan.labels.place}を登録する`
+          : "投票ページを開く",
     };
-  } else if (!itinDone) {
-    nextStepLine =
-      "次のステップ: 旅程ページで各日のルートを埋め、確認済みにしてください。";
+  } else if (isStepVisible(plan.itinerary) && !itinDone) {
+    nextStepLine = `次のステップ: ${plan.labels.itinerary}ページで各日のルートを埋め、確認済みにしてください。`;
     nextStepLink = {
       href: `/groups/${groupId}/trip`,
-      label: "旅程ページへ",
+      label: `${plan.labels.itinerary}ページへ`,
     };
   } else if (!settlementDone) {
     nextStepLine =
-      tripStatus === "confirmed"
-        ? "次のステップ: 支出を記録し、精算結果を確認して旅行を締めましょう。"
-        : "次のステップ: 支出・精算を進め、精算が終わったら旅行を締めましょう。";
+      familyCount === 0
+        ? "次のステップ: 支出・精算の前に参加世帯を登録してください。"
+        : tripStatus === "confirmed"
+          ? "次のステップ: 支出を記録し、精算結果を確認して締めましょう。"
+          : "次のステップ: 支出・精算を進め、終わったら締めましょう。";
     nextStepLink = {
       href:
         familyCount === 0
@@ -244,10 +274,11 @@ export function computeDashboardInsights(params: {
   }
 
   // ── 個人タスク ──
-  /** 日程・目的地の催促は該当フェーズで「次のステップ」に出すため、同フェーズでは重複させない */
   const personalTasks: DashboardPersonalTask[] = [];
-  /** `nextStepLine` が目的地のとき（日程済み・目的地未完了） */
-  const nextStepIsDestination = datesDone && !destDone;
+  const nextStepIsDestination =
+    isStepVisible(plan.place) &&
+    !destDone &&
+    (!scheduleNeeded || datesDone);
 
   if (userId) {
     // 精算で詰まらないよう、参加世帯未登録は早めに提示する
@@ -259,20 +290,20 @@ export function computeDashboardInsights(params: {
       });
     }
 
-    if (!nextStepIsDestination) {
+    if (!nextStepIsDestination && plan.placeMode === "vote") {
       for (const row of openDestinationPollVotes) {
         const sum = sumUserDestinationWantVotes(userId, row.votes);
         if (sum === 0) {
           personalTasks.push({
             key: `dest-${row.pollId}`,
-            label: `目的地の投票「${row.pollTitle.slice(0, 48)}${row.pollTitle.length > 48 ? "…" : ""}」にまだ票が入っていません。`,
+            label: `${plan.labels.place}の投票「${row.pollTitle.slice(0, 48)}${row.pollTitle.length > 48 ? "…" : ""}」にまだ票が入っていません。`,
             href: `/groups/${groupId}/destination-votes#destination-voting`,
           });
         }
       }
     }
 
-    for (const rt of openRecipeVotes) {
+    for (const rt of isStepVisible(plan.itinerary) ? openRecipeVotes : []) {
       const mine = rt.votes.find((v) => v.userId === userId);
       const n = rt.candidateCount;
       const ratedCount = mine

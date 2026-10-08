@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "旅行を作成",
+  title: "予定を作成",
 };
 
 export default function NewGroupPage() {
@@ -18,10 +18,10 @@ export default function NewGroupPage() {
           ← 旅行一覧
         </Link>
         <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          旅行を作成
+          予定を作成
         </h1>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          1回の旅行・キャンプ単位のスペースを作ります。サークルを選ぶと、作成後にまとめて招待リンクを共有できます。
+          旅行・飲み会・精算だけの箱を作れます。サークルを選ぶと、作成後にまとめて招待リンクを共有できます。
         </p>
         <NewGroupForm />
       </div>

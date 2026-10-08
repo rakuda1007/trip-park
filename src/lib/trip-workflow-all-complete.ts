@@ -1,4 +1,9 @@
 import { normalizeDecidedNamesFromPollDoc } from "@/lib/destination-poll-decided";
+import {
+  isStepRequired,
+  isStepVisible,
+  resolvePlanConfig,
+} from "@/lib/plan-shape";
 import type { DestinationPollDoc } from "@/types/destination";
 import type { GroupDoc } from "@/types/group";
 import type { TripRouteDoc } from "@/types/trip";
@@ -18,11 +23,19 @@ export function calcTripNumDaysFromGroup(
   return Math.max(1, diff + 1);
 }
 
-/** TripStepNavBar と同じ目的地ステップ完了判定 */
+/** 場所工程の完了判定（placeMode / 工程OFF を考慮） */
 export function isDestinationStepCompleteForGroup(
   group: GroupDoc,
   polls: DestinationPollRow[],
 ): boolean {
+  const config = resolvePlanConfig(group, polls.length);
+  if (!isStepVisible(config.place) || config.placeMode === "skip") {
+    return true;
+  }
+  if (config.placeMode === "fixed") {
+    return !!(group.destination?.trim() || group.placeFixed?.name?.trim());
+  }
+  // vote
   if (polls.length === 0) {
     return !!group.destination?.trim();
   }
@@ -40,6 +53,9 @@ export function isItineraryCompleteForGroup(
   tripRoutes: { id: string; data: TripRouteDoc }[],
 ): boolean {
   if (!group) return false;
+  const config = resolvePlanConfig(group);
+  if (!isStepVisible(config.itinerary)) return true;
+
   const fromDates = calcTripNumDaysFromGroup(
     group.tripStartDate ?? null,
     group.tripEndDate ?? null,
@@ -58,8 +74,15 @@ export function isItineraryCompleteForGroup(
   return true;
 }
 
+function isScheduleStepComplete(group: GroupDoc): boolean {
+  const config = resolvePlanConfig(group);
+  if (!isStepVisible(config.schedule)) return true;
+  if (!isStepRequired(config.schedule)) return true;
+  return !!group.tripStartDate?.trim();
+}
+
 /**
- * 日程・目的地・旅程・精算の各工程がすべて完了したときのみ true。
+ * 有効な必須工程がすべて完了したときのみ true。
  * 思い出写真の表示・一覧サムネイルに利用する。
  */
 export function areAllTripWorkflowStepsComplete(
@@ -68,7 +91,7 @@ export function areAllTripWorkflowStepsComplete(
   tripRoutes: { id: string; data: TripRouteDoc }[],
 ): boolean {
   if (!group) return false;
-  const scheduleDone = !!group.tripStartDate;
+  const scheduleDone = isScheduleStepComplete(group);
   const destDone = isDestinationStepCompleteForGroup(group, destinationPolls);
   const itinDone = isItineraryCompleteForGroup(group, tripRoutes);
   const settlementDone = (group.status ?? "planning") === "completed";
@@ -76,8 +99,8 @@ export function areAllTripWorkflowStepsComplete(
 }
 
 /**
- * ボトムナビ「計画」など用: 未完了の最初の計画工程へ。
- * 日程・目的地・旅程がすべて完了済みなら旅程（計画の最終画面）へ。
+ * ボトムナビ「計画」など用: 有効な未完了の最初の計画工程へ。
+ * 計画工程がすべて不要／完了なら精算へ。
  */
 export function resolveNextPlanPath(
   groupId: string,
@@ -86,9 +109,23 @@ export function resolveNextPlanPath(
   tripRoutes: { id: string; data: TripRouteDoc }[],
 ): string {
   const base = `/groups/${groupId}`;
-  if (!group?.tripStartDate) return `${base}/schedule`;
-  if (!isDestinationStepCompleteForGroup(group, destinationPolls)) {
-    return `${base}/destination-votes`;
+  if (!group) return `${base}/schedule`;
+
+  const config = resolvePlanConfig(group, destinationPolls.length);
+
+  if (isStepVisible(config.schedule) && isStepRequired(config.schedule)) {
+    if (!group.tripStartDate?.trim()) return `${base}/schedule`;
   }
-  return `${base}/trip`;
+  if (isStepVisible(config.place)) {
+    if (!isDestinationStepCompleteForGroup(group, destinationPolls)) {
+      return `${base}/destination-votes`;
+    }
+  }
+  if (isStepVisible(config.itinerary)) {
+    if (!isItineraryCompleteForGroup(group, tripRoutes)) {
+      return `${base}/trip`;
+    }
+    return `${base}/trip`;
+  }
+  return `${base}/expenses?tab=settle`;
 }

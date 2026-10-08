@@ -4,6 +4,7 @@ import { useGroupRouteId } from "@/contexts/group-route-context";
 import { listDestinationPolls } from "@/lib/firestore/destination-votes";
 import { getGroup } from "@/lib/firestore/groups";
 import { listTripRoutes } from "@/lib/firestore/trip";
+import { resolvePlanConfig } from "@/lib/plan-shape";
 import { resolveNextPlanPath } from "@/lib/trip-workflow-all-complete";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -20,21 +21,25 @@ export function TripBottomNav() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
-  const [planHref, setPlanHref] = useState(`/groups/${groupId}/schedule`);
+  const [planHref, setPlanHref] = useState(`/groups/${groupId}/expenses?tab=settle`);
+  const [sharingEnabled, setSharingEnabled] = useState(true);
+  const [planTabLabel, setPlanTabLabel] = useState("計画");
 
   const homeHref = `/groups/${groupId}`;
   const contactHref = `/groups/${groupId}/bulletin`;
+  const planGoesToExpenses = planHref.includes("/expenses");
 
   const isHome =
     pathname === homeHref || pathname === `${homeHref}/`;
   const isPlan =
     pathname.startsWith(`${homeHref}/schedule`) ||
     pathname.startsWith(`${homeHref}/destination-votes`) ||
-    pathname.startsWith(`${homeHref}/trip`);
+    pathname.startsWith(`${homeHref}/trip`) ||
+    (planGoesToExpenses && pathname.startsWith(`${homeHref}/expenses`));
   const isContact = pathname.startsWith(`${homeHref}/bulletin`);
   const isMore =
+    (!planGoesToExpenses && pathname.startsWith(`${homeHref}/expenses`)) ||
     pathname.startsWith(`${homeHref}/sharing`) ||
-    pathname.startsWith(`${homeHref}/expenses`) ||
     pathname.startsWith(`${homeHref}/families`) ||
     pathname.startsWith(`${homeHref}/admin`);
 
@@ -55,11 +60,14 @@ export function TripBottomNav() {
 
   useEffect(() => {
     let cancelled = false;
-    setPlanHref(`/groups/${groupId}/schedule`);
+    setPlanHref(`/groups/${groupId}/expenses?tab=settle`);
     void (async () => {
       try {
         const group = await getGroup(groupId);
         if (cancelled || !group) return;
+        const cfg = resolvePlanConfig(group);
+        setSharingEnabled(cfg.sharingEnabled);
+        setPlanTabLabel(cfg.planShape === "settle_only" ? "精算" : "計画");
         const [polls, routes] = await Promise.all([
           listDestinationPolls(groupId),
           listTripRoutes(groupId),
@@ -67,7 +75,11 @@ export function TripBottomNav() {
         if (cancelled) return;
         setPlanHref(resolveNextPlanPath(groupId, group, polls, routes));
       } catch {
-        if (!cancelled) setPlanHref(`/groups/${groupId}/schedule`);
+        if (!cancelled) {
+          setPlanHref(`/groups/${groupId}/expenses?tab=settle`);
+          setSharingEnabled(true);
+          setPlanTabLabel("計画");
+        }
       }
     })();
     return () => {
@@ -76,13 +88,16 @@ export function TripBottomNav() {
   }, [groupId, pathname]);
 
   const moreItems: { key: MoreKey; label: string; href: string }[] = [
-    { key: "sharing", label: "買い出し", href: `${homeHref}/sharing` },
+    ...(sharingEnabled
+      ? [{ key: "sharing" as const, label: "買い出し", href: `${homeHref}/sharing` }]
+      : []),
     {
       key: "expenses",
       label: "支出・精算",
       href: `${homeHref}/expenses`,
     },
     { key: "families", label: "参加世帯", href: `${homeHref}/families` },
+    { key: "admin", label: "管理", href: `${homeHref}/admin` },
   ];
 
   const itemClass = (active: boolean) =>
@@ -104,7 +119,7 @@ export function TripBottomNav() {
         </Link>
         <Link href={planHref} className={itemClass(isPlan && !isHome)} aria-current={isPlan && !isHome ? "page" : undefined}>
           <PlanIcon />
-          計画
+          {planTabLabel}
         </Link>
         <Link
           href={contactHref}

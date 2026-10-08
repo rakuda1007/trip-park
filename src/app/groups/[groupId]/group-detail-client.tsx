@@ -19,6 +19,7 @@ import {
 } from "@/lib/firestore/bulletin";
 import { listFamilies } from "@/lib/firestore/families";
 import { clearLastTripId, loadLastTripId, saveLastTripId } from "@/lib/last-trip";
+import { labelsForShape, resolvePlanShape } from "@/lib/plan-shape";
 import { uploadGroupMemoryPhoto } from "@/lib/storage/group-memory-photo";
 import { areAllTripWorkflowStepsComplete } from "@/lib/trip-workflow-all-complete";
 import { computeDashboardInsights } from "@/lib/trip-dashboard-insights";
@@ -36,6 +37,7 @@ import type {
 } from "@/types/bulletin";
 import type { TripRouteDoc } from "@/types/trip";
 import { VisibilityBadge } from "@/components/visibility-badge";
+import { PlanShapeSettings } from "@/components/trip/plan-shape-settings";
 import { TripDashboardInsightsPanel } from "@/components/trip/trip-dashboard-insights-panel";
 import { TripHomeContactSummary } from "@/components/trip/trip-home-contact-summary";
 import Image from "next/image";
@@ -650,6 +652,16 @@ export function GroupDetailClient() {
         allWorkflowComplete={allTripWorkflowComplete}
       />
 
+      {canManageSchedule ? (
+        <div className="mt-6">
+          <PlanShapeSettings
+            groupId={groupId}
+            group={group}
+            onUpdated={setGroup}
+          />
+        </div>
+      ) : null}
+
       {/* 日程編集フォーム（オーナーのみ） */}
       {editingDates && isOwner ? (
         <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
@@ -734,13 +746,13 @@ export function GroupDetailClient() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-                旅のあと
+                {labelsForShape(resolvePlanShape(group)).afterSection}
               </p>
               <h2 className="mt-1 text-sm font-medium text-zinc-800 dark:text-zinc-200">
                 思い出写真
               </h2>
               <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                工程が完了した旅行向けです。1枚だけ登録でき、「過去の旅行」一覧のサムネイルにも使われます。
+                工程が完了した予定向けです。1枚だけ登録でき、一覧のサムネイルにも使われます。
               </p>
             </div>
             {isOwner ? (

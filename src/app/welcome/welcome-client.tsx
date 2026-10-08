@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import { getInviteCodeInfo } from "@/lib/firestore/groups";
+import { inviteJoinNoun, inviteKindLabel } from "@/lib/plan-shape";
 import type { InviteCodeDoc } from "@/types/group";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -103,13 +104,14 @@ export function WelcomeClient() {
     <div className="mx-auto w-full max-w-md flex-1 px-4 py-10 sm:py-14">
       <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-6 py-8 text-center dark:border-emerald-800 dark:bg-emerald-950/30">
         <p className="text-sm text-emerald-700 dark:text-emerald-300">
-          旅行への招待
+          {inviteKindLabel(info.planShape)}
         </p>
         <h1 className="mt-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
           {info.groupName}
         </h1>
         <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
-          この旅行に参加するには、Trip Park のアカウントが必要です。
+          {inviteJoinNoun(info.planShape)}
+          に参加するには、Trip Park のアカウントが必要です。
         </p>
       </div>
 

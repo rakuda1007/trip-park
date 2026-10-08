@@ -2,10 +2,22 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import { deleteGroup, listMyGroups } from "@/lib/firestore/groups";
-import type { UserGroupRefDoc } from "@/types/group";
+import { labelsForShape, resolvePlanShape } from "@/lib/plan-shape";
+import type { PlanShape, UserGroupRefDoc } from "@/types/group";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+
+function PlanShapeBadge({ planShape }: { planShape?: PlanShape | null }) {
+  const shape = resolvePlanShape({ planShape });
+  if (shape === "trip") return null;
+  const label = labelsForShape(shape).shape;
+  return (
+    <span className="ml-1.5 inline-flex items-center rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+      {label}
+    </span>
+  );
+}
 
 type GroupItem = { groupId: string; data: UserGroupRefDoc };
 
@@ -130,6 +142,7 @@ function GroupCard({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium text-zinc-900 dark:text-zinc-50">
                 {data.groupName}
+                <PlanShapeBadge planShape={data.planShape} />
                 <RoleBadge role={data.role} />
               </span>
               {daysLabel ? (

@@ -63,6 +63,7 @@ export function FamiliesClient() {
   const isSetupMode =
     searchParams.get("setup") === "1" || searchParams.get("setup") === "true";
   const circleInviteId = searchParams.get("circleInvite");
+  const afterSetup = searchParams.get("after");
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
   const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>([]);
@@ -311,10 +312,16 @@ export function FamiliesClient() {
             ) : null}
             {families.length > 0 ? (
               <Link
-                href={`/groups/${groupId}`}
+                href={
+                  afterSetup === "expenses"
+                    ? `/groups/${groupId}/expenses`
+                    : `/groups/${groupId}`
+                }
                 className="rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-50 dark:hover:bg-amber-900/60"
               >
-                旅行ホームへ進む
+                {afterSetup === "expenses"
+                  ? "支出の記録へ進む"
+                  : "旅行ホームへ進む"}
               </Link>
             ) : (
               <Link

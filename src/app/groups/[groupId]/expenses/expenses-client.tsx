@@ -578,7 +578,10 @@ export function ExpensesClient() {
   const canUpdateSettlementStep =
     !!user && (group.ownerId === user.uid || myRole === "admin");
   const settlementStepDone = (group.status ?? "planning") === "completed";
-  const closeLabels = settlementCloseLabels(settlementStepDone);
+  const closeLabels = settlementCloseLabels(
+    settlementStepDone,
+    group.planShape,
+  );
 
   async function handleToggleSettlementStep() {
     if (!canUpdateSettlementStep) return;
@@ -1281,7 +1284,8 @@ export function ExpensesClient() {
                   旅行の締め
                 </p>
                 <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  段階: {tripStatusLabel(group.status)} — {closeLabels.current}
+                  段階: {tripStatusLabel(group.status, group.planShape)} —{" "}
+                  {closeLabels.current}
                 </p>
               </div>
               {canUpdateSettlementStep ? (

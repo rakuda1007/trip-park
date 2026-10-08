@@ -3,6 +3,20 @@ export type GroupRole = "owner" | "admin" | "member";
 /** 旅行のフェーズ: 計画中 / 旅行確定 / 旅行終了 */
 export type TripStatus = "planning" | "confirmed" | "completed";
 
+/** 予定の形（旅行 / 飲み会・食事 / シンプル精算） */
+export type PlanShape = "trip" | "gathering" | "settle_only";
+
+/** 場所工程の決め方 */
+export type PlaceMode = "vote" | "fixed" | "skip";
+
+export type StepAvailability = "required" | "optional" | "off";
+
+export type PlaceFixed = {
+  name: string;
+  mapUrl?: string | null;
+  note?: string | null;
+};
+
 export type GroupDoc = {
   name: string;
   description: string | null;
@@ -16,10 +30,23 @@ export type GroupDoc = {
   tripStartDate: string | null;
   /** 旅行終了日 YYYY-MM-DD */
   tripEndDate: string | null;
-  /** 確定した目的地名 */
+  /** 確定した目的地名（お店名）。一覧・ナビ要約用 */
   destination: string | null;
   /** 旅行フェーズ。未設定の場合は "planning" とみなす */
   status: TripStatus | null;
+  /** 予定の形。未設定は trip（レガシー互換） */
+  planShape?: PlanShape | null;
+  /** 場所の決め方。未設定は形とデータから推定 */
+  placeMode?: PlaceMode | null;
+  /** fixed 用の詳細（destination と併用） */
+  placeFixed?: PlaceFixed | null;
+  /** 工程の上書き。未設定は形のデフォルト */
+  stepOverrides?: {
+    schedule?: StepAvailability;
+    place?: StepAvailability;
+    itinerary?: StepAvailability;
+    sharing?: "on" | "off";
+  } | null;
 };
 
 export type MemberDoc = {
@@ -45,10 +72,14 @@ export type UserGroupRefDoc = {
   tripEndDate?: string | null;
   /** 思い出サムネイルを一覧に出してよいか（日程・目的地・旅程・精算がすべて完了のとき true） */
   memoryPhotoVisible?: boolean;
+  /** 予定の形（一覧バッジ用） */
+  planShape?: PlanShape | null;
 };
 
 export type InviteCodeDoc = {
   groupId: string;
   groupName: string;
   createdAt: unknown;
+  /** 招待プレビュー用。未設定は trip 扱い */
+  planShape?: PlanShape | null;
 };

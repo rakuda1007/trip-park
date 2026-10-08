@@ -12,6 +12,7 @@ import {
 import type { GroupDoc, GroupRole, MemberDoc } from "@/types/group";
 import type { NotifyStatusResponse } from "@/app/api/admin/notify-status/route";
 import { Timestamp } from "firebase/firestore";
+import { PlanShapeSettings } from "@/components/trip/plan-shape-settings";
 import { VisibilityBadge } from "@/components/visibility-badge";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -182,8 +183,18 @@ export function AdminClient() {
         />
       </div>
       <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-        {group?.name} のメンバー・通知の確認、およびオーナーによる旅行の削除ができます。
+        {group?.name} の予定の形・メンバー・通知の確認、およびオーナーによる削除ができます。
       </p>
+
+      {group ? (
+        <div className="mt-6">
+          <PlanShapeSettings
+            groupId={groupId}
+            group={group}
+            onUpdated={setGroup}
+          />
+        </div>
+      ) : null}
 
       {/* Push通知サマリー */}
       {deviceCounts !== null && (

@@ -6,6 +6,12 @@ import {
   getMemberForUser,
   joinGroupWithCode,
 } from "@/lib/firestore/groups";
+import {
+  inviteJoinNoun,
+  inviteKindLabel,
+  labelsForShape,
+  resolvePlanShape,
+} from "@/lib/plan-shape";
 import type { InviteCodeDoc } from "@/types/group";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -92,7 +98,10 @@ export function JoinClient() {
       if (wasMember) {
         router.replace(`/groups/${groupId}`);
       } else {
-        router.push(`/groups/${groupId}/families?setup=1`);
+        const shape = resolvePlanShape({ planShape: invite?.planShape });
+        const q = new URLSearchParams({ setup: "1" });
+        if (shape === "settle_only") q.set("after", "expenses");
+        router.push(`/groups/${groupId}/families?${q.toString()}`);
       }
       router.refresh();
     } catch (e) {
@@ -100,7 +109,7 @@ export function JoinClient() {
     } finally {
       setSubmitting(false);
     }
-  }, [user, code, router]);
+  }, [user, code, router, invite?.planShape]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -138,14 +147,18 @@ export function JoinClient() {
       {previewReady && invite && tripName ? (
         <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 dark:border-emerald-800 dark:bg-emerald-950/40">
           <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
-            参加する旅行
+            {inviteKindLabel(invite.planShape)}
           </p>
           <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
             {tripName}
           </p>
+          <p className="mt-1 text-[11px] text-emerald-900/70 dark:text-emerald-100/70">
+            {labelsForShape(resolvePlanShape({ planShape: invite.planShape })).shape}
+          </p>
           {user ? (
             <p className="mt-2 text-xs text-emerald-900/80 dark:text-emerald-100/80">
-              下のボタンを押すと、この旅行に参加できます。
+              下のボタンを押すと、{inviteJoinNoun(invite.planShape)}
+              に参加できます。
             </p>
           ) : null}
         </div>

@@ -12,6 +12,7 @@ import {
   updateTripRoute,
   type TripRouteInput,
 } from "@/lib/firestore/trip";
+import { isStepVisible, resolvePlanConfig } from "@/lib/plan-shape";
 import { collectMealsForDayFromBulletin } from "@/lib/recipe-vote";
 import { calcTripNumDays, dateLabelForTripDay } from "@/lib/trip-dates";
 import { RECIPE_MEAL_LABELS } from "@/types/bulletin";
@@ -688,6 +689,26 @@ export function TripClient() {
   // ────────────────────────────────
   // レンダリング
   // ────────────────────────────────
+
+  const tripPlanConfig = resolvePlanConfig(group);
+  if (!isStepVisible(tripPlanConfig.itinerary)) {
+    return (
+      <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
+        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+          {tripPlanConfig.labels.itinerary}
+        </h1>
+        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          この予定では旅程は使いません。ホームや精算から操作できます。
+        </p>
+        <Link
+          href={`/groups/${groupId}`}
+          className="mt-6 inline-block text-sm underline"
+        >
+          ホームへ戻る
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">

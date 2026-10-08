@@ -20,6 +20,7 @@ import type {
   ScheduleConfigDoc,
 } from "@/types/schedule";
 import { VisibilityBadge } from "@/components/visibility-badge";
+import { resolvePlanConfig } from "@/lib/plan-shape";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -341,7 +342,7 @@ export function ScheduleClient() {
   ) {
     if (
       !confirm(
-        `次の候補を旅行の確定日程としてよいですか？\n\n${label}`,
+        `次の候補を確定の${resolvePlanConfig(group!).labels.schedule}としてよいですか？\n\n${label}`,
       )
     ) {
       return;
@@ -405,14 +406,16 @@ export function ScheduleClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:py-14">
       <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        日程調整
+        {resolvePlanConfig(group).labels.schedule}調整
       </h1>
       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
         各候補で ○ / △ / × を選び、
         <span className="font-medium text-zinc-800 dark:text-zinc-200">
           「回答を保存」
         </span>
-        を押すと他のメンバーにも反映されます。日程の確定はオーナーまたは管理者が行います。
+        を押すと他のメンバーにも反映されます。
+        {resolvePlanConfig(group).labels.schedule}
+        の確定はオーナーまたは管理者が行います。
       </p>
 
       {saveBanner ? (

@@ -12,6 +12,12 @@ import {
   getGroup,
   getMemberForUser,
 } from "@/lib/firestore/groups";
+import {
+  inviteJoinNoun,
+  inviteKindLabel,
+  labelsForShape,
+  resolvePlanShape,
+} from "@/lib/plan-shape";
 import type { GroupDoc } from "@/types/group";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
@@ -349,7 +355,7 @@ export function AppHeader() {
                             </button>
                             <a
                               href={`https://line.me/R/msg/text/?${encodeURIComponent(
-                                `「${groupForMenu.name}」の旅行に招待されました！\n参加はこちらから👇\n${buildWelcomeUrl(groupForMenu.inviteCode)}`,
+                                `${inviteKindLabel(groupForMenu.planShape)}「${groupForMenu.name}」\n${inviteJoinNoun(groupForMenu.planShape)}に参加はこちらから👇\n${buildWelcomeUrl(groupForMenu.inviteCode)}`,
                               )}`}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -364,8 +370,8 @@ export function AppHeader() {
                                 onClick={async () => {
                                   try {
                                     await navigator.share({
-                                      title: `「${groupForMenu.name}」への招待`,
-                                      text: `「${groupForMenu.name}」の旅行に招待されました！`,
+                                      title: `「${groupForMenu.name}」への招待（${labelsForShape(resolvePlanShape(groupForMenu)).shape}）`,
+                                      text: `${inviteKindLabel(groupForMenu.planShape)}「${groupForMenu.name}」`,
                                       url: buildWelcomeUrl(groupForMenu.inviteCode),
                                     });
                                   } catch {

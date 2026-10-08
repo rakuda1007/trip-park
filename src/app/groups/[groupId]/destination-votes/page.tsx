@@ -1,15 +1,15 @@
 import { AuthGuard } from "@/components/auth-guard";
-import { DestinationVotesClient } from "./destination-votes-client";
+import { PlaceStepClient } from "./place-step-client";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "目的地を決める",
+  title: "場所を決める",
 };
 
 export default function DestinationVotesPage() {
   return (
     <AuthGuard>
-      <DestinationVotesClient />
+      <PlaceStepClient />
     </AuthGuard>
   );
 }
