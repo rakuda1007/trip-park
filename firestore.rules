@@ -157,22 +157,30 @@ service cloud.firestore {
       }
     }
 
+    function invitePlanShapeOk(data) {
+      return !data.keys().hasAny(['planShape']) ||
+        data.planShape in ['trip', 'gathering', 'settle_only'];
+    }
+
     match /inviteCodes/{code} {
       allow read: if true;
       allow create: if request.auth != null &&
         exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)) &&
-        get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.ownerId == request.auth.uid;
+        get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.ownerId == request.auth.uid &&
+        invitePlanShapeOk(request.resource.data);
       allow delete: if request.auth != null;
-      // オーナーのみ旅行名と同期（groupId・createdAt は不変）
+      // オーナー／管理者: 旅行名・予定の形を同期（groupId・createdAt は不変）
       allow update: if request.auth != null &&
         resource.data.keys().hasAll(['groupId', 'groupName', 'createdAt']) &&
-        request.resource.data.keys().hasOnly(['groupId', 'groupName', 'createdAt']) &&
-        groupOwnerId(resource.data.groupId) == request.auth.uid &&
+        request.resource.data.keys().hasAll(['groupId', 'groupName', 'createdAt']) &&
+        request.resource.data.keys().hasOnly(['groupId', 'groupName', 'createdAt', 'planShape']) &&
+        isOwnerOrAdmin(resource.data.groupId) &&
         request.resource.data.groupId == resource.data.groupId &&
         request.resource.data.createdAt == resource.data.createdAt &&
         request.resource.data.groupName is string &&
         request.resource.data.groupName.size() > 0 &&
-        request.resource.data.groupName.size() <= 200;
+        request.resource.data.groupName.size() <= 200 &&
+        invitePlanShapeOk(request.resource.data);
     }
 
     match /groups/{groupId} {
@@ -183,7 +191,8 @@ service cloud.firestore {
         request.resource.data.keys().hasOnly([
           'name', 'description', 'ownerId', 'inviteCode',
           'createdAt', 'updatedAt', 'tripStartDate', 'tripEndDate',
-          'destination', 'status', 'memoryPhotoUrl'
+          'destination', 'status', 'memoryPhotoUrl',
+          'planShape', 'placeMode', 'placeFixed', 'stepOverrides'
         ]);
       allow update: if request.auth != null && (
         resource.data.ownerId == request.auth.uid ||
