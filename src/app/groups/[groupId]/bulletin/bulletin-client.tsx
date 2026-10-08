@@ -116,6 +116,17 @@ function BulletinClientInner() {
     if (q === "1" || q === "true") {
       openedFromNewQueryRef.current = true;
       setShowForm(true);
+      const cat = searchParams.get("category");
+      if (
+        cat === "general" ||
+        cat === "gear" ||
+        cat === "dayof" ||
+        cat === "other" ||
+        cat === "recipe_vote" ||
+        cat === "nearby_map"
+      ) {
+        setNewCategory(cat);
+      }
       router.replace(`/groups/${groupId}/bulletin`, { scroll: false });
     }
   }, [groupId, router, searchParams]);

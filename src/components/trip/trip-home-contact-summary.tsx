@@ -30,12 +30,6 @@ function contactHeadingTitle(data: BulletinTopicDoc): string {
   if (data.category === "nearby_map") {
     return formatNearbyMapTopicHeadingTitle(data.title);
   }
-  if (data.category === "recipe_vote") {
-    const t = data.title.trim();
-    if (!t) return "レシピ投票";
-    if (t.includes("レシピ投票")) return t;
-    return `レシピ投票: ${t}`;
-  }
   return data.title;
 }
 
@@ -52,10 +46,12 @@ export function TripHomeContactSummary({
   groupId: string;
   topics: TopicRow[];
 }) {
+  // レシピ投票は旅程の献立導線へ寄せるため、連絡サマリからは除外
+  const contactTopics = topics.filter((t) => t.data.category !== "recipe_vote");
   const latest =
-    topics.length === 0
+    contactTopics.length === 0
       ? null
-      : [...topics].sort(
+      : [...contactTopics].sort(
           (a, b) => tsToMs(b.data.updatedAt) - tsToMs(a.data.updatedAt),
         )[0]!;
 

@@ -216,7 +216,7 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
       key: "expenses",
       label: "精算",
       status: settlementStatus,
-      href: `/groups/${groupId}/expenses`,
+      href: `/groups/${groupId}/expenses?tab=settle`,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
           <path fillRule="evenodd" d="M9.99 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16ZM4 10a6 6 0 0 1 10.607-3.87l-8.477 8.477A6 6 0 0 1 4 10Zm6 6a5.966 5.966 0 0 1-3.607-1.217l8.477-8.477A6 6 0 0 1 16 10a6 6 0 0 1-6 6Z" clipRule="evenodd" />

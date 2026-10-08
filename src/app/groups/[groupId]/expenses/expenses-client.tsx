@@ -33,7 +33,10 @@ import type {
 } from "@/types/expense";
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+type ExpensesTab = "record" | "settle";
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   food: "食材・飲食",
@@ -177,6 +180,22 @@ function buildDemoMapFromSelection(
 export function ExpensesClient() {
   const groupId = useGroupRouteId();
   const { user } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const activeTab: ExpensesTab =
+    tabParam === "settle" ? "settle" : "record";
+
+  function setActiveTab(next: ExpensesTab) {
+    const q = new URLSearchParams(searchParams.toString());
+    if (next === "record") q.delete("tab");
+    else q.set("tab", next);
+    const qs = q.toString();
+    router.replace(
+      qs ? `/groups/${groupId}/expenses?${qs}` : `/groups/${groupId}/expenses`,
+      { scroll: false },
+    );
+  }
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
   const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>([]);
@@ -1184,54 +1203,66 @@ export function ExpensesClient() {
       </section>
   );
 
+  const familiesWizard =
+    families.length === 0 ? (
+      <div
+        className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-50"
+        role="status"
+      >
+        <p className="font-semibold">先に参加世帯を登録してください</p>
+        <p className="mt-1 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/90">
+          支出の立て替え・負担分担は世帯単位です。参加世帯が無いと記録できません。
+        </p>
+        <Link
+          href={`/groups/${groupId}/families?setup=1`}
+          className="mt-3 inline-flex rounded-md bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800"
+        >
+          参加世帯を登録する
+        </Link>
+      </div>
+    ) : null;
+
   return (
     <div className="mx-auto w-full min-w-0 max-w-3xl flex-1 px-4 py-10 sm:py-14">
       <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
         支出・精算
       </h1>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        立て替えと負担の対象は
-        <span className="font-semibold">世帯単位</span>
-        です。
-        <Link
-          href={`/groups/${groupId}/families`}
-          className="font-medium text-emerald-800 underline dark:text-emerald-400"
-        >
-          参加世帯の登録
-        </Link>
-        が必要です。
+        「支出を記録」で立て替えを残し、「精算結果」で誰が誰に払うかを確認します。
       </p>
-      <section className="mt-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-              精算工程ステータス
-            </p>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              現在:{" "}
-              {settlementStepDone ? "完了" : "進行中"}
-            </p>
-          </div>
-          {canUpdateSettlementStep ? (
-            <button
-              type="button"
-              onClick={() => void handleToggleSettlementStep()}
-              disabled={busy !== null}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 ${
-                settlementStepDone
-                  ? "bg-zinc-600 hover:bg-zinc-500"
-                  : "bg-emerald-600 hover:bg-emerald-500"
-              }`}
-            >
-              {busy === "settlement-status"
-                ? "更新中…"
-                : settlementStepDone
-                  ? "未完了に戻す"
-                  : "精算工程を完了にする"}
-            </button>
-          ) : null}
-        </div>
-      </section>
+
+      <div
+        className="mt-5 inline-flex overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-sm dark:border-zinc-600 dark:bg-zinc-900"
+        role="tablist"
+        aria-label="支出・精算の表示切替"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "record"}
+          onClick={() => setActiveTab("record")}
+          className={`px-4 py-2 text-sm font-semibold transition ${
+            activeTab === "record"
+              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+              : "text-zinc-700 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          }`}
+        >
+          支出を記録
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "settle"}
+          onClick={() => setActiveTab("settle")}
+          className={`px-4 py-2 text-sm font-semibold transition ${
+            activeTab === "settle"
+              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+              : "text-zinc-700 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          }`}
+        >
+          精算結果
+        </button>
+      </div>
 
       {error ? (
         <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
@@ -1239,19 +1270,52 @@ export function ExpensesClient() {
         </p>
       ) : null}
 
-      {hasExpenses ? (
+      {activeTab === "record" ? (
         <>
-          {expenseListSection}
-          {settlementSummarySection}
-          {settlementGuideSection}
+          {familiesWizard}
           {addExpenseFormSection}
+          {expenseListSection}
         </>
       ) : (
         <>
-          {addExpenseFormSection}
+          {familiesWizard}
+          <section className="mt-6 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                  精算工程ステータス
+                </p>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  現在: {settlementStepDone ? "完了" : "進行中"}
+                </p>
+              </div>
+              {canUpdateSettlementStep ? (
+                <button
+                  type="button"
+                  onClick={() => void handleToggleSettlementStep()}
+                  disabled={busy !== null}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 ${
+                    settlementStepDone
+                      ? "bg-zinc-600 hover:bg-zinc-500"
+                      : "bg-emerald-600 hover:bg-emerald-500"
+                  }`}
+                >
+                  {busy === "settlement-status"
+                    ? "更新中…"
+                    : settlementStepDone
+                      ? "未完了に戻す"
+                      : "精算工程を完了にする"}
+                </button>
+              ) : null}
+            </div>
+          </section>
+          {!hasExpenses ? (
+            <p className="mt-6 text-sm text-zinc-500 dark:text-zinc-400">
+              まだ支出がありません。「支出を記録」タブから追加すると、ここに精算結果が表示されます。
+            </p>
+          ) : null}
           {settlementSummarySection}
           {settlementGuideSection}
-          {expenseListSection}
         </>
       )}
     </div>

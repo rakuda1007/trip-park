@@ -8,7 +8,13 @@ import {
   updateHousehold,
   type HouseholdItem,
 } from "@/lib/firestore/households";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+
+function safeReturnTo(raw: string | null): string | null {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return null;
+  return raw;
+}
 
 type FormState = {
   name: string;
@@ -188,12 +194,16 @@ function HouseholdCard({
 
 export function HouseholdsClient() {
   const { user } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = safeReturnTo(searchParams.get("returnTo"));
+
   const [items, setItems] = useState<HouseholdItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [showNew, setShowNew] = useState(false);
+  const [showNew, setShowNew] = useState(!!returnTo);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -221,6 +231,10 @@ export function HouseholdsClient() {
       await createHousehold(user.uid, toParams(form));
       setShowNew(false);
       await load();
+      if (returnTo) {
+        router.push(returnTo);
+        return;
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "作成に失敗しました");
     } finally {
@@ -262,6 +276,15 @@ export function HouseholdsClient() {
 
   return (
     <div>
+      {returnTo ? (
+        <div
+          className="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
+          role="status"
+        >
+          世帯マスタを登録したあと、旅行の参加世帯セットアップに戻ります。
+        </div>
+      ) : null}
+
       {error ? (
         <p className="mb-4 text-sm text-red-600 dark:text-red-400" role="alert">
           {error}

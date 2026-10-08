@@ -85,6 +85,8 @@ export function computeDashboardInsights(params: {
   userId: string | null;
   /** 日程の確定・候補の追加など（オーナー／管理者）。メンバー向け文言と切り替える */
   canManageSchedule: boolean;
+  /** この旅行の参加世帯数（未登録だと精算できない） */
+  familyCount?: number;
 }): DashboardInsights {
   const {
     groupId,
@@ -97,6 +99,7 @@ export function computeDashboardInsights(params: {
     openDestinationPollVotes,
     userId,
     canManageSchedule,
+    familyCount = 0,
   } = params;
 
   const datesDone = !!group.tripStartDate?.trim();
@@ -220,8 +223,12 @@ export function computeDashboardInsights(params: {
         ? "次のステップ: 支出・精算ページで清算を進め、旅行を完了にしてください。"
         : "次のステップ: 旅行を確定したうえで、支出・精算を進めてください。";
     nextStepLink = {
-      href: `/groups/${groupId}/expenses`,
-      label: "支出・精算ページへ",
+      href:
+        familyCount === 0
+          ? `/groups/${groupId}/families?setup=1`
+          : `/groups/${groupId}/expenses?tab=settle`,
+      label:
+        familyCount === 0 ? "参加世帯を登録する" : "精算結果を確認する",
     };
   } else {
     nextStepLine =
@@ -236,6 +243,15 @@ export function computeDashboardInsights(params: {
   const nextStepIsDestination = datesDone && !destDone;
 
   if (userId) {
+    // 精算で詰まらないよう、参加世帯未登録は早めに提示する
+    if (familyCount === 0) {
+      personalTasks.push({
+        key: "families-setup",
+        label: "支出・精算の前に、この旅行の参加世帯を登録してください。",
+        href: `/groups/${groupId}/families?setup=1`,
+      });
+    }
+
     if (!nextStepIsDestination) {
       for (const row of openDestinationPollVotes) {
         const sum = sumUserDestinationWantVotes(userId, row.votes);
@@ -258,7 +274,7 @@ export function computeDashboardInsights(params: {
       if (ratedCount === 0) {
         personalTasks.push({
           key: `recipe-${rt.topicId}`,
-          label: `レシピ投票「${rt.title.slice(0, 40)}${rt.title.length > 40 ? "…" : ""}」でまだ評価していません。`,
+          label: `献立のレシピ投票「${rt.title.slice(0, 40)}${rt.title.length > 40 ? "…" : ""}」でまだ評価していません。`,
           href: `/groups/${groupId}/bulletin/${rt.topicId}`,
         });
       }

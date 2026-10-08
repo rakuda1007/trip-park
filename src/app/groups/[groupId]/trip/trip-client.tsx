@@ -574,6 +574,18 @@ export function TripClient() {
     [selectedDay, bulletinTopics],
   );
 
+  /** 未確定のレシピ投票（献立導線用） */
+  const openRecipeVotes = useMemo(
+    () =>
+      bulletinTopics.filter(
+        (t) =>
+          t.data.category === "recipe_vote" &&
+          !t.data.recipePollResolution &&
+          (t.data.recipePoll?.candidates?.length ?? 0) > 0,
+      ),
+    [bulletinTopics],
+  );
+
   const dayNumbers = useMemo(() => Array.from({ length: numDays }, (_, i) => i + 1), [numDays]);
 
   const currentRoute = useMemo(
@@ -751,12 +763,32 @@ export function TripClient() {
           )}
         </div>
 
-        {mealsForSelectedDay.length > 0 ? (
-          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/25">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
-              この日の献立（レシピ投票の確定）
-            </p>
-            <ul className="mt-2 space-y-2">
+        {/* 献立・レシピ投票（旅程のサブ導線） */}
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/25">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
+                献立・レシピ投票
+              </p>
+              <p className="mt-1 text-xs text-emerald-900/80 dark:text-emerald-100/80">
+                候補を投票して確定すると、各 Day の献立に反映されます。
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Link
+                href={`/groups/${groupId}/bulletin?new=1&category=recipe_vote`}
+                className="rounded-md bg-emerald-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-800"
+              >
+                投票を作成
+              </Link>
+            </div>
+          </div>
+
+          {mealsForSelectedDay.length > 0 ? (
+            <ul className="mt-3 space-y-2 border-t border-emerald-200/80 pt-3 dark:border-emerald-800/50">
+              <li className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-200">
+                Day {selectedDay} の確定献立
+              </li>
               {mealsForSelectedDay.map((m, i) => (
                 <li key={`${m.topicId}-${m.meal}-${i}`} className="text-sm text-zinc-800 dark:text-zinc-100">
                   <span className="font-medium text-zinc-600 dark:text-zinc-300">
@@ -770,20 +802,42 @@ export function TripClient() {
                     className="font-medium text-emerald-800 underline underline-offset-2 hover:text-emerald-700 dark:text-emerald-300">
                     {m.recipeTitle}
                   </a>
-                  <span className="ml-1 text-xs text-zinc-500">
-                    （{m.topicTitle}）
-                  </span>
                   <Link
                     href={`/groups/${groupId}/bulletin/${m.topicId}`}
-                    className="ml-2 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                    className="ml-2 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                   >
-                    話題へ
+                    投票を開く
                   </Link>
                 </li>
               ))}
             </ul>
-          </div>
-        ) : null}
+          ) : null}
+
+          {openRecipeVotes.length > 0 ? (
+            <ul className="mt-3 space-y-1.5 border-t border-emerald-200/80 pt-3 dark:border-emerald-800/50">
+              <li className="text-[11px] font-semibold text-amber-800 dark:text-amber-200">
+                投票中
+              </li>
+              {openRecipeVotes.map((t) => (
+                <li key={t.id}>
+                  <Link
+                    href={`/groups/${groupId}/bulletin/${t.id}`}
+                    className="text-sm font-medium text-amber-950 underline-offset-2 hover:underline dark:text-amber-100"
+                  >
+                    {t.data.title}
+                  </Link>
+                  <span className="ml-2 text-xs text-zinc-500">
+                    候補 {t.data.recipePoll?.candidates?.length ?? 0} 件
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : mealsForSelectedDay.length === 0 ? (
+            <p className="mt-3 text-xs text-emerald-900/70 dark:text-emerald-100/70">
+              まだレシピ投票がありません。「投票を作成」から始められます。
+            </p>
+          ) : null}
+        </div>
 
         {currentRoute === null ? (
           /* このDayのプランがない */

@@ -30,7 +30,8 @@ export function JoinClient() {
     setSubmitting(true);
     try {
       const gid = await joinGroupWithCode(user.uid, user.displayName, c);
-      router.push(`/groups/${gid}`);
+      // 精算前に詰まらないよう、参加直後に参加世帯セットアップへ
+      router.push(`/groups/${gid}/families?setup=1`);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "参加に失敗しました");

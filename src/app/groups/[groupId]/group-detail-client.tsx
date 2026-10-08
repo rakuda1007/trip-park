@@ -17,6 +17,7 @@ import {
   listBulletinTopicsWithReplyCounts,
   listRecipeVotes,
 } from "@/lib/firestore/bulletin";
+import { listFamilies } from "@/lib/firestore/families";
 import { saveLastTripId } from "@/lib/last-trip";
 import { uploadGroupMemoryPhoto } from "@/lib/storage/group-memory-photo";
 import { areAllTripWorkflowStepsComplete } from "@/lib/trip-workflow-all-complete";
@@ -75,6 +76,7 @@ type DashboardExtrasState = {
     pollTitle: string;
     votes: VoteItem[];
   }[];
+  familyCount: number;
 };
 
 export function GroupDetailClient() {
@@ -174,12 +176,14 @@ export function GroupDetailClient() {
         setTopics([]);
       }
       try {
-        const [cands, resps] = await Promise.all([
+        const [cands, resps, families] = await Promise.all([
           listScheduleCandidates(groupId),
           listScheduleResponses(groupId),
+          listFamilies(groupId).catch(() => []),
         ]);
         const scheduleCandidateIds = cands.map((c) => c.id);
         const scheduleResponses = resps.map((r) => r.data);
+        const familyCount = families.length;
 
         const recipeTopicsMeta = topicsList.filter(
           (row) =>
@@ -219,6 +223,7 @@ export function GroupDetailClient() {
           scheduleResponses,
           openRecipeVotes,
           openDestinationPollVotes,
+          familyCount,
         });
       } catch {
         setDashboardExtras(null);
@@ -297,6 +302,7 @@ export function GroupDetailClient() {
       openDestinationPollVotes: dashboardExtras.openDestinationPollVotes,
       userId: user?.uid ?? null,
       canManageSchedule,
+      familyCount: dashboardExtras.familyCount,
     });
   }, [
     group,

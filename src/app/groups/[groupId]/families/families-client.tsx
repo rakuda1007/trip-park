@@ -14,6 +14,7 @@ import { listHouseholds, type HouseholdItem } from "@/lib/firestore/households";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import type { FamilyDoc } from "@/types/family";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 function canManageFamily(
@@ -49,6 +50,9 @@ function emptyForm(): FormState {
 export function FamiliesClient() {
   const groupId = useGroupRouteId();
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const isSetupMode =
+    searchParams.get("setup") === "1" || searchParams.get("setup") === "true";
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
   const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>([]);
@@ -90,9 +94,15 @@ export function FamiliesClient() {
   useEffect(() => {
     if (!user) return;
     listHouseholds(user.uid)
-      .then(setHouseholds)
+      .then((list) => {
+        setHouseholds(list);
+        // セットアップ時はマスタがあればピッカーを開いてすぐ登録できるようにする
+        if (isSetupMode && list.length > 0) {
+          setShowHouseholdPicker(true);
+        }
+      })
       .catch(() => {});
-  }, [user]);
+  }, [user, isSetupMode]);
 
   function resetForm() {
     setEditingId(null);
@@ -191,13 +201,17 @@ export function FamiliesClient() {
 
   const showChildRatio = Number(form.childCount) > 0;
 
+  const householdsReturnTo = encodeURIComponent(
+    `/groups/${groupId}/families?setup=1`,
+  );
+
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
       <Link
         href={`/groups/${groupId}`}
         className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
       >
-        ← 旅行詳細
+        ← 旅行ホーム
       </Link>
 
       <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
@@ -207,6 +221,46 @@ export function FamiliesClient() {
         この旅行に参加する世帯を登録します。精算は世帯名単位でまとめられます。
         世帯マスタに登録済みの世帯を選ぶと人数を自動入力できます。
       </p>
+
+      {isSetupMode ? (
+        <div
+          className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-50"
+          role="status"
+        >
+          <p className="font-semibold">はじめてのセットアップ</p>
+          <p className="mt-1 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/90">
+            支出・精算を使う前に、この旅行の「参加世帯」を1件以上登録してください。
+            {households.length === 0
+              ? " まだ世帯マスタが無い場合は、先にマスタへ登録すると次回からコピーできます。"
+              : " 下の「世帯マスタから選ぶ」か、直接入力で追加できます。"}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {households.length === 0 ? (
+              <Link
+                href={`/profile/households?returnTo=${householdsReturnTo}`}
+                className="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800"
+              >
+                世帯マスタを登録する
+              </Link>
+            ) : null}
+            {families.length > 0 ? (
+              <Link
+                href={`/groups/${groupId}`}
+                className="rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-50 dark:hover:bg-amber-900/60"
+              >
+                旅行ホームへ進む
+              </Link>
+            ) : (
+              <Link
+                href={`/groups/${groupId}`}
+                className="rounded-md border border-amber-300/80 px-3 py-1.5 text-xs font-medium text-amber-900/80 hover:bg-amber-100/80 dark:border-amber-800 dark:text-amber-200"
+              >
+                あとで登録する
+              </Link>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">

@@ -38,7 +38,8 @@ export function NewGroupForm() {
         tripStartDate || null,
         tripEndDate || tripStartDate || null,
       );
-      router.push(`/groups/${gid}`);
+      // 精算前に詰まらないよう、作成直後に参加世帯セットアップへ
+      router.push(`/groups/${gid}/families?setup=1`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "作成に失敗しました");
