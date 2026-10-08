@@ -1,10 +1,12 @@
-const CACHE_NAME = "trip-park-v3";
+const CACHE_NAME = "trip-park-v4";
 const APP_SHELL = "/dashboard";
-const NAVIGATE_TIMEOUT_MS = 2500;
+const LAST_TRIP_HOME = "/__last_trip_home__";
+const OFFLINE_PAGE = "/offline.html";
+const NAVIGATE_TIMEOUT_MS = 2200;
 
 const STATIC_ASSETS = [
-  "/dashboard",
-  "/groups",
+  APP_SHELL,
+  OFFLINE_PAGE,
   "/icons/icon-192.png",
   "/icons/icon-512.png",
 ];
@@ -89,13 +91,35 @@ function cachePut(request, response) {
   caches.open(CACHE_NAME).then((cache) => cache.put(request, cloned));
 }
 
+/** 旅行ホーム `/groups/{id}`（サブパスは除く） */
+function isTripHomePath(pathname) {
+  return /^\/groups\/[^/]+\/?$/.test(pathname);
+}
+
+function rememberLastTripHome(response) {
+  if (!response || !response.ok) return;
+  const cloned = response.clone();
+  caches.open(CACHE_NAME).then((cache) =>
+    cache.put(new Request(LAST_TRIP_HOME), cloned).catch(() => {}),
+  );
+}
+
+function matchOfflineFallback() {
+  return caches.match(OFFLINE_PAGE).then((r) => r ?? Response.error());
+}
+
 /**
  * ネットワーク優先。遅ければ同一 URL のキャッシュへ。
- * キャッシュも無いときはネットワーク完了を待ち、最終手段でアプリシェル。
+ * 旅行ホームは直近シェルとしても保持。最終手段は offline.html。
  */
-function networkFirstWithTimeout(request, timeoutMs, fallbackUrl) {
+function networkFirstWithTimeout(request, timeoutMs) {
+  const pathname = new URL(request.url).pathname;
+
   const networkPromise = fetch(request).then((response) => {
     cachePut(request, response);
+    if (isTripHomePath(pathname)) {
+      rememberLastTripHome(response);
+    }
     return response;
   });
 
@@ -107,12 +131,42 @@ function networkFirstWithTimeout(request, timeoutMs, fallbackUrl) {
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return networkPromise.catch(() =>
-        fallbackUrl
-          ? caches.match(fallbackUrl).then((r) => r ?? Response.error())
-          : Response.error(),
+        caches.match(APP_SHELL).then((shell) => {
+          if (shell) return shell;
+          if (isTripHomePath(pathname)) {
+            return caches.match(LAST_TRIP_HOME).then((last) =>
+              last ?? matchOfflineFallback(),
+            );
+          }
+          return matchOfflineFallback();
+        }),
       );
     }),
   );
+}
+
+/** /dashboard: キャッシュ即返し＋裏で更新（起動の待ちを短縮） */
+function staleWhileRevalidateNavigate(request) {
+  return caches.match(request).then((cached) => {
+    const networkPromise = fetch(request)
+      .then((response) => {
+        cachePut(request, response);
+        return response;
+      })
+      .catch(() => null);
+
+    if (cached) {
+      void networkPromise;
+      return cached;
+    }
+
+    return networkPromise.then((response) => {
+      if (response) return response;
+      return caches.match(LAST_TRIP_HOME).then((last) =>
+        last ?? matchOfflineFallback(),
+      );
+    });
+  });
 }
 
 // ── フェッチキャッシュ ────────────────────────────────────────────────────
@@ -131,18 +185,29 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // ナビゲーション: タイムアウト付き network-first（遅いときアプリシェルへ）
-  if (request.mode === "navigate") {
+  // 仮想キーはネットワークに出さない
+  if (url.pathname === LAST_TRIP_HOME) {
     event.respondWith(
-      networkFirstWithTimeout(request, NAVIGATE_TIMEOUT_MS, APP_SHELL),
+      caches.match(LAST_TRIP_HOME).then((r) => r ?? matchOfflineFallback()),
     );
     return;
   }
 
-  // ハッシュ付き静的アセット・アイコンは cache-first（ファイル名が変われば別 URL）
+  if (request.mode === "navigate") {
+    const path = url.pathname;
+    if (path === APP_SHELL || path === `${APP_SHELL}/`) {
+      event.respondWith(staleWhileRevalidateNavigate(request));
+      return;
+    }
+    event.respondWith(networkFirstWithTimeout(request, NAVIGATE_TIMEOUT_MS));
+    return;
+  }
+
+  // ハッシュ付き静的アセット・アイコンは cache-first
   if (
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icons/") ||
+    url.pathname === OFFLINE_PAGE ||
     url.pathname.endsWith(".png") ||
     url.pathname.endsWith(".svg") ||
     url.pathname.endsWith(".ico")
@@ -156,6 +221,5 @@ self.addEventListener("fetch", (event) => {
         });
       }),
     );
-    return;
   }
 });

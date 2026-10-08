@@ -66,7 +66,7 @@ export function TripDashboardInsightsPanel({
         ) : null}
         {allWorkflowComplete ? (
           <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
-            工程は一通り完了しています。下の連絡でやり取りを続けられます。
+            工程は一通り完了しています。連絡のあとに「旅のあと」で思い出写真を残せます。
           </p>
         ) : null}
       </div>

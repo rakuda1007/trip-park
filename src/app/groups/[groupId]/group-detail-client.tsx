@@ -629,120 +629,6 @@ export function GroupDetailClient() {
         allWorkflowComplete={allTripWorkflowComplete}
       />
 
-      {memoryPhotoSectionUnlocked ? (
-      <section className="mt-2 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-              思い出写真
-            </h2>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              1枚だけ登録できます。「過去の旅行」一覧のサムネイルにも使われます。
-            </p>
-          </div>
-          {isOwner ? (
-            <label className="inline-flex cursor-pointer items-center rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800">
-              写真を選択
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => void handleMemoryPhotoFileChange(e)}
-                disabled={busy !== null}
-              />
-            </label>
-          ) : null}
-        </div>
-        {memoryPhotoDraftPreview || memoryPhotoPreview ? (
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={() => setIsMemoryPhotoLightboxOpen(true)}
-              aria-label="思い出写真を拡大表示"
-              className="block w-full cursor-zoom-in overflow-hidden rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
-            >
-              <Image
-                src={memoryPhotoDraftPreview ?? memoryPhotoPreview ?? ""}
-                alt="旅行の思い出写真"
-                width={960}
-                height={540}
-                unoptimized
-                className="h-44 w-full rounded-md object-cover transition-opacity hover:opacity-90 sm:h-56"
-              />
-            </button>
-            {isOwner ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {memoryPhotoDraftFile ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => void handleSaveMemoryPhoto()}
-                      disabled={busy !== null}
-                      className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-                    >
-                      {busy === "memory-photo-save" ? "保存中…" : "保存"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCancelMemoryPhotoSelection}
-                      disabled={busy !== null}
-                      className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                    >
-                      選択を取り消す
-                    </button>
-                  </>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => void handleClearMemoryPhoto()}
-                  disabled={busy !== null}
-                  className="text-xs text-red-600 hover:underline disabled:opacity-50"
-                >
-                  {busy === "memory-photo-clear" ? "削除中…" : "写真を削除"}
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <p className="mt-3 text-xs text-zinc-400 dark:text-zinc-500">
-            まだ写真が登録されていません。
-          </p>
-        )}
-      </section>
-      ) : null}
-
-      {isMemoryPhotoLightboxOpen &&
-      (memoryPhotoDraftPreview || memoryPhotoPreview) ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="思い出写真の拡大表示"
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setIsMemoryPhotoLightboxOpen(false)}
-        >
-          <button
-            type="button"
-            aria-label="拡大表示を閉じる"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsMemoryPhotoLightboxOpen(false);
-            }}
-            className="absolute right-3 top-3 rounded-md bg-white/20 px-3 py-1.5 text-sm text-white hover:bg-white/30"
-          >
-            閉じる
-          </button>
-          <Image
-            src={memoryPhotoDraftPreview ?? memoryPhotoPreview ?? ""}
-            alt="旅行の思い出写真（拡大表示）"
-            width={1920}
-            height={1080}
-            unoptimized
-            className="max-h-[90vh] max-w-[95vw] rounded-md object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      ) : null}
-
       {/* 日程編集フォーム（オーナーのみ） */}
       {editingDates && isOwner ? (
         <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
@@ -820,6 +706,124 @@ export function GroupDetailClient() {
       ) : null}
 
       <TripHomeContactSummary groupId={groupId} topics={topics} />
+
+      {/* 旅のあと: 全工程完了後のみ。計画中ホームの上部には置かない */}
+      {memoryPhotoSectionUnlocked ? (
+        <section className="mt-10 rounded-lg border border-emerald-200/80 bg-emerald-50/40 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+                旅のあと
+              </p>
+              <h2 className="mt-1 text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                思い出写真
+              </h2>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                工程が完了した旅行向けです。1枚だけ登録でき、「過去の旅行」一覧のサムネイルにも使われます。
+              </p>
+            </div>
+            {isOwner ? (
+              <label className="inline-flex cursor-pointer items-center rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
+                写真を選択
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => void handleMemoryPhotoFileChange(e)}
+                  disabled={busy !== null}
+                />
+              </label>
+            ) : null}
+          </div>
+          {memoryPhotoDraftPreview || memoryPhotoPreview ? (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => setIsMemoryPhotoLightboxOpen(true)}
+                aria-label="思い出写真を拡大表示"
+                className="block w-full cursor-zoom-in overflow-hidden rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+              >
+                <Image
+                  src={memoryPhotoDraftPreview ?? memoryPhotoPreview ?? ""}
+                  alt="旅行の思い出写真"
+                  width={960}
+                  height={540}
+                  unoptimized
+                  className="h-44 w-full rounded-md object-cover transition-opacity hover:opacity-90 sm:h-56"
+                />
+              </button>
+              {isOwner ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {memoryPhotoDraftFile ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveMemoryPhoto()}
+                        disabled={busy !== null}
+                        className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+                      >
+                        {busy === "memory-photo-save" ? "保存中…" : "保存"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCancelMemoryPhotoSelection}
+                        disabled={busy !== null}
+                        className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      >
+                        選択を取り消す
+                      </button>
+                    </>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void handleClearMemoryPhoto()}
+                    disabled={busy !== null}
+                    className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                  >
+                    {busy === "memory-photo-clear" ? "削除中…" : "写真を削除"}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-zinc-400 dark:text-zinc-500">
+              まだ写真が登録されていません。
+            </p>
+          )}
+        </section>
+      ) : null}
+
+      {isMemoryPhotoLightboxOpen &&
+      (memoryPhotoDraftPreview || memoryPhotoPreview) ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="思い出写真の拡大表示"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setIsMemoryPhotoLightboxOpen(false)}
+        >
+          <button
+            type="button"
+            aria-label="拡大表示を閉じる"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsMemoryPhotoLightboxOpen(false);
+            }}
+            className="absolute right-3 top-3 rounded-md bg-white/20 px-3 py-1.5 text-sm text-white hover:bg-white/30"
+          >
+            閉じる
+          </button>
+          <Image
+            src={memoryPhotoDraftPreview ?? memoryPhotoPreview ?? ""}
+            alt="旅行の思い出写真（拡大表示）"
+            width={1920}
+            height={1080}
+            unoptimized
+            className="max-h-[90vh] max-w-[95vw] rounded-md object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
 
       {error ? (
         <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
