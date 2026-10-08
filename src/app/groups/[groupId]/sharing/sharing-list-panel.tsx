@@ -938,7 +938,7 @@ export function SharingListPanel({
       return (
         <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
           <p className="text-sm text-zinc-600">
-            このグループのメンバーではありません。
+            この旅行のメンバーではありません。
           </p>
           <Link
             href={`/groups/${groupId}`}
@@ -991,7 +991,7 @@ export function SharingListPanel({
   if (user && !isMember) {
     return (
       <p className="text-sm text-zinc-600">
-        このグループのメンバーではありません。
+        この旅行のメンバーではありません。
       </p>
     );
   }

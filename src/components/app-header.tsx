@@ -229,9 +229,8 @@ export function AppHeader() {
                     </p>
                   </div>
 
-                  {/* ナビリンク */}
+                  {/* ナビリンク（連絡・買い出しは旅行内ナビへ。ダッシュボードはサイレント遷移のみでメニューに出さない） */}
                   <nav className="py-1">
-                    {/* 1. プロフィール */}
                     <Link
                       href="/profile"
                       className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
@@ -241,39 +240,6 @@ export function AppHeader() {
                       </svg>
                       プロフィール
                     </Link>
-                    {/* 2. ダッシュボード */}
-                    <Link
-                      href="/dashboard"
-                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
-                        <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
-                      </svg>
-                      ダッシュボード
-                    </Link>
-                    {/* 3. トピック（グループ選択中のみ） */}
-                    {currentGroupId ? (
-                      <Link
-                        href={`/groups/${currentGroupId}/bulletin`}
-                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
-                          <path fillRule="evenodd" d="M2 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5.414l-2.707 2.707A1 1 0 0 1 1 17V5Zm3 1a1 1 0 0 0 0 2h10a1 1 0 1 0 0-2H5Zm0 4a1 1 0 0 0 0 2h6a1 1 0 1 0 0-2H5Z" clipRule="evenodd" />
-                        </svg>
-                        トピック
-                      </Link>
-                    ) : null}
-                    {/* 4. 旅行一覧 */}
-                    <Link
-                      href="/groups"
-                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
-                        <path d="M10 1a6 6 0 0 0-3.815 10.631C7.237 12.5 8 13.443 8 14.456v.644a.75.75 0 0 0 .572.729 6.016 6.016 0 0 0 2.856 0A.75.75 0 0 0 12 15.1v-.644c0-1.013.762-1.957 1.815-2.825A6 6 0 0 0 10 1ZM8.863 17.414a.75.75 0 0 0-.226 1.483 9.066 9.066 0 0 0 2.726 0 .75.75 0 0 0-.226-1.483 7.553 7.553 0 0 1-2.274 0Z" />
-                      </svg>
-                      旅行一覧
-                    </Link>
-                    {/* 5. 参加世帯（グループ選択中のみ） */}
                     {currentGroupId ? (
                       <Link
                         href={`/groups/${currentGroupId}/families`}
@@ -285,18 +251,7 @@ export function AppHeader() {
                         参加世帯
                       </Link>
                     ) : null}
-                    {currentGroupId ? (
-                      <Link
-                        href={`/groups/${currentGroupId}/sharing`}
-                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
-                          <path d="M3 3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H3Zm2 3h10v2H5V6Zm0 4h10v2H5v-2Zm0 4h7v2H5v-2Z" />
-                        </svg>
-                        買い出しリスト
-                      </Link>
-                    ) : null}
-                    {/* 6. オーナー・管理者（メンバー管理・旅行の削除など） */}
+                    {/* オーナー・管理者（メンバー管理・旅行の削除など） */}
                     {currentGroupId && showAdminMenuLink === true ? (
                       <div className="border-t border-zinc-100 py-2 dark:border-zinc-800">
                         <p className="px-4 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">

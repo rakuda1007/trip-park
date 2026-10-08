@@ -6,7 +6,6 @@ import {
   getGroup,
   getMemberForUser,
   leaveGroup,
-  updateDestination,
   updateGroupDescription,
   updateGroupMemoryPhotoUrl,
   updateGroupName,
@@ -15,78 +14,39 @@ import {
 import { listDestinationPolls, type PollItem } from "@/lib/firestore/destination-votes";
 import { listTripRoutes } from "@/lib/firestore/trip";
 import {
-  computeReplyReadCounts,
-  computeTopicOpenReadCount,
-  createBulletinReply,
-  listBulletinReplies,
   listBulletinTopicsWithReplyCounts,
-  listTopicReplyReadProgress,
-  setMyTopicReplyReadProgress,
+  listRecipeVotes,
 } from "@/lib/firestore/bulletin";
-import { sendNotification } from "@/lib/notify";
 import { saveLastTripId } from "@/lib/last-trip";
 import { uploadGroupMemoryPhoto } from "@/lib/storage/group-memory-photo";
-import {
-  areAllTripWorkflowStepsComplete,
-} from "@/lib/trip-workflow-all-complete";
-import {
-  computeDashboardInsights,
-  isVoteOrDecisionTopic,
-} from "@/lib/trip-dashboard-insights";
+import { areAllTripWorkflowStepsComplete } from "@/lib/trip-workflow-all-complete";
+import { computeDashboardInsights } from "@/lib/trip-dashboard-insights";
 import { listScheduleCandidates, listScheduleResponses } from "@/lib/firestore/schedule";
-import { listRecipeVotes } from "@/lib/firestore/bulletin";
-import { listDestinationVotes } from "@/lib/firestore/destination-votes";
+import {
+  listDestinationVotes,
+  type VoteItem,
+} from "@/lib/firestore/destination-votes";
 import { normalizeDecidedNamesFromPollDoc } from "@/lib/destination-poll-decided";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import type { ScheduleResponseDoc } from "@/types/schedule";
-import type { BulletinRecipeVoteDoc } from "@/types/bulletin";
-import type { VoteItem } from "@/lib/firestore/destination-votes";
+import type {
+  BulletinRecipeVoteDoc,
+  BulletinTopicDoc,
+} from "@/types/bulletin";
 import type { TripRouteDoc } from "@/types/trip";
-import { BulletinRichBody } from "@/components/bulletin/bulletin-rich-body";
-import {
-  NearbyMapTopicDisplay,
-  formatNearbyMapTopicHeadingTitle,
-} from "@/components/bulletin/nearby-map-topic-display";
-import { BulletinImageAttachButton } from "@/components/bulletin/bulletin-image-attach-button";
-import { useBulletinImagePaste } from "@/hooks/use-bulletin-image-paste";
 import { VisibilityBadge } from "@/components/visibility-badge";
 import { TripDashboardInsightsPanel } from "@/components/trip/trip-dashboard-insights-panel";
-import {
-  BULLETIN_CATEGORY_LABELS,
-  BULLETIN_TOPIC_TAG_LABELS,
-  type BulletinReplyDoc,
-  type BulletinTopicDoc,
-  normalizeBulletinTopicTags,
-} from "@/types/bulletin";
-import { Timestamp } from "firebase/firestore";
+import { TripHomeContactSummary } from "@/components/trip/trip-home-contact-summary";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Fragment,
   useCallback,
   useEffect,
-  useId,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
   type ChangeEvent,
 } from "react";
-
-function formatTs(v: unknown): string {
-  if (!v) return "—";
-  if (v instanceof Timestamp) {
-    return v.toDate().toLocaleString("ja-JP", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-  return "—";
-}
 
 function formatDateRange(start: string, end?: string | null): string {
   const ps = start.split("-").map(Number);
@@ -99,37 +59,6 @@ function formatDateRange(start: string, end?: string | null): string {
   if (sy === ey && sm === em) return `${sy}年${sm}月${sd}日 〜 ${ed}日`;
   if (sy === ey) return `${sy}年${sm}月${sd}日 〜 ${em}月${ed}日`;
   return `${sy}年${sm}月${sd}日 〜 ${ey}年${em}月${ed}日`;
-}
-
-function tsToMs(v: unknown): number {
-  if (v instanceof Timestamp) return v.toMillis();
-  return 0;
-}
-
-function isUpdatedTopic(data: BulletinTopicDoc): boolean {
-  const u = data.updatedAt;
-  const c = data.createdAt;
-  if (!u || !c) return false;
-  if (u instanceof Timestamp && c instanceof Timestamp) {
-    return u.seconds !== c.seconds || u.nanoseconds !== c.nanoseconds;
-  }
-  return u !== c;
-}
-
-/** 自分の lastRead の直後＝未読先頭の返信インデックス。未読なしなら null */
-function indexOfFirstUnreadReply(
-  replies: { id: string }[],
-  readerUid: string | undefined,
-  reads: { userId: string; lastReadReplyId: string | null }[],
-): number | null {
-  if (!readerUid || replies.length === 0) return null;
-  const mine = reads.find((r) => r.userId === readerUid);
-  const lastId = mine?.lastReadReplyId ?? null;
-  if (lastId == null) return 0;
-  const idx = replies.findIndex((r) => r.id === lastId);
-  if (idx === -1) return 0;
-  const next = idx + 1;
-  return next < replies.length ? next : null;
 }
 
 type DashboardExtrasState = {
@@ -157,21 +86,6 @@ export function GroupDetailClient() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const { pasteBulletinImage, insertImageFromFile } = useBulletinImagePaste({
-    groupId,
-    uid: user?.uid,
-    disabled: busy !== null,
-    setBusy,
-    setError,
-  });
-
-  const spotlightReplyComposerRef = useRef<HTMLTextAreaElement>(null);
-  /** ダッシュボード直近1件トピックのスレッド（末尾＝最新へスクロール） */
-  const spotlightThreadScrollRef = useRef<HTMLDivElement>(null);
-  /** 自動スクロール直後は既読更新を抑制（誤検知防止） */
-  const spotlightThreadMarkReadLockUntilRef = useRef(0);
-  const bulletinImgSpotlightReplyId = useId();
-
   // 旅行名編集用
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -180,10 +94,6 @@ export function GroupDetailClient() {
   const [editingDates, setEditingDates] = useState(false);
   const [draftStart, setDraftStart] = useState("");
   const [draftEnd, setDraftEnd] = useState("");
-
-  // 目的地編集用
-  const [editingDest, setEditingDest] = useState(false);
-  const [draftDest, setDraftDest] = useState("");
 
   // 説明編集用
   const [editingDesc, setEditingDesc] = useState(false);
@@ -198,7 +108,7 @@ export function GroupDetailClient() {
     { id: string; data: TripRouteDoc }[]
   >([]);
 
-  // トピック
+  // 連絡（洞察パネルのレシピ投票用にも利用）
   const [topics, setTopics] = useState<
     { id: string; data: BulletinTopicDoc; replyCount: number }[]
   >([]);
@@ -206,30 +116,6 @@ export function GroupDetailClient() {
     useState<DashboardExtrasState | null>(null);
   /** ダッシュボード文言（オーナー／管理者向け）用 */
   const [myMember, setMyMember] = useState<MemberDoc | null>(null);
-  /** default: 直近アクティブ1件のみ / all: 全件 / vote: 決定系のみ */
-  const [topicView, setTopicView] = useState<"default" | "all" | "vote">(
-    "default",
-  );
-  /** default 表示で見せるトピック（null なら更新日時が最新の1件を自動選択） */
-  const [spotlightTopicId, setSpotlightTopicId] = useState<string | null>(null);
-  const [topicRepliesById, setTopicRepliesById] = useState<
-    Record<string, { id: string; data: BulletinReplyDoc }[]>
-  >({});
-  /** 直近1件トピックの返信既読（トピック詳細と同じ replyReadProgress） */
-  const [spotlightReplyReads, setSpotlightReplyReads] = useState<
-    { userId: string; lastReadReplyId: string | null }[]
-  >([]);
-  /** ダッシュボード「直近1件」表示内の返信下書き */
-  const [spotlightReplyDraft, setSpotlightReplyDraft] = useState("");
-
-  const topicRepliesByIdRef = useRef<
-    Record<string, { id: string; data: BulletinReplyDoc }[]>
-  >({});
-  const spotlightReplyReadsRef = useRef<
-    { userId: string; lastReadReplyId: string | null }[]
-  >([]);
-  topicRepliesByIdRef.current = topicRepliesById;
-  spotlightReplyReadsRef.current = spotlightReplyReads;
 
   // 旅行ページを開いたら直近アクセス旅行として記録
   useEffect(() => {
@@ -422,343 +308,6 @@ export function GroupDetailClient() {
     canManageSchedule,
   ]);
 
-  const voteTopics = useMemo(
-    () => topics.filter((x) => isVoteOrDecisionTopic(x.data)),
-    [topics],
-  );
-
-  const sortByActivityDesc = useCallback(
-    <T extends { data: BulletinTopicDoc }>(rows: T[]) =>
-      [...rows].sort(
-        (a, b) => tsToMs(b.data.updatedAt) - tsToMs(a.data.updatedAt),
-      ),
-    [],
-  );
-
-  const allSortedByActivity = useMemo(
-    () => sortByActivityDesc(topics),
-    [topics, sortByActivityDesc],
-  );
-
-  const defaultSpotlightRow = useMemo(
-    () => allSortedByActivity[0] ?? null,
-    [allSortedByActivity],
-  );
-
-  const spotlightRow = useMemo(() => {
-    if (topicView !== "default") return null;
-    if (spotlightTopicId) {
-      return (
-        topics.find((t) => t.id === spotlightTopicId) ?? defaultSpotlightRow
-      );
-    }
-    return defaultSpotlightRow;
-  }, [topicView, spotlightTopicId, topics, defaultSpotlightRow]);
-
-  const visibleTopicRows = useMemo(() => {
-    if (topicView === "default") {
-      return spotlightRow ? [spotlightRow] : [];
-    }
-    if (topicView === "all") return allSortedByActivity;
-    return sortByActivityDesc(voteTopics);
-  }, [
-    topicView,
-    spotlightRow,
-    allSortedByActivity,
-    voteTopics,
-    sortByActivityDesc,
-  ]);
-
-  /** ボタン横: 直近アクティブのうち、いま表示中の1件以外から最大3件 */
-  const quickPickTopics = useMemo(() => {
-    const sid = spotlightRow?.id ?? allSortedByActivity[0]?.id;
-    return allSortedByActivity.filter((t) => t.id !== sid).slice(0, 3);
-  }, [allSortedByActivity, spotlightRow]);
-
-  useEffect(() => {
-    if (!groupId) return;
-    const ids = visibleTopicRows.map((row) => row.id);
-    if (ids.length === 0) {
-      setTopicRepliesById({});
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const entries = await Promise.all(
-        ids.map(async (id) => {
-          try {
-            const replies = await listBulletinReplies(groupId, id);
-            return [id, replies] as const;
-          } catch {
-            return [id, []] as const;
-          }
-        }),
-      );
-      if (cancelled) return;
-      setTopicRepliesById(Object.fromEntries(entries));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [groupId, visibleTopicRows]);
-
-  const spotlightRepliesLen =
-    spotlightRow != null
-      ? (topicRepliesById[spotlightRow.id]?.length ?? 0)
-      : 0;
-
-  useEffect(() => {
-    if (topicView !== "default" || !groupId || !spotlightRow?.id) {
-      setSpotlightReplyReads([]);
-      return;
-    }
-    let cancelled = false;
-    void listTopicReplyReadProgress(groupId, spotlightRow.id)
-      .then((r) => {
-        if (!cancelled) setSpotlightReplyReads(r);
-      })
-      .catch(() => {
-        if (!cancelled) setSpotlightReplyReads([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [topicView, groupId, spotlightRow?.id, spotlightRepliesLen]);
-
-  useEffect(() => {
-    setSpotlightReplyDraft("");
-  }, [spotlightRow?.id]);
-
-  const scrollSpotlightThreadToBottom = useCallback(() => {
-    const el = spotlightThreadScrollRef.current;
-    if (!el) return;
-    spotlightThreadMarkReadLockUntilRef.current = Date.now() + 220;
-    el.scrollTop = el.scrollHeight;
-  }, []);
-
-  useLayoutEffect(() => {
-    if (topicView !== "default" || !spotlightRow?.id) return;
-    scrollSpotlightThreadToBottom();
-    const id = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        scrollSpotlightThreadToBottom();
-      });
-    });
-    return () => cancelAnimationFrame(id);
-  }, [
-    topicView,
-    spotlightRow?.id,
-    spotlightRepliesLen,
-    scrollSpotlightThreadToBottom,
-  ]);
-
-  useEffect(() => {
-    if (topicView !== "default" || !spotlightRow?.id) return;
-    const el = spotlightThreadScrollRef.current;
-    if (!el) return;
-    const inner = el.firstElementChild as HTMLElement | null;
-    if (!inner) return;
-    const ro = new ResizeObserver(() => {
-      scrollSpotlightThreadToBottom();
-    });
-    ro.observe(inner);
-    return () => ro.disconnect();
-  }, [
-    topicView,
-    spotlightRow?.id,
-    spotlightRepliesLen,
-    scrollSpotlightThreadToBottom,
-  ]);
-
-  /** ダッシュボード内スクロール・表示範囲に応じて返信既読位置を更新 */
-  useEffect(() => {
-    if (topicView !== "default" || !groupId || !user?.uid || !spotlightRow?.id) {
-      return;
-    }
-    const root = spotlightThreadScrollRef.current;
-    if (!root) return;
-
-    let cancelled = false;
-    let flushTimer: ReturnType<typeof setTimeout> | null = null;
-    let maxReplyIdx = -1;
-
-    const replies = () =>
-      topicRepliesByIdRef.current[spotlightRow.id] ?? [];
-
-    const flushReadProgress = async () => {
-      flushTimer = null;
-      if (cancelled) return;
-      const list = replies();
-      if (list.length === 0 || maxReplyIdx < 0) return;
-      const targetId = list[maxReplyIdx]!.id;
-      const mine = spotlightReplyReadsRef.current.find((r) => r.userId === user.uid);
-      const prevId = mine?.lastReadReplyId ?? null;
-      const prevIdx = prevId
-        ? list.findIndex((r) => r.id === prevId)
-        : -1;
-      if (maxReplyIdx <= prevIdx) return;
-      try {
-        await setMyTopicReplyReadProgress(
-          groupId,
-          spotlightRow.id,
-          user.uid,
-          targetId,
-        );
-        if (cancelled) return;
-        setSpotlightReplyReads(
-          await listTopicReplyReadProgress(groupId, spotlightRow.id),
-        );
-      } catch {
-        // ignore
-      }
-    };
-
-    const scheduleFlush = () => {
-      if (flushTimer != null) clearTimeout(flushTimer);
-      flushTimer = setTimeout(() => void flushReadProgress(), 380);
-    };
-
-    const bumpMaxFromReplyId = (replyId: string | undefined) => {
-      if (!replyId) return;
-      const list = replies();
-      const idx = list.findIndex((r) => r.id === replyId);
-      if (idx < 0) return;
-      if (idx > maxReplyIdx) {
-        maxReplyIdx = idx;
-        scheduleFlush();
-      }
-    };
-
-    const onScrollOrResize = () => {
-      if (Date.now() < spotlightThreadMarkReadLockUntilRef.current) return;
-      const list = replies();
-      if (list.length === 0) return;
-      const { scrollTop, scrollHeight, clientHeight } = root;
-      const nearBottom = scrollTop + clientHeight >= scrollHeight - 48;
-      const noOverflow = scrollHeight <= clientHeight + 2;
-      if (nearBottom || noOverflow) {
-        maxReplyIdx = list.length - 1;
-        scheduleFlush();
-      }
-    };
-
-    let io: IntersectionObserver | null = null;
-    let attachRetryTimer: number | null = null;
-    const attachIo = () => {
-      if (attachRetryTimer != null) {
-        clearTimeout(attachRetryTimer);
-        attachRetryTimer = null;
-      }
-      io?.disconnect();
-      maxReplyIdx = -1;
-      const list = replies();
-      if (list.length === 0) {
-        onScrollOrResize();
-        return;
-      }
-      const nodes = root.querySelectorAll<HTMLElement>("[data-spotlight-reply]");
-      if (nodes.length === 0) {
-        attachRetryTimer = window.setTimeout(() => {
-          attachRetryTimer = null;
-          if (!cancelled) attachIo();
-        }, 100);
-        onScrollOrResize();
-        return;
-      }
-      io = new IntersectionObserver(
-        (entries) => {
-          if (Date.now() < spotlightThreadMarkReadLockUntilRef.current) return;
-          for (const e of entries) {
-            if (!e.isIntersecting || !(e.target instanceof HTMLElement)) continue;
-            bumpMaxFromReplyId(
-              e.target.getAttribute("data-spotlight-reply") ?? undefined,
-            );
-          }
-        },
-        {
-          root,
-          rootMargin: "0px 0px -8% 0px",
-          threshold: [0, 0.15, 0.35, 0.6, 1],
-        },
-      );
-      nodes.forEach((node) => io!.observe(node));
-      onScrollOrResize();
-    };
-
-    root.addEventListener("scroll", onScrollOrResize, { passive: true });
-    const ro = new ResizeObserver(() => onScrollOrResize());
-    ro.observe(root);
-
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(attachIo);
-    });
-
-    return () => {
-      cancelled = true;
-      if (attachRetryTimer != null) clearTimeout(attachRetryTimer);
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-      root.removeEventListener("scroll", onScrollOrResize);
-      ro.disconnect();
-      io?.disconnect();
-      if (flushTimer != null) clearTimeout(flushTimer);
-    };
-  }, [topicView, groupId, user, spotlightRow?.id, spotlightRepliesLen]);
-
-  async function handleSpotlightDashboardReply() {
-    if (!user || !groupId || !spotlightRow) return;
-    const body = spotlightReplyDraft.trim();
-    if (!body) return;
-    setBusy("dash-spotlight-reply");
-    setError(null);
-    try {
-      const newReplyId = await createBulletinReply(
-        groupId,
-        spotlightRow.id,
-        user.uid,
-        user.displayName,
-        body,
-      );
-      try {
-        await setMyTopicReplyReadProgress(
-          groupId,
-          spotlightRow.id,
-          user.uid,
-          newReplyId,
-        );
-      } catch {
-        // ignore
-      }
-      setSpotlightReplyDraft("");
-      const t = spotlightRow.data;
-      if (t.authorUserId !== user.uid) {
-        sendNotification({
-          type: "bulletin_reply",
-          groupId,
-          groupName: group?.name ?? "",
-          topicId: spotlightRow.id,
-          topicTitle: t.title,
-          authorName: user.displayName ?? "メンバー",
-          authorUid: user.uid,
-          topicAuthorUid: t.authorUserId,
-        });
-      }
-      await load();
-      try {
-        setSpotlightReplyReads(
-          await listTopicReplyReadProgress(groupId, spotlightRow.id),
-        );
-      } catch {
-        // ignore
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "返信に失敗しました");
-    } finally {
-      setBusy(null);
-    }
-  }
-
   function startEditName() {
     if (!group) return;
     setDraftName(group.name);
@@ -809,21 +358,6 @@ export function GroupDetailClient() {
         draftEnd || draftStart || null,
       );
       setEditingDates(false);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "保存に失敗しました");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function handleSaveDest() {
-    if (!groupId) return;
-    setBusy("save-dest");
-    setError(null);
-    try {
-      await updateDestination(groupId, draftDest.trim() || null);
-      setEditingDest(false);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "保存に失敗しました");
@@ -910,309 +444,6 @@ export function GroupDetailClient() {
     } finally {
       setBusy(null);
     }
-  }
-
-  function renderTopicRow(row: {
-    id: string;
-    data: BulletinTopicDoc;
-    replyCount: number;
-  }) {
-    const { id, data, replyCount } = row;
-    const isImportant = data.importance === "important";
-    const showImportant = isImportant || data.pinned;
-    const tags = normalizeBulletinTopicTags(data);
-    const replies = topicRepliesById[id] ?? [];
-    const latestTs =
-      replies.length > 0
-        ? replies[replies.length - 1]?.data.createdAt
-        : data.createdAt;
-    const replyReadCountsForRow =
-      topicView === "default" && spotlightRow?.id === id
-        ? computeReplyReadCounts(
-            replies.map((r) => r.id),
-            spotlightReplyReads,
-          )
-        : null;
-    const isDashSpotlightThread =
-      topicView === "default" && spotlightRow?.id === id;
-    const topicIsOwn = user?.uid === data.authorUserId;
-    const firstUnreadIdx =
-      isDashSpotlightThread && user?.uid
-        ? indexOfFirstUnreadReply(replies, user.uid, spotlightReplyReads)
-        : null;
-    const topicOpenReadCount = computeTopicOpenReadCount(
-      replies.map((r) => r.id),
-      topicView === "default" && spotlightRow?.id === id
-        ? spotlightReplyReads
-        : [],
-    );
-    return (
-      <li key={id}>
-        <Link
-          href={`/groups/${groupId}/bulletin/${id}`}
-          onClick={(e) => {
-            const el = e.target as HTMLElement;
-            if (el.closest("button") || el.closest('[aria-modal="true"]')) {
-              e.preventDefault();
-            }
-          }}
-          className={`block ps-4 pe-2.5 py-3 transition hover:bg-zinc-50 sm:px-4 dark:hover:bg-zinc-800/40 ${
-            isImportant
-              ? "mx-2 my-2 rounded-lg border-2 border-amber-500 bg-amber-50/90 shadow-sm ring-1 ring-amber-200/90 dark:border-amber-600 dark:bg-amber-950/35 dark:ring-amber-800/50"
-              : showImportant
-                ? "bg-amber-50/60 dark:bg-amber-950/15"
-                : ""
-          }`}
-        >
-          <div className="min-w-0 w-full">
-              {data.pinned ? (
-                <p className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
-                  📌 ピン留め
-                </p>
-              ) : null}
-              <div className="mt-0.5 flex items-start justify-between gap-2">
-                <h3 className="min-w-0 flex-1 text-sm font-semibold leading-snug text-zinc-700 dark:text-zinc-200">
-                  トピック:{" "}
-                  {data.category === "nearby_map"
-                    ? formatNearbyMapTopicHeadingTitle(data.title)
-                    : data.title}
-                </h3>
-                <span className="shrink-0 pt-0.5 text-xs text-zinc-400">
-                  返信 {replyCount} 件
-                </span>
-              </div>
-
-              <div
-                ref={isDashSpotlightThread ? spotlightThreadScrollRef : undefined}
-                className={
-                  isDashSpotlightThread
-                    ? "touch-pan-y mt-2 max-h-[min(72vh,36rem)] min-h-[7rem] overflow-y-auto overflow-x-hidden overscroll-y-contain [-webkit-overflow-scrolling:touch]"
-                    : "mt-2"
-                }
-              >
-                <div className="flex w-full min-w-0 flex-col gap-2">
-                  {data.category === "recipe_vote" ? (
-                    <div className="w-full min-w-0 rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 dark:border-emerald-800/60 dark:bg-emerald-950/35">
-                      <p className="text-sm font-semibold text-emerald-950 dark:text-emerald-50">
-                        レシピ投票
-                        {data.recipePoll?.candidates?.length
-                          ? `（候補 ${data.recipePoll.candidates.length} 件）`
-                          : null}
-                      </p>
-                      <p className="mt-1 text-xs text-emerald-900/80 dark:text-emerald-100/80">
-                        タップして投票画面を開く
-                      </p>
-                      {data.recipePoll?.candidates?.length ? (
-                        <div className="mt-2.5 flex gap-2 overflow-x-auto pb-0.5">
-                          {data.recipePoll.candidates.slice(0, 4).map((c, i) => (
-                            <div
-                              key={`${c.url}-${i}`}
-                              className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800"
-                            >
-                              {c.imageUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={c.imageUrl}
-                                  alt=""
-                                  className="h-full w-full object-cover"
-                                  loading="lazy"
-                                />
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                      {topicIsOwn ? (
-                        <button
-                          type="button"
-                          className="mt-2.5 text-xs font-medium text-emerald-900 underline underline-offset-2 dark:text-emerald-100"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            router.push(
-                              `/groups/${groupId}/bulletin/${id}?edit=1`,
-                            );
-                          }}
-                        >
-                          投稿を編集
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : (
-                  <div
-                    className={
-                      topicIsOwn
-                        ? "flex w-full min-w-0 flex-col items-end gap-0.5"
-                        : "flex w-full min-w-0 flex-col items-start gap-0.5"
-                    }
-                  >
-                    {data.category === "nearby_map" ? (
-                      <div
-                        className="w-full min-w-0 self-stretch"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <NearbyMapTopicDisplay
-                          body={data.body}
-                          spots={data.nearbyMapSpots ?? []}
-                        />
-                      </div>
-                    ) : (
-                      <div
-                        className={
-                          topicIsOwn
-                            ? "max-w-[min(88%,22rem)] rounded-[17px] rounded-br-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
-                            : "max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800"
-                        }
-                      >
-                        <BulletinRichBody
-                          body={data.body}
-                          className="text-xs leading-relaxed"
-                          textClassName={
-                            topicIsOwn
-                              ? "text-white"
-                              : "text-zinc-900 dark:text-zinc-100"
-                          }
-                          imgClassName={
-                            topicIsOwn
-                              ? "border-white/30"
-                              : "border-zinc-200 dark:border-zinc-600"
-                          }
-                        />
-                      </div>
-                    )}
-                    {topicIsOwn ? (
-                      <>
-                        <p className="w-full px-0.5 text-right text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
-                          {formatTs(data.createdAt)}
-                          {isUpdatedTopic(data) ? (
-                            <span>（更新 {formatTs(data.updatedAt)}）</span>
-                          ) : null}
-                        </p>
-                        {topicOpenReadCount > 0 ? (
-                          <p className="w-full px-0.5 text-right text-[10px] leading-tight text-zinc-400 dark:text-zinc-500">
-                            既読 {topicOpenReadCount}
-                          </p>
-                        ) : null}
-                      </>
-                    ) : (
-                      <p className="px-0.5 text-left text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
-                        {data.authorDisplayName ||
-                          data.authorUserId.slice(0, 8) + "…"}{" "}
-                        · {formatTs(data.createdAt)}
-                        {isUpdatedTopic(data) ? (
-                          <span>（更新 {formatTs(data.updatedAt)}）</span>
-                        ) : null}
-                      </p>
-                    )}
-                  </div>
-                  )}
-                  {data.category !== "recipe_vote" &&
-                    replies.map((reply, rIdx) => {
-                    const replyIsOwn = user?.uid === reply.data.authorUserId;
-                    const rc = replyReadCountsForRow?.[rIdx] ?? 0;
-                    const replyLabel =
-                      reply.data.authorDisplayName ||
-                      reply.data.authorUserId.slice(0, 8) + "…";
-                    return (
-                      <Fragment key={reply.id}>
-                        {firstUnreadIdx !== null &&
-                        firstUnreadIdx === rIdx ? (
-                          <div
-                            className="flex justify-center py-1"
-                            role="separator"
-                            aria-label="未読メッセージの開始位置"
-                          >
-                            <span className="rounded-full bg-sky-100/95 px-3 py-1 text-[10px] font-semibold text-sky-900 shadow-sm ring-1 ring-sky-200/80 dark:bg-sky-950/50 dark:text-sky-100 dark:ring-sky-800/60">
-                              ここから未読
-                            </span>
-                          </div>
-                        ) : null}
-                        <div
-                          data-spotlight-reply={
-                            isDashSpotlightThread ? reply.id : undefined
-                          }
-                          className={
-                            replyIsOwn
-                              ? "flex w-full min-w-0 flex-col items-end gap-0.5"
-                              : "flex w-full min-w-0 flex-col items-start gap-0.5"
-                          }
-                        >
-                          <div
-                            className={
-                              replyIsOwn
-                                ? "max-w-[min(88%,22rem)] rounded-[17px] rounded-tr-[5px] bg-[#06C755] px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
-                                : "max-w-[min(92%,22rem)] rounded-[17px] rounded-tl-[5px] border border-zinc-200/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:border-zinc-600 dark:bg-zinc-800"
-                            }
-                          >
-                            <BulletinRichBody
-                              body={reply.data.body}
-                              className="text-xs leading-relaxed"
-                              textClassName={
-                                replyIsOwn
-                                  ? "text-white"
-                                  : "text-zinc-900 dark:text-zinc-100"
-                              }
-                              imgClassName={
-                                replyIsOwn
-                                  ? "border-white/30"
-                                  : "border-zinc-200 dark:border-zinc-600"
-                              }
-                            />
-                          </div>
-                          {replyIsOwn ? (
-                            <>
-                              <p className="w-full text-right text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
-                                {formatTs(reply.data.createdAt)}
-                              </p>
-                              {rc > 0 ? (
-                                <p className="w-full text-right text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
-                                  既読 {rc}
-                                </p>
-                              ) : null}
-                            </>
-                          ) : (
-                            <p className="text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">
-                              {replyLabel} · {formatTs(reply.data.createdAt)}
-                            </p>
-                          )}
-                        </div>
-                      </Fragment>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
-                <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                  {BULLETIN_CATEGORY_LABELS[data.category]}
-                </span>
-                {tags.map((tg) => (
-                  <span
-                    key={tg}
-                    className={`rounded px-1.5 py-0.5 text-[10px] ${
-                      tg === "priority_top"
-                        ? "bg-rose-100 font-medium text-rose-900 dark:bg-rose-950/60 dark:text-rose-200"
-                        : "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200"
-                    }`}
-                  >
-                    {BULLETIN_TOPIC_TAG_LABELS[tg]}
-                  </span>
-                ))}
-                {data.importance === "important" ? (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-300 dark:bg-amber-900/45 dark:text-amber-100 dark:ring-amber-700">
-                    重要
-                  </span>
-                ) : null}
-                <span>
-                  {data.authorDisplayName ||
-                    data.authorUserId.slice(0, 8) + "…"}{" "}
-                  · 最新 {formatTs(latestTs)}
-                </span>
-              </div>
-            </div>
-        </Link>
-      </li>
-    );
   }
 
   if (group === undefined) {
@@ -1515,35 +746,28 @@ export function GroupDetailClient() {
             </p>
             <VisibilityBadge kind="owner" />
           </div>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            日程調整で確定した場合は自動的に反映されます。
-          </p>
           <div className="mt-3 flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
               開始日
               <input
                 type="date"
                 value={draftStart}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setDraftStart(v);
-                  setDraftEnd((prev) => (!prev || prev < v ? v : prev));
-                }}
-                className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                onChange={(e) => setDraftStart(e.target.value)}
+                className="mt-1 block rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
               />
             </label>
-            <label className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
               終了日
               <input
                 type="date"
                 value={draftEnd}
-                min={draftStart || undefined}
                 onChange={(e) => setDraftEnd(e.target.value)}
-                className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                min={draftStart || undefined}
+                className="mt-1 block rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
               />
             </label>
           </div>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={handleSaveDates}
@@ -1589,224 +813,7 @@ export function GroupDetailClient() {
         </div>
       ) : null}
 
-      {/* ── トピック（工程完了後はこちらを主役に見えるよう強調） ── */}
-      <section
-        className={`mt-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60 ${
-          allTripWorkflowComplete
-            ? "ring-1 ring-emerald-300/90 dark:ring-emerald-800/60"
-            : ""
-        }`}
-      >
-        <div className="border-b border-emerald-100 bg-gradient-to-br from-emerald-50 via-emerald-50/95 to-white px-4 py-4 dark:border-emerald-900/45 dark:from-emerald-950/50 dark:via-emerald-950/35 dark:to-zinc-900/80">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <div
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-emerald-200/90 dark:bg-zinc-900 dark:ring-emerald-800/60"
-                aria-hidden
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="h-4 w-4 text-emerald-700 dark:text-emerald-300"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"
-                  />
-                </svg>
-              </div>
-              <h2 className="whitespace-nowrap text-sm font-semibold leading-none tracking-tight text-emerald-950 dark:text-emerald-100">
-                トピック
-              </h2>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Link
-                href={`/groups/${groupId}/bulletin?new=1`}
-                className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                ＋ 新しい話題
-              </Link>
-              <Link
-                href={`/groups/${groupId}/bulletin`}
-                className="text-xs text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
-              >
-                すべて見る →
-              </Link>
-            </div>
-          </div>
-          <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="me-2.5 shrink-0 text-sm font-extrabold uppercase tracking-[0.08em] text-zinc-800 dark:text-zinc-100">
-                表示
-              </span>
-              <div
-                className="inline-flex items-stretch overflow-hidden rounded-lg border border-zinc-300/90 bg-white shadow-sm dark:border-zinc-600 dark:bg-zinc-900"
-                role="group"
-                aria-label="掲示板の表示切替"
-              >
-                <button
-                  type="button"
-                  onClick={() => setTopicView("all")}
-                  className={`px-3 py-1.5 text-xs font-semibold transition ${
-                    topicView === "all"
-                      ? "bg-emerald-700 text-white dark:bg-emerald-600"
-                      : "text-zinc-700 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800/80"
-                  }`}
-                >
-                  すべて
-                </button>
-                <span
-                  className="w-px shrink-0 self-stretch bg-zinc-200 dark:bg-zinc-600"
-                  aria-hidden
-                />
-                <button
-                  type="button"
-                  onClick={() => setTopicView("vote")}
-                  className={`px-3 py-1.5 text-xs font-semibold transition ${
-                    topicView === "vote"
-                      ? "bg-emerald-700 text-white dark:bg-emerald-600"
-                      : "text-zinc-700 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800/80"
-                  }`}
-                >
-                  決定系のみ
-                </button>
-              </div>
-              {(topicView !== "default" || spotlightTopicId) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTopicView("default");
-                    setSpotlightTopicId(null);
-                  }}
-                  className="text-xs font-medium text-zinc-500 underline-offset-2 hover:text-zinc-800 hover:underline dark:text-zinc-400 dark:hover:text-zinc-200"
-                >
-                  直近のみ
-                </button>
-              )}
-            </div>
-            {quickPickTopics.length > 0 ? (
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 border-t border-emerald-200/60 pt-2.5 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0 dark:border-emerald-800/40">
-                <span className="me-2 shrink-0 text-sm font-extrabold uppercase tracking-[0.06em] text-emerald-950 dark:text-emerald-50">
-                  話題
-                </span>
-                {quickPickTopics.map((row) => {
-                  const active =
-                    topicView === "default" && spotlightRow?.id === row.id;
-                  return (
-                    <button
-                      key={row.id}
-                      type="button"
-                      title={
-                        row.data.category === "nearby_map"
-                          ? formatNearbyMapTopicHeadingTitle(row.data.title)
-                          : row.data.title
-                      }
-                      onClick={() => {
-                        // レシピ投票は簡易プレビューではなく本番UIへ
-                        if (row.data.category === "recipe_vote") {
-                          router.push(
-                            `/groups/${groupId}/bulletin/${row.id}`,
-                          );
-                          return;
-                        }
-                        setTopicView("default");
-                        setSpotlightTopicId(row.id);
-                      }}
-                      className={`max-w-[11rem] truncate rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition ${
-                        active
-                          ? "border-emerald-600 bg-emerald-200/90 text-emerald-950 shadow-sm ring-1 ring-emerald-500/25 dark:border-emerald-500 dark:bg-emerald-900/55 dark:text-emerald-50"
-                          : "border-emerald-200/90 bg-emerald-50/90 text-emerald-950 hover:border-emerald-400 hover:bg-emerald-100/90 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-100 dark:hover:border-emerald-600 dark:hover:bg-emerald-900/50"
-                      }`}
-                    >
-                      {row.data.category === "nearby_map"
-                        ? formatNearbyMapTopicHeadingTitle(row.data.title)
-                        : row.data.title}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        {/* 話題一覧 */}
-        <div className="min-h-0 flex-1 bg-white pb-2 pt-1 dark:bg-transparent">
-          {topics.length === 0 ? (
-            <p className="px-4 pb-4 text-sm text-zinc-400 dark:text-zinc-500">
-              まだ話題がありません。
-            </p>
-          ) : visibleTopicRows.length === 0 ? (
-            <p className="px-4 pb-4 text-sm text-zinc-500 dark:text-zinc-400">
-              該当する話題はありません。
-            </p>
-          ) : (
-            <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {visibleTopicRows.map((row) => renderTopicRow(row))}
-            </ul>
-          )}
-        </div>
-        {topicView === "default" &&
-        spotlightRow &&
-        spotlightRow.data.category !== "recipe_vote" &&
-        user &&
-        myMember ? (
-          <div className="border-t border-zinc-200 bg-zinc-50/90 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900/55">
-            <div className="flex items-center gap-2">
-              <textarea
-                ref={spotlightReplyComposerRef}
-                value={spotlightReplyDraft}
-                onChange={(e) => setSpotlightReplyDraft(e.target.value)}
-                rows={1}
-                disabled={busy !== null}
-                aria-label="メッセージ"
-                className="h-10 min-h-10 max-h-10 min-w-0 flex-1 resize-none overflow-y-auto rounded-[18px] border border-zinc-300 bg-white px-3 py-2 text-sm leading-tight text-zinc-900 focus:border-[#06C755] focus:outline-none focus:ring-1 focus:ring-[#06C755]/40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                onPaste={(e) =>
-                  void pasteBulletinImage(
-                    e,
-                    spotlightReplyDraft,
-                    setSpotlightReplyDraft,
-                    true,
-                  )
-                }
-                onKeyDown={(e) => {
-                  if (e.nativeEvent.isComposing) return;
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    if (spotlightReplyDraft.trim() && busy === null) {
-                      void handleSpotlightDashboardReply();
-                    }
-                  }
-                }}
-              />
-              <BulletinImageAttachButton
-                inputId={bulletinImgSpotlightReplyId}
-                disabled={busy !== null}
-                onFile={(f) =>
-                  void insertImageFromFile(
-                    f,
-                    spotlightReplyDraft,
-                    setSpotlightReplyDraft,
-                    spotlightReplyComposerRef,
-                    true,
-                  )
-                }
-              />
-              <button
-                type="button"
-                onClick={() => void handleSpotlightDashboardReply()}
-                disabled={busy !== null || !spotlightReplyDraft.trim()}
-                className="shrink-0 rounded-full bg-[#06C755] px-4 py-2 text-sm font-medium text-white hover:bg-[#05b34c] disabled:opacity-40"
-              >
-                {busy === "dash-spotlight-reply" ? "…" : "送信"}
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </section>
+      <TripHomeContactSummary groupId={groupId} topics={topics} />
 
       {error ? (
         <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">

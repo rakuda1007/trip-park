@@ -3,7 +3,7 @@ import { GroupDetailClient } from "./group-detail-client";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "グループ詳細",
+  title: "旅行ホーム",
 };
 
 export default function GroupDetailPage() {

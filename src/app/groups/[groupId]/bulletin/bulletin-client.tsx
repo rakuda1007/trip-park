@@ -239,12 +239,12 @@ function BulletinClientInner() {
   if (group === null) {
     return (
       <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
-        <p className="text-sm text-zinc-600">グループが見つかりません。</p>
+        <p className="text-sm text-zinc-600">旅行が見つかりません。</p>
         <Link
           href="/groups"
           className="mt-4 inline-block text-sm text-zinc-900 underline"
         >
-          グループ一覧へ
+          旅行一覧へ
         </Link>
       </div>
     );
@@ -254,13 +254,13 @@ function BulletinClientInner() {
     return (
       <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
         <p className="text-sm text-zinc-600">
-          このグループのメンバーではありません。
+          この旅行のメンバーではありません。
         </p>
         <Link
           href={`/groups/${groupId}`}
           className="mt-4 inline-block text-sm text-zinc-900 underline"
         >
-          グループ詳細へ
+          旅行ホームへ
         </Link>
       </div>
     );
@@ -270,11 +270,8 @@ function BulletinClientInner() {
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
-            掲示板
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            トピック
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+            連絡
           </h1>
         </div>
         {user && isMember ? (
@@ -283,12 +280,12 @@ function BulletinClientInner() {
             onClick={() => setShowForm((v) => !v)}
             className="shrink-0 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
           >
-            {showForm ? "× キャンセル" : "+ 新しい話題"}
+            {showForm ? "× キャンセル" : "+ 新しい連絡"}
           </button>
         ) : null}
       </div>
       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-        トピックごとにチャットでやりとりできます。
+        話題ごとにチャットでやりとりできます。
       </p>
 
       {error ? (
@@ -301,7 +298,7 @@ function BulletinClientInner() {
       {showForm && user && isMember ? (
         <section className="mt-6 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
           <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-            新しい話題を立てる
+            新しい連絡を立てる
           </h2>
           <div className="mt-3 space-y-3">
             <label className="block text-xs text-zinc-600 dark:text-zinc-400">
@@ -367,7 +364,7 @@ function BulletinClientInner() {
                   立ち寄り先の地図を登録
                 </p>
                 <p className="mt-2 text-xs leading-relaxed text-sky-900/95 dark:text-sky-100/90">
-                  地図は複数登録できます。1件ごとに「場所名」と「地図URL」を入力し「追加」を押してください。表示では<strong>場所名がラベル</strong>となり、その行の「地図を開く」がそのURLへのリンクになります。件名（タイトル）はトピック全体の見出し、場所名は各リンクの名前として使い分けられます。
+                  地図は複数登録できます。1件ごとに「場所名」と「地図URL」を入力し「追加」を押してください。表示では<strong>場所名がラベル</strong>となり、その行の「地図を開く」がそのURLへのリンクになります。件名（タイトル）は連絡全体の見出し、場所名は各リンクの名前として使い分けられます。
                 </p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
                   <label className="text-xs text-zinc-600 dark:text-zinc-400">
@@ -483,7 +480,7 @@ function BulletinClientInner() {
         </h2>
         {topics.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-500">
-            まだ話題がありません。「＋ 新しい話題」ボタンから最初の話題を作成してください。
+            まだ連絡がありません。「＋ 新しい連絡」ボタンから最初の連絡を作成してください。
           </p>
         ) : (
           <ul className="mt-4 space-y-3">
@@ -507,7 +504,7 @@ function BulletinClientInner() {
                   >
                     {data.importance === "important" ? (
                       <div className="mb-2 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-300 dark:bg-amber-900/50 dark:text-amber-100 dark:ring-amber-700">
-                        重要トピック
+                        重要な連絡
                       </div>
                     ) : null}
                     {data.pinned ? (

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { BulletinTopicClient } from "./bulletin-topic-client";
 
 export const metadata: Metadata = {
-  title: "トピック",
+  title: "連絡",
 };
 
 export default function BulletinTopicPage() {

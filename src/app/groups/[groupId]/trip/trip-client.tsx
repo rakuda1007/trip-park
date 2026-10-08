@@ -667,8 +667,8 @@ export function TripClient() {
   if (group === null) {
     return (
       <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
-        <p className="text-sm text-zinc-600">グループが見つかりません。</p>
-        <Link href="/groups" className="mt-4 inline-block text-sm underline">グループ一覧へ</Link>
+        <p className="text-sm text-zinc-600">旅行が見つかりません。</p>
+        <Link href="/groups" className="mt-4 inline-block text-sm underline">旅行一覧へ</Link>
       </div>
     );
   }

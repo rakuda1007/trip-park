@@ -821,7 +821,7 @@ export function BulletinTopicClient() {
           href={`/groups/${groupId}/bulletin`}
           className="mt-4 inline-block text-sm text-zinc-900 underline"
         >
-          トピック一覧へ
+          連絡一覧へ
         </Link>
       </div>
     );
@@ -831,13 +831,13 @@ export function BulletinTopicClient() {
     return (
       <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
         <p className="text-sm text-zinc-600">
-          このグループのメンバーではありません。
+          この旅行のメンバーではありません。
         </p>
         <Link
           href={`/groups/${groupId}`}
           className="mt-4 inline-block text-sm text-zinc-900 underline"
         >
-          グループ詳細へ
+          旅行ホームへ
         </Link>
       </div>
     );
@@ -877,7 +877,7 @@ export function BulletinTopicClient() {
         >
           {topic.importance === "important" ? (
             <p className="mb-1 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-300 dark:bg-amber-900/50 dark:text-amber-100 dark:ring-amber-700">
-              重要トピック
+              重要な連絡
             </p>
           ) : null}
           {topic.pinned ? (
@@ -1297,7 +1297,7 @@ export function BulletinTopicClient() {
       >
         {topic.importance === "important" ? (
           <p className="mb-2 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-300 dark:bg-amber-900/50 dark:text-amber-100 dark:ring-amber-700">
-            重要トピック
+            重要な連絡
           </p>
         ) : null}
         {topic.pinned ? (

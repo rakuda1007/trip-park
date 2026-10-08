@@ -124,7 +124,7 @@ export async function joinGroupWithCode(
 
   const existing = await getDoc(memberRef);
   if (existing.exists()) {
-    throw new Error("すでにこのグループに参加しています。");
+    throw new Error("すでにこの旅行に参加しています。");
   }
 
   const groupName = nameFromInvite || "グループ";
@@ -360,10 +360,10 @@ export async function listMembers(groupId: string): Promise<
 export async function leaveGroup(uid: string, groupId: string): Promise<void> {
   const db = getFirebaseFirestore();
   const group = await getGroup(groupId);
-  if (!group) throw new Error("グループが見つかりません。");
+  if (!group) throw new Error("旅行が見つかりません。");
   if (group.ownerId === uid) {
     throw new Error(
-      "オーナーはグループを抜けられません。グループを削除するか、別のオーナーに移譲する機能は今後追加予定です。",
+      "オーナーは旅行を抜けられません。旅行を削除するか、別のオーナーに移譲する機能は今後追加予定です。",
     );
   }
 
@@ -380,7 +380,7 @@ export async function removeMember(
 ): Promise<void> {
   const db = getFirebaseFirestore();
   const group = await getGroup(groupId);
-  if (!group) throw new Error("グループが見つかりません。");
+  if (!group) throw new Error("旅行が見つかりません。");
   if (group.ownerId !== actorUid) {
     throw new Error("メンバーを外す権限がありません。");
   }

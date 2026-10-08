@@ -8,20 +8,11 @@ import {
 import type { ScheduleResponseDoc } from "@/types/schedule";
 import type { GroupDoc } from "@/types/group";
 import type { TripRouteDoc } from "@/types/trip";
-import type { BulletinRecipeVoteDoc, BulletinTopicDoc } from "@/types/bulletin";
+import type { BulletinRecipeVoteDoc } from "@/types/bulletin";
 import {
   isDestinationStepCompleteForGroup,
   isItineraryCompleteForGroup,
 } from "@/lib/trip-workflow-all-complete";
-
-/** トピック一覧の「投票・決定系」フィルタ（掲示） */
-export function isVoteOrDecisionTopic(data: BulletinTopicDoc): boolean {
-  if (data.category === "recipe_vote") return true;
-  if (data.importance === "important") return true;
-  const tags = data.tags;
-  if (Array.isArray(tags) && tags.includes("priority_top")) return true;
-  return false;
-}
 
 export type DashboardPersonalTask = {
   key: string;
@@ -82,7 +73,7 @@ export function computeDashboardInsights(params: {
   tripRoutes: { id: string; data: TripRouteDoc }[];
   scheduleCandidateIds: string[];
   scheduleResponses: ScheduleResponseDoc[];
-  /** recipe_vote で未確定かつ候補ありのトピックごとの投票一覧 */
+  /** recipe_vote で未確定かつ候補ありの連絡ごとの投票一覧 */
   openRecipeVotes: {
     topicId: string;
     title: string;
@@ -139,7 +130,7 @@ export function computeDashboardInsights(params: {
     statusLines.push(
       group.destination?.trim()
         ? `目的地は「${group.destination.trim()}」として記録されています（投票ブロックなし）。`
-        : "目的地は投票ブロックがまだなく、グループの目的地欄も未設定です。",
+        : "目的地は投票ブロックがまだなく、旅行の目的地欄も未設定です。",
     );
   } else {
     const undecided = destinationPolls.filter(
@@ -234,7 +225,7 @@ export function computeDashboardInsights(params: {
     };
   } else {
     nextStepLine =
-      "すべての主要な工程が一通り完了しています。トピックで連絡・共有を続けられます。";
+      "すべての主要な工程が一通り完了しています。連絡で共有を続けられます。";
     nextStepLink = null;
   }
 

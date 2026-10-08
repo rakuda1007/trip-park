@@ -36,6 +36,13 @@ function getActiveStep(pathname: string, groupId: string): string | null {
   return null;
 }
 
+/** 工程外の常時ナビ（連絡・買い出し） */
+function getActiveTool(pathname: string, groupId: string): "contact" | "sharing" | null {
+  if (pathname.startsWith(`/groups/${groupId}/bulletin`)) return "contact";
+  if (pathname.startsWith(`/groups/${groupId}/sharing`)) return "sharing";
+  return null;
+}
+
 function isGroupPage(pathname: string, groupId: string): boolean {
   return pathname.startsWith(`/groups/${groupId}`);
 }
@@ -140,6 +147,7 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
   if (!isGroupPage(pathname, groupId)) return null;
 
   const activeStep = getActiveStep(pathname, groupId);
+  const activeTool = getActiveTool(pathname, groupId);
 
   const datesDone = !!group?.tripStartDate;
   const destDone = destStepDone;
@@ -217,60 +225,110 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
     },
   ];
 
+  const tools = [
+    {
+      key: "contact" as const,
+      label: "連絡",
+      href: `/groups/${groupId}/bulletin`,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+          <path fillRule="evenodd" d="M2 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5.414l-2.707 2.707A1 1 0 0 1 1 17V5Zm3 1a1 1 0 0 0 0 2h10a1 1 0 1 0 0-2H5Zm0 4a1 1 0 0 0 0 2h6a1 1 0 1 0 0-2H5Z" clipRule="evenodd" />
+        </svg>
+      ),
+    },
+    {
+      key: "sharing" as const,
+      label: "買い出し",
+      href: `/groups/${groupId}/sharing`,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+          <path d="M3 3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H3Zm2 3h10v2H5V6Zm0 4h10v2H5v-2Zm0 4h7v2H5v-2Z" />
+        </svg>
+      ),
+    },
+  ];
+
   return (
     <div className="shrink-0 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <div className="mx-auto max-w-3xl px-4">
-        <div className="flex items-center gap-0.5 overflow-x-auto py-2">
-          {/* ステップ */}
-          {steps.map((step, idx) => {
-            const isActive = step.key === activeStep;
-            const prevStatus = idx > 0 ? steps[idx - 1]!.status : "pending";
-            const statusTitle =
-              step.status === "done"
-                ? "完了"
-                : step.status === "in_progress"
-                  ? "進行中"
-                  : "未着手";
-            return (
-              <div key={step.key} className="flex shrink-0 items-center">
-                {idx > 0 && (
-                  <div
-                    className={`mx-1 h-px w-3 shrink-0 ${dividerClassBeforeStep(prevStatus)}`}
-                  />
-                )}
+        <div className="flex items-center gap-1 overflow-x-auto py-2">
+          {/* 計画工程 */}
+          <div className="flex shrink-0 items-center gap-0.5">
+            {steps.map((step, idx) => {
+              const isActive = step.key === activeStep;
+              const prevStatus = idx > 0 ? steps[idx - 1]!.status : "pending";
+              const statusTitle =
+                step.status === "done"
+                  ? "完了"
+                  : step.status === "in_progress"
+                    ? "進行中"
+                    : "未着手";
+              return (
+                <div key={step.key} className="flex shrink-0 items-center">
+                  {idx > 0 && (
+                    <div
+                      className={`mx-1 h-px w-3 shrink-0 ${dividerClassBeforeStep(prevStatus)}`}
+                    />
+                  )}
+                  <Link
+                    href={step.href}
+                    title={`${step.label}（${statusTitle}）`}
+                    className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${
+                      isActive
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : step.status === "done"
+                          ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          : step.status === "in_progress"
+                            ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950/40 dark:text-amber-200"
+                            : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                    }`}
+                  >
+                    {step.status === "done" && !isActive ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                        <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
+                      </svg>
+                    ) : step.status === "in_progress" && !isActive ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3" aria-hidden>
+                        <path
+                          fillRule="evenodd"
+                          d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16Zm.75-13.25a.75.75 0 0 0-1.5 0v5c0 .199.079.391.22.53l2.5 2.5a.75.75 0 1 0 1.06-1.06L8 7.59V2.75Z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    ) : (
+                      step.icon
+                    )}
+                    {step.label}
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 工程外の実務ナビ（常時表示） */}
+          <div
+            className="mx-1 h-5 w-px shrink-0 bg-zinc-200 dark:bg-zinc-700"
+            aria-hidden
+          />
+          <div className="flex shrink-0 items-center gap-1">
+            {tools.map((tool) => {
+              const isActive = tool.key === activeTool;
+              return (
                 <Link
-                  href={step.href}
-                  title={`${step.label}（${statusTitle}）`}
+                  key={tool.key}
+                  href={tool.href}
                   className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${
                     isActive
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : step.status === "done"
-                        ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300"
-                        : step.status === "in_progress"
-                          ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950/40 dark:text-amber-200"
-                          : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                      ? "bg-teal-700 text-white shadow-sm dark:bg-teal-600"
+                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                   }`}
                 >
-                  {step.status === "done" && !isActive ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-                      <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
-                    </svg>
-                  ) : step.status === "in_progress" && !isActive ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3" aria-hidden>
-                      <path
-                        fillRule="evenodd"
-                        d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16Zm.75-13.25a.75.75 0 0 0-1.5 0v5c0 .199.079.391.22.53l2.5 2.5a.75.75 0 1 0 1.06-1.06L8 7.59V2.75Z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  ) : (
-                    step.icon
-                  )}
-                  {step.label}
+                  {tool.icon}
+                  {tool.label}
                 </Link>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
