@@ -17,22 +17,9 @@ export function ServiceWorkerRegister() {
 
     navigator.serviceWorker
       .register("/sw.js", { scope: "/" })
-      .then((reg) => {
-        reg.addEventListener("updatefound", () => {
-          const newWorker = reg.installing;
-          if (!newWorker) return;
-          newWorker.addEventListener("statechange", () => {
-            if (
-              newWorker.state === "installed" &&
-              navigator.serviceWorker.controller
-            ) {
-              // 新バージョンが利用可能になったら自動でページをリロード
-              window.location.reload();
-            }
-          });
-        });
-      })
       .catch((err) => console.error("SW registration failed:", err));
+    // 更新時の強制 reload は起動直後のチラつきの原因になるため行わない。
+    // sw.js 側の skipWaiting + clients.claim で次回ナビ以降に新 SW が効く。
   }, []);
 
   return null;

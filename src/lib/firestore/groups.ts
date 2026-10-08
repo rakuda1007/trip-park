@@ -153,9 +153,9 @@ export async function joinGroupWithCode(
   return groupId;
 }
 
-export async function listMyGroups(uid: string): Promise<
-  { groupId: string; data: UserGroupRefDoc }[]
-> {
+async function listUserGroupRefs(
+  uid: string,
+): Promise<{ groupId: string; data: UserGroupRefDoc }[]> {
   const db = getFirebaseFirestore();
   const ref = collection(db, COLLECTIONS.users, uid, SUB.groups);
   const q = query(ref, orderBy("joinedAt", "desc"));
@@ -164,6 +164,69 @@ export async function listMyGroups(uid: string): Promise<
   snap.forEach((d) => {
     items.push({ groupId: d.id, data: d.data() as UserGroupRefDoc });
   });
+  return items;
+}
+
+/**
+ * 起動振り分け用の軽量一覧。
+ * polls / routes は取らず、グループ本体の status・日程だけをマージする。
+ */
+export async function listMyGroupsForRouting(uid: string): Promise<
+  { groupId: string; data: UserGroupRefDoc }[]
+> {
+  const db = getFirebaseFirestore();
+  const items = await listUserGroupRefs(uid);
+
+  const groupSnaps = await Promise.all(
+    items.map(({ groupId }) =>
+      getDoc(doc(db, COLLECTIONS.groups, groupId)).catch(() => null),
+    ),
+  );
+
+  return items.flatMap((item, i) => {
+    const gSnap = groupSnaps[i];
+    if (!gSnap || !gSnap.exists()) return [];
+    const gd = gSnap.data() as GroupDoc | undefined;
+    return [
+      {
+        groupId: item.groupId,
+        data: {
+          ...item.data,
+          groupName: gd?.name ?? item.data.groupName,
+          memoryPhotoUrl: gd?.memoryPhotoUrl ?? null,
+          status: gd?.status ?? "planning",
+          tripStartDate: gd?.tripStartDate ?? null,
+          tripEndDate: gd?.tripEndDate ?? null,
+        },
+      },
+    ];
+  });
+}
+
+/** 直近旅行が未完了で開けるなら true（membership + group status のみ確認） */
+export async function isOpenTripForUser(
+  uid: string,
+  groupId: string,
+): Promise<boolean> {
+  const db = getFirebaseFirestore();
+  const memberSnap = await getDoc(
+    doc(db, COLLECTIONS.users, uid, SUB.groups, groupId),
+  ).catch(() => null);
+  if (!memberSnap || !memberSnap.exists()) return false;
+
+  const groupSnap = await getDoc(doc(db, COLLECTIONS.groups, groupId)).catch(
+    () => null,
+  );
+  if (!groupSnap || !groupSnap.exists()) return false;
+  const gd = groupSnap.data() as GroupDoc | undefined;
+  return (gd?.status ?? "planning") !== "completed";
+}
+
+export async function listMyGroups(uid: string): Promise<
+  { groupId: string; data: UserGroupRefDoc }[]
+> {
+  const db = getFirebaseFirestore();
+  const items = await listUserGroupRefs(uid);
 
   // グループ本体から旅行日程を並列取得
   // 権限エラーや削除済みグループは null として扱いリストから除外する

@@ -5,9 +5,10 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Trip Park",
     short_name: "Trip Park",
     description: "旅行・キャンプの計画を共有する Web アプリ",
-    start_url: "/",
+    // PWA 起動時はプロモ LP を経由せずアプリ入口へ
+    start_url: "/dashboard",
     display: "standalone",
-    background_color: "#ffffff",
+    background_color: "#0f766e",
     theme_color: "#0f766e",
     orientation: "portrait-primary",
     categories: ["travel", "lifestyle"],

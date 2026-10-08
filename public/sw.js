@@ -1,13 +1,25 @@
-const CACHE_NAME = "trip-park-v2";
+const CACHE_NAME = "trip-park-v3";
+const APP_SHELL = "/dashboard";
+const NAVIGATE_TIMEOUT_MS = 2500;
 
 const STATIC_ASSETS = [
-  "/",
+  "/dashboard",
   "/groups",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)),
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        STATIC_ASSETS.map((url) =>
+          cache.add(url).catch(() => {
+            // 個別失敗はインストール全体を止めない
+          }),
+        ),
+      ),
+    ),
   );
   self.skipWaiting();
 });
@@ -42,7 +54,7 @@ self.addEventListener("push", (event) => {
     || payload._body
     || (payload.notification && payload.notification.body)
     || "";
-  const url   = data.url || payload.url || "/";
+  const url   = data.url || payload.url || APP_SHELL;
 
   event.waitUntil(
     self.registration.showNotification(title, {
@@ -57,7 +69,7 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || "/";
+  const url = (event.notification.data && event.notification.data.url) || APP_SHELL;
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const c of list) {
@@ -70,6 +82,38 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
+
+function cachePut(request, response) {
+  if (!response || !response.ok) return;
+  const cloned = response.clone();
+  caches.open(CACHE_NAME).then((cache) => cache.put(request, cloned));
+}
+
+/**
+ * ネットワーク優先。遅ければ同一 URL のキャッシュへ。
+ * キャッシュも無いときはネットワーク完了を待ち、最終手段でアプリシェル。
+ */
+function networkFirstWithTimeout(request, timeoutMs, fallbackUrl) {
+  const networkPromise = fetch(request).then((response) => {
+    cachePut(request, response);
+    return response;
+  });
+
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("timeout")), timeoutMs);
+  });
+
+  return Promise.race([networkPromise, timeoutPromise]).catch(() =>
+    caches.match(request).then((cached) => {
+      if (cached) return cached;
+      return networkPromise.catch(() =>
+        fallbackUrl
+          ? caches.match(fallbackUrl).then((r) => r ?? Response.error())
+          : Response.error(),
+      );
+    }),
+  );
+}
 
 // ── フェッチキャッシュ ────────────────────────────────────────────────────
 self.addEventListener("fetch", (event) => {
@@ -87,21 +131,15 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // ナビゲーションリクエスト: ネットワーク優先、失敗時にキャッシュ
+  // ナビゲーション: タイムアウト付き network-first（遅いときアプリシェルへ）
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const cloned = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, cloned));
-          return response;
-        })
-        .catch(() => caches.match(request).then((r) => r ?? caches.match("/"))),
+      networkFirstWithTimeout(request, NAVIGATE_TIMEOUT_MS, APP_SHELL),
     );
     return;
   }
 
-  // Next.js のビルドアセットはネットワーク優先（古いJS配信を防ぐ）
+  // ハッシュ付き静的アセット・アイコンは cache-first（ファイル名が変われば別 URL）
   if (
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icons/") ||
@@ -110,13 +148,13 @@ self.addEventListener("fetch", (event) => {
     url.pathname.endsWith(".ico")
   ) {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const cloned = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, cloned));
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          cachePut(request, response);
           return response;
-        })
-        .catch(() => caches.match(request)),
+        });
+      }),
     );
     return;
   }

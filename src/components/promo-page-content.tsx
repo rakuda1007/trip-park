@@ -12,8 +12,8 @@ export function PromoPageContent({
   autoRedirectOnAuth = true,
 }: PromoPageContentProps) {
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-16 bg-white px-4 py-8 sm:px-6 sm:py-12">
-      <PromoAuthRedirect enabled={autoRedirectOnAuth} />
+    <PromoAuthRedirect enabled={autoRedirectOnAuth}>
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-16 bg-white px-4 py-8 sm:px-6 sm:py-12">
       <section className="rounded-3xl border border-zinc-200 bg-zinc-100 p-3 shadow-sm sm:p-4">
         <div className="relative min-h-[440px] overflow-hidden rounded-2xl sm:min-h-[520px]">
           <Image
@@ -150,6 +150,7 @@ export function PromoPageContent({
           </Link>
         </p>
       </section>
-    </div>
+      </div>
+    </PromoAuthRedirect>
   );
 }

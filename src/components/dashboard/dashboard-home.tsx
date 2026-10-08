@@ -1,7 +1,11 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
-import { listMyGroups } from "@/lib/firestore/groups";
+import { LoadingScreen } from "@/components/loading-screen";
+import {
+  isOpenTripForUser,
+  listMyGroupsForRouting,
+} from "@/lib/firestore/groups";
 import { loadLastTripId } from "@/lib/last-trip";
 import type { UserGroupRefDoc } from "@/types/group";
 import Link from "next/link";
@@ -76,38 +80,54 @@ export function DashboardHome() {
   useEffect(() => {
     if (!user) return;
 
-    // 旅行リストを取得して要件に沿って遷移先を決定する
-    listMyGroups(user.uid).then((items) => {
-      if (items.length === 0) {
-        setChecked(true);
-        return;
-      }
-      const incomplete = items.filter((x) => x.data.status !== "completed");
-      const lastTripId = loadLastTripId(user.uid);
+    let cancelled = false;
 
-      // ① 全工程未完了の旅行がある: 直近参照旅行（未完了のみ）を優先表示
-      if (incomplete.length > 0) {
-        if (lastTripId && incomplete.some((x) => x.groupId === lastTripId)) {
-          router.replace(`/groups/${lastTripId}`);
+    (async () => {
+      try {
+        // 直近旅行があれば polls/routes なしの軽量確認だけで遷移
+        const lastTripId = loadLastTripId(user.uid);
+        if (lastTripId) {
+          const open = await isOpenTripForUser(user.uid, lastTripId);
+          if (cancelled) return;
+          if (open) {
+            router.replace(`/groups/${lastTripId}`);
+            return;
+          }
+        }
+
+        const items = await listMyGroupsForRouting(user.uid);
+        if (cancelled) return;
+
+        if (items.length === 0) {
+          setChecked(true);
           return;
         }
-        const today = getTodayISO();
-        const bestId = pickBestTripId(incomplete, today);
-        if (bestId) {
-          router.replace(`/groups/${bestId}`);
-          return;
-        }
-      }
 
-      // ② すべて完了済み: 旅行一覧を開き、過去の旅行を初期展開
-      router.replace("/groups?pastOpen=1");
-    }).catch(() => {
-      setChecked(true);
-    });
+        const incomplete = items.filter((x) => x.data.status !== "completed");
+
+        if (incomplete.length > 0) {
+          const today = getTodayISO();
+          const bestId = pickBestTripId(incomplete, today);
+          if (bestId) {
+            router.replace(`/groups/${bestId}`);
+            return;
+          }
+        }
+
+        router.replace("/groups?pastOpen=1");
+      } catch {
+        if (!cancelled) setChecked(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, router]);
 
-  // リダイレクト中 or uid 待機中は何も表示しない
-  if (!checked) return null;
+  if (!checked) {
+    return <LoadingScreen label="旅行を開いています…" />;
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
