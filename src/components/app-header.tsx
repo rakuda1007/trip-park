@@ -13,10 +13,9 @@ import {
   getMemberForUser,
 } from "@/lib/firestore/groups";
 import {
-  inviteJoinNoun,
+  buildInviteShareText,
+  buildInviteShareTitle,
   inviteKindLabel,
-  labelsForShape,
-  resolvePlanShape,
 } from "@/lib/plan-shape";
 import type { GroupDoc } from "@/types/group";
 import Link from "next/link";
@@ -355,7 +354,11 @@ export function AppHeader() {
                             </button>
                             <a
                               href={`https://line.me/R/msg/text/?${encodeURIComponent(
-                                `${inviteKindLabel(groupForMenu.planShape)}「${groupForMenu.name}」\n${inviteJoinNoun(groupForMenu.planShape)}に参加はこちらから👇\n${buildWelcomeUrl(groupForMenu.inviteCode)}`,
+                                buildInviteShareText(
+                                  groupForMenu.name,
+                                  groupForMenu.planShape,
+                                  buildWelcomeUrl(groupForMenu.inviteCode),
+                                ),
                               )}`}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -369,10 +372,16 @@ export function AppHeader() {
                                 type="button"
                                 onClick={async () => {
                                   try {
+                                    const url = buildWelcomeUrl(
+                                      groupForMenu.inviteCode,
+                                    );
                                     await navigator.share({
-                                      title: `「${groupForMenu.name}」への招待（${labelsForShape(resolvePlanShape(groupForMenu)).shape}）`,
+                                      title: buildInviteShareTitle(
+                                        groupForMenu.name,
+                                        groupForMenu.planShape,
+                                      ),
                                       text: `${inviteKindLabel(groupForMenu.planShape)}「${groupForMenu.name}」`,
-                                      url: buildWelcomeUrl(groupForMenu.inviteCode),
+                                      url,
                                     });
                                   } catch {
                                     // キャンセルは無視

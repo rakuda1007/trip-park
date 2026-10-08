@@ -10,10 +10,17 @@ import { useCallback, useEffect, useState } from "react";
 
 function PlanShapeBadge({ planShape }: { planShape?: PlanShape | null }) {
   const shape = resolvePlanShape({ planShape });
-  if (shape === "trip") return null;
   const label = labelsForShape(shape).shape;
+  const tone =
+    shape === "gathering"
+      ? "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
+      : shape === "settle_only"
+        ? "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200"
+        : "bg-teal-100 text-teal-900 dark:bg-teal-950/50 dark:text-teal-200";
   return (
-    <span className="ml-1.5 inline-flex items-center rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+    <span
+      className={`ml-1.5 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${tone}`}
+    >
       {label}
     </span>
   );
@@ -196,6 +203,7 @@ export function GroupsClient() {
   const [error, setError] = useState<string | null>(null);
   const [pastOpen, setPastOpen] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -243,13 +251,23 @@ export function GroupsClient() {
   if (!user) return null;
 
   const today = getTodayISO();
+  const q = searchQuery.trim().toLowerCase();
+  const filteredItems = q
+    ? items.filter((x) => x.data.groupName.toLowerCase().includes(q))
+    : items;
 
-  const active = items.filter((x) => classifyGroup(x, today) === "active");
-  const upcoming = items
+  const active = filteredItems.filter(
+    (x) => classifyGroup(x, today) === "active",
+  );
+  const upcoming = filteredItems
     .filter((x) => classifyGroup(x, today) === "upcoming")
-    .sort((a, b) => (a.data.tripStartDate ?? "").localeCompare(b.data.tripStartDate ?? ""));
-  const undecided = items.filter((x) => classifyGroup(x, today) === "undecided");
-  const past = items
+    .sort((a, b) =>
+      (a.data.tripStartDate ?? "").localeCompare(b.data.tripStartDate ?? ""),
+    );
+  const undecided = filteredItems.filter(
+    (x) => classifyGroup(x, today) === "undecided",
+  );
+  const past = filteredItems
     .filter((x) => classifyGroup(x, today) === "past")
     .sort((a, b) =>
       (b.data.tripEndDate ?? b.data.tripStartDate ?? "").localeCompare(
@@ -282,6 +300,19 @@ export function GroupsClient() {
         旅行ごとの共有スペースです。旅行を作成して招待リンクを共有すると、メンバーが参加できます。
       </p>
 
+      {items.length > 0 ? (
+        <label className="mt-4 block">
+          <span className="sr-only">旅行名で検索</span>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="旅行名・集まり名で絞り込み"
+            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-50"
+          />
+        </label>
+      ) : null}
+
       {error ? (
         <p className="mt-6 text-sm text-red-600 dark:text-red-400" role="alert">
           {error}
@@ -293,6 +324,10 @@ export function GroupsClient() {
       ) : items.length === 0 ? (
         <p className="mt-8 rounded-lg border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-400">
           まだ旅行がありません。旅行を作成するか、招待リンクから参加してください。
+        </p>
+      ) : filteredItems.length === 0 ? (
+        <p className="mt-8 text-sm text-zinc-500">
+          「{searchQuery.trim()}」に一致する予定はありません。
         </p>
       ) : (
         <div className="mt-8 space-y-8">

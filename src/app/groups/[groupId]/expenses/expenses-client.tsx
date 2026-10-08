@@ -606,7 +606,10 @@ export function ExpensesClient() {
   }
 
   const addExpenseFormSection = (
-      <section className={`${hasExpenses ? "mt-10" : "mt-8"} min-w-0 max-w-full overflow-x-clip rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50`}>
+      <section
+        id="expense-quick-add"
+        className={`${hasExpenses ? "mt-10" : "mt-8"} min-w-0 max-w-full overflow-x-clip rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50`}
+      >
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
           {editingId ? "支出を編集" : "支出を追加"}
         </h2>
@@ -1103,7 +1106,25 @@ export function ExpensesClient() {
           支出一覧
         </h2>
         {expenses.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">まだ支出がありません。</p>
+          <div className="mt-3 rounded-lg border border-dashed border-zinc-300 px-4 py-4 dark:border-zinc-600">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              まだ支出がありません。金額と立て替え人を入れて1件記録すると精算が始められます。
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("record");
+                window.setTimeout(() => {
+                  document
+                    .getElementById("expense-quick-add")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }, 0);
+              }}
+              className="mt-2 text-sm font-medium text-teal-800 underline dark:text-teal-300"
+            >
+              支出の記録フォームへ
+            </button>
+          </div>
         ) : (
           <ul className="mt-4 space-y-3">
             {expenses.map((row) => {
@@ -1308,7 +1329,7 @@ export function ExpensesClient() {
           </section>
           {!hasExpenses ? (
             <p className="mt-6 text-sm text-zinc-500 dark:text-zinc-400">
-              まだ支出がありません。「支出を記録」タブから追加すると、ここに精算結果が表示されます。
+              まだ支出がありません。「支出を記録」タブで1件追加すると、ここに精算結果が表示されます。
             </p>
           ) : null}
           {settlementSummarySection}

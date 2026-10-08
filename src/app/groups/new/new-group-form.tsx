@@ -7,7 +7,7 @@ import {
   type CircleItem,
 } from "@/lib/firestore/circles";
 import { createGroup } from "@/lib/firestore/groups";
-import { PLAN_SHAPE_OPTIONS } from "@/lib/plan-shape";
+import { defaultSharingEnabled, PLAN_SHAPE_OPTIONS } from "@/lib/plan-shape";
 import type { PlaceMode, PlanShape } from "@/types/group";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -19,6 +19,7 @@ export function NewGroupForm() {
   const searchParams = useSearchParams();
   const [planShape, setPlanShape] = useState<PlanShape>("settle_only");
   const [placeMode, setPlaceMode] = useState<PlaceMode>("fixed");
+  const [sharingEnabled, setSharingEnabled] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [tripStartDate, setTripStartDate] = useState("");
@@ -35,6 +36,7 @@ export function NewGroupForm() {
     if (planShape === "trip") setPlaceMode("vote");
     else if (planShape === "gathering") setPlaceMode("fixed");
     else setPlaceMode("skip");
+    setSharingEnabled(defaultSharingEnabled(planShape));
   }, [planShape]);
 
   useEffect(() => {
@@ -102,6 +104,7 @@ export function NewGroupForm() {
         {
           planShape,
           placeMode: resolvedPlaceMode,
+          sharingEnabled,
           tripStartDate:
             planShape === "settle_only" ? null : tripStartDate || null,
           tripEndDate:
@@ -244,6 +247,23 @@ export function NewGroupForm() {
           </div>
         </fieldset>
       ) : null}
+
+      <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
+        <input
+          type="checkbox"
+          checked={sharingEnabled}
+          onChange={(e) => setSharingEnabled(e.target.checked)}
+          className="mt-1"
+        />
+        <span>
+          <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-200">
+            買い出しリストを使う
+          </span>
+          <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-400">
+            食材・持ち物の分担リストをナビに出します。旅行はON、飲み会・精算はOFFが初期値です（後から変更可）。
+          </span>
+        </span>
+      </label>
 
       {showDates ? (
         <div>

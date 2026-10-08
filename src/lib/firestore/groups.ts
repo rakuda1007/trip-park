@@ -62,6 +62,8 @@ export type CreateGroupOptions = {
   tripStartDate?: string | null;
   tripEndDate?: string | null;
   memoryPhotoUrl?: string | null;
+  /** 未指定時は形のデフォルト。指定時は stepOverrides.sharing に保存 */
+  sharingEnabled?: boolean;
 };
 
 export async function createGroup(
@@ -84,6 +86,13 @@ export async function createGroup(
 
   // セキュリティルールの exists/get が同一バッチ内の未コミット書き込みを参照できないため、
   // 先に groups のみ作成してから inviteCodes / members を書く。
+  const sharingOverride =
+    options.sharingEnabled === undefined
+      ? undefined
+      : options.sharingEnabled
+        ? ("on" as const)
+        : ("off" as const);
+
   await setDoc(groupRef, {
     name,
     description: description ?? null,
@@ -99,6 +108,9 @@ export async function createGroup(
     planShape,
     placeMode,
     placeFixed: null,
+    ...(sharingOverride
+      ? { stepOverrides: { sharing: sharingOverride } }
+      : {}),
   });
 
   const batch = writeBatch(db);

@@ -20,6 +20,11 @@ import {
   listMembers,
 } from "@/lib/firestore/groups";
 import { listHouseholds, type HouseholdItem } from "@/lib/firestore/households";
+import {
+  buildInviteShareText,
+  buildInviteShareTitle,
+  resolvePlanShape,
+} from "@/lib/plan-shape";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import type { FamilyDoc } from "@/types/family";
 import Link from "next/link";
@@ -259,7 +264,15 @@ export function FamiliesClient() {
     group?.inviteCode != null ? buildWelcomeUrl(group.inviteCode) : null;
   const inviteShareText =
     group && inviteUrl
-      ? `「${group.name}」の旅行に招待されました！\n参加はこちらから👇\n${inviteUrl}`
+      ? buildInviteShareText(
+          group.name,
+          resolvePlanShape(group),
+          inviteUrl,
+        )
+      : "";
+  const inviteShareTitle =
+    group != null
+      ? buildInviteShareTitle(group.name, resolvePlanShape(group))
       : "";
 
   async function copyInviteLink() {
@@ -392,8 +405,8 @@ export function FamiliesClient() {
                 onClick={async () => {
                   try {
                     await navigator.share({
-                      title: `「${group.name}」への招待`,
-                      text: `「${group.name}」の旅行に招待されました！`,
+                      title: inviteShareTitle,
+                      text: inviteShareText,
                       url: inviteUrl,
                     });
                   } catch {

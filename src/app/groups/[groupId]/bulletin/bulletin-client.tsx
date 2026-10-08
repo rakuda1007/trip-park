@@ -109,6 +109,7 @@ function BulletinClientInner() {
   const [newNearbyMapSpots, setNewNearbyMapSpots] = useState<NearbyMapSpot[]>(
     [],
   );
+  const [topicSearch, setTopicSearch] = useState("");
 
   useLayoutEffect(() => {
     if (!groupId || openedFromNewQueryRef.current) return;
@@ -497,12 +498,59 @@ function BulletinClientInner() {
           話題一覧
         </h2>
         {topics.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">
-            まだ連絡がありません。「＋ 新しい連絡」ボタンから最初の連絡を作成してください。
-          </p>
+          <div className="mt-3 rounded-lg border border-dashed border-zinc-300 px-4 py-5 dark:border-zinc-600">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              まだ連絡がありません。よくある話題から始められます。
+            </p>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {(
+                [
+                  { cat: "general" as const, label: "お知らせ" },
+                  { cat: "dayof" as const, label: "集合・当日" },
+                  { cat: "gear" as const, label: "持ち物" },
+                  { cat: "nearby_map" as const, label: "周辺地図" },
+                ] as const
+              ).map((t) => (
+                <li key={t.cat}>
+                  <Link
+                    href={`/groups/${groupId}/bulletin?new=1&category=${t.cat}`}
+                    className="inline-flex rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                  >
+                    {t.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : (
-          <ul className="mt-4 space-y-3">
-            {topics.map(({ id, data, replyCount }) => {
+          <>
+            <label className="mt-3 block">
+              <span className="sr-only">連絡を検索</span>
+              <input
+                type="search"
+                value={topicSearch}
+                onChange={(e) => setTopicSearch(e.target.value)}
+                placeholder="タイトル・本文・カテゴリで絞り込み"
+                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+              />
+            </label>
+            <ul className="mt-4 space-y-3">
+            {topics
+              .filter(({ data }) => {
+                const q = topicSearch.trim().toLowerCase();
+                if (!q) return true;
+                const cat = BULLETIN_CATEGORY_LABELS[data.category] ?? "";
+                const tags = normalizeBulletinTopicTags(data)
+                  .map((t) => BULLETIN_TOPIC_TAG_LABELS[t])
+                  .join(" ");
+                return (
+                  data.title.toLowerCase().includes(q) ||
+                  data.body.toLowerCase().includes(q) ||
+                  cat.toLowerCase().includes(q) ||
+                  tags.toLowerCase().includes(q)
+                );
+              })
+              .map(({ id, data, replyCount }) => {
               const showImportant =
                 data.importance === "important" || data.pinned;
               const importantMobileFrame =
@@ -575,6 +623,7 @@ function BulletinClientInner() {
               );
             })}
           </ul>
+          </>
         )}
       </section>
     </div>

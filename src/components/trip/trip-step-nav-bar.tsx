@@ -34,10 +34,15 @@ function getActiveStep(pathname: string, groupId: string): string | null {
   return null;
 }
 
-/** 工程外の常時ナビ（連絡・買い出し） */
-function getActiveTool(pathname: string, groupId: string): "contact" | "sharing" | null {
+/** 工程外の常時ナビ（見通し・連絡・買い出し・世帯） */
+function getActiveTool(
+  pathname: string,
+  groupId: string,
+): "plan" | "contact" | "sharing" | "families" | null {
+  if (pathname.startsWith(`/groups/${groupId}/plan`)) return "plan";
   if (pathname.startsWith(`/groups/${groupId}/bulletin`)) return "contact";
   if (pathname.startsWith(`/groups/${groupId}/sharing`)) return "sharing";
+  if (pathname.startsWith(`/groups/${groupId}/families`)) return "families";
   return null;
 }
 
@@ -219,6 +224,16 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
 
   const tools = [
     {
+      key: "plan" as const,
+      label: planConfig.planShape === "settle_only" ? "見通し" : "計画",
+      href: `/groups/${groupId}/plan`,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+          <path fillRule="evenodd" d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z" clipRule="evenodd" />
+        </svg>
+      ),
+    },
+    {
       key: "contact" as const,
       label: "連絡",
       href: `/groups/${groupId}/bulletin`,
@@ -240,6 +255,16 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
           ),
         }
       : null,
+    {
+      key: "families" as const,
+      label: "世帯",
+      href: `/groups/${groupId}/families`,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+          <path d="M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM16 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM2.5 16.5a3.5 3.5 0 0 1 7 0V17H2.5v-.5ZM10.5 17v-.5a3.49 3.49 0 0 1 2.25-3.27A3.5 3.5 0 0 1 17.5 17v.5h-7Z" />
+        </svg>
+      ),
+    },
   ].filter((t): t is NonNullable<typeof t> => t != null);
 
   return (

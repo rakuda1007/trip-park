@@ -219,3 +219,24 @@ export function inviteJoinNoun(planShape: PlanShape | null | undefined): string 
       return "この旅行";
   }
 }
+
+/** 招待リンク共有用テキスト（LINE・クリップボード共通） */
+export function buildInviteShareText(
+  groupName: string,
+  planShape: PlanShape | null | undefined,
+  welcomeUrl: string,
+): string {
+  return `${inviteKindLabel(planShape)}「${groupName}」\n${inviteJoinNoun(planShape)}に参加はこちらから👇\n${welcomeUrl}`;
+}
+
+export function buildInviteShareTitle(
+  groupName: string,
+  planShape: PlanShape | null | undefined,
+): string {
+  return `「${groupName}」への招待（${labelsForShape(resolvePlanShape({ planShape })).shape}）`;
+}
+
+/** 形ごとの買い出しデフォルト（作成フォーム初期値用） */
+export function defaultSharingEnabled(planShape: PlanShape): boolean {
+  return SHAPE_DEFAULTS[planShape].sharingEnabled;
+}

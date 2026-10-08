@@ -6,6 +6,7 @@ import {
   getGroup,
   getMemberForUser,
   leaveGroup,
+  listMembers,
   updateGroupDescription,
   updateGroupMemoryPhotoUrl,
   updateGroupName,
@@ -44,6 +45,7 @@ import { VisibilityBadge } from "@/components/visibility-badge";
 import { PlanShapeSettings } from "@/components/trip/plan-shape-settings";
 import { TripDashboardInsightsPanel } from "@/components/trip/trip-dashboard-insights-panel";
 import { TripHomeContactSummary } from "@/components/trip/trip-home-contact-summary";
+import { TripInviteCard } from "@/components/trip/trip-invite-card";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -125,6 +127,7 @@ export function GroupDetailClient() {
   /** 旅行ホームの次の一手文言（オーナー／管理者向け）用 */
   const [myMember, setMyMember] = useState<MemberDoc | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [memberCount, setMemberCount] = useState(0);
 
   // 開けた旅行だけ直近として記録（見つからない URL では保存しない）
   useEffect(() => {
@@ -153,9 +156,16 @@ export function GroupDetailClient() {
         setWorkflowTripRoutes([]);
         setDashboardExtras(null);
         setMyMember(null);
+        setMemberCount(0);
         return;
       }
       setGroup(g);
+      try {
+        const members = await listMembers(groupId);
+        setMemberCount(members.length);
+      } catch {
+        setMemberCount(0);
+      }
       if (user) {
         try {
           const m = await getMemberForUser(groupId, user.uid);
@@ -699,6 +709,8 @@ export function GroupDetailClient() {
             : null
         }
       />
+
+      <TripInviteCard group={group} memberCount={memberCount} />
 
       {canManageSchedule ? (
         <div className="mt-6">
