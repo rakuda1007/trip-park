@@ -455,7 +455,7 @@ function CircleCard({
                     href={`/groups/new?circle=${circle.id}`}
                     className="mt-1 inline-block text-xs font-medium text-zinc-900 underline dark:text-zinc-100"
                   >
-                    このサークルで旅行を作成 →
+                    このサークルで予定を作成 →
                   </Link>
                 </div>
               ) : null}

@@ -286,7 +286,7 @@ export function GroupsClient() {
           href="/groups/new"
           className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
         >
-          旅行を作成
+          予定を作成
         </Link>
         <Link
           href="/join"
@@ -323,7 +323,7 @@ export function GroupsClient() {
         <p className="mt-8 text-sm text-zinc-500">読み込み中…</p>
       ) : items.length === 0 ? (
         <p className="mt-8 rounded-lg border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-400">
-          まだ旅行がありません。旅行を作成するか、招待リンクから参加してください。
+          まだ予定がありません。予定を作成するか、招待リンクから参加してください。
         </p>
       ) : filteredItems.length === 0 ? (
         <p className="mt-8 text-sm text-zinc-500">

@@ -649,20 +649,23 @@ export async function updatePlanShape(
   if (!group) throw new Error("旅行が見つかりません。");
   const { placeMode } = defaultsForCreate(planShape);
 
-  const groupRef = doc(db, COLLECTIONS.groups, groupId);
-  const inviteRef = doc(db, COLLECTIONS.inviteCodes, group.inviteCode);
-  const inviteSnap = await getDoc(inviteRef);
-
-  const batch = writeBatch(db);
-  batch.update(groupRef, {
+  // グループ本体を先に更新（招待同期失敗で形変更自体が落ちないようにする）
+  await updateDoc(doc(db, COLLECTIONS.groups, groupId), {
     planShape,
     placeMode,
     updatedAt: serverTimestamp(),
   });
-  if (inviteSnap.exists()) {
-    batch.update(inviteRef, { planShape });
+
+  if (!group.inviteCode) return;
+  try {
+    const inviteRef = doc(db, COLLECTIONS.inviteCodes, group.inviteCode);
+    const inviteSnap = await getDoc(inviteRef);
+    if (inviteSnap.exists()) {
+      await updateDoc(inviteRef, { planShape });
+    }
+  } catch {
+    // 招待プレビュー用の同期失敗は本体の形変更を妨げない
   }
-  await batch.commit();
 }
 
 /** 場所の決め方を更新する（オーナー / 管理者） */

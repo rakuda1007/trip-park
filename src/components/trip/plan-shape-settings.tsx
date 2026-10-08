@@ -41,7 +41,15 @@ export function PlanShapeSettings({
         placeMode,
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "変更に失敗しました");
+      const msg =
+        e && typeof e === "object" && "code" in e
+          ? `${String((e as { code?: string }).code ?? "")}: ${
+              e instanceof Error ? e.message : "変更に失敗しました"
+            }`
+          : e instanceof Error
+            ? e.message
+            : "変更に失敗しました";
+      setError(msg);
     } finally {
       setBusy(false);
     }

@@ -169,17 +169,19 @@ service cloud.firestore {
         get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.ownerId == request.auth.uid &&
         invitePlanShapeOk(request.resource.data);
       allow delete: if request.auth != null;
-      // オーナー／管理者: 旅行名・予定の形を同期（groupId・createdAt は不変）
+      // オーナー／管理者: groupName / planShape のみ変更可（groupId・createdAt は不変）
+      // hasOnly(全キー) だと古い招待ドキュメントの余剰フィールドで拒否されるため、差分キーで判定する
       allow update: if request.auth != null &&
-        resource.data.keys().hasAll(['groupId', 'groupName', 'createdAt']) &&
-        request.resource.data.keys().hasAll(['groupId', 'groupName', 'createdAt']) &&
-        request.resource.data.keys().hasOnly(['groupId', 'groupName', 'createdAt', 'planShape']) &&
+        resource.data.keys().hasAll(['groupId']) &&
         isOwnerOrAdmin(resource.data.groupId) &&
         request.resource.data.groupId == resource.data.groupId &&
-        request.resource.data.createdAt == resource.data.createdAt &&
-        request.resource.data.groupName is string &&
-        request.resource.data.groupName.size() > 0 &&
-        request.resource.data.groupName.size() <= 200 &&
+        (!resource.data.keys().hasAny(['createdAt']) ||
+          request.resource.data.createdAt == resource.data.createdAt) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groupName', 'planShape']) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['groupName']) ||
+          (request.resource.data.groupName is string &&
+            request.resource.data.groupName.size() > 0 &&
+            request.resource.data.groupName.size() <= 200)) &&
         invitePlanShapeOk(request.resource.data);
     }
 

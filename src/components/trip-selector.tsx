@@ -227,7 +227,7 @@ export function TripSelector() {
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
-              旅行を作成
+              予定を作成
             </Link>
           </div>
         </div>

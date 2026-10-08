@@ -14,7 +14,7 @@ export default function CirclesPage() {
           サークル
         </h1>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          一緒に旅行する仲間の名簿を管理します。旅行を作成するときに選ぶと、そのメンバーへ招待リンクをまとめて共有できます。
+          一緒に出かける仲間の名簿を管理します。予定を作成するときに選ぶと、そのメンバーへ招待リンクをまとめて共有できます。
         </p>
         <div className="mt-6">
           <CirclesClient />

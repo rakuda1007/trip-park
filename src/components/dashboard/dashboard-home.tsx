@@ -145,14 +145,14 @@ export function DashboardHome() {
         こんにちは、{label} さん。
       </p>
       <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-        まだ旅行がありません。旅行を作成するか、招待リンクから参加しましょう。
+        まだ予定がありません。予定を作成するか、招待リンクから参加しましょう。
       </p>
       <div className="mt-8 flex gap-3">
         <Link
           href="/groups/new"
           className="inline-flex rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
         >
-          旅行を作成する
+          予定を作成する
         </Link>
         <Link
           href="/groups"
