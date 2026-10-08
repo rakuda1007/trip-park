@@ -110,15 +110,18 @@ export function FamiliesClient() {
   useEffect(() => {
     if (!user) return;
     listHouseholds(user.uid)
-      .then((list) => {
-        setHouseholds(list);
-        // セットアップ時はマスタがあればピッカーを開いてすぐ登録できるようにする
-        if (isSetupMode && list.length > 0) {
-          setShowHouseholdPicker(true);
-        }
-      })
+      .then((list) => setHouseholds(list))
       .catch(() => {});
-  }, [user, isSetupMode]);
+  }, [user]);
+
+  // セットアップ時は表示名を世帯名の初期値に（空のときだけ）
+  useEffect(() => {
+    if (!isSetupMode || !user?.displayName || editingId) return;
+    setForm((prev) => {
+      if (prev.name.trim() || prev.householdMasterId) return prev;
+      return { ...prev, name: `${user.displayName}家` };
+    });
+  }, [isSetupMode, user, editingId]);
 
   useEffect(() => {
     if (!user || !circleInviteId) {
@@ -286,7 +289,7 @@ export function FamiliesClient() {
       </h1>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
         この旅行に参加する世帯を登録します。精算は世帯名単位でまとめられます。
-        世帯マスタに登録済みの世帯を選ぶと人数を自動入力できます。
+        まずは下のフォームで「この旅行用」に1件追加すれば十分です。
       </p>
 
       {isSetupMode ? (
@@ -296,20 +299,22 @@ export function FamiliesClient() {
         >
           <p className="font-semibold">はじめてのセットアップ</p>
           <p className="mt-1 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/90">
-            支出・精算を使う前に、この旅行の「参加世帯」を1件以上登録してください。
-            {households.length === 0
-              ? " まだ世帯マスタが無い場合は、先にマスタへ登録すると次回からコピーできます。"
-              : " 下の「世帯マスタから選ぶ」か、直接入力で追加できます。"}
+            支出・精算の前に、この旅行の参加世帯を1件以上登録してください。
+            下のフォームに名前と人数を入れて追加すればすぐに進めます。
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {households.length === 0 ? (
-              <Link
-                href={`/profile/households?returnTo=${householdsReturnTo}`}
-                className="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800"
-              >
-                世帯マスタを登録する
-              </Link>
-            ) : null}
+            <a
+              href="#family-quick-add"
+              className="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800"
+            >
+              この旅行用に1世帯を追加
+            </a>
+            <Link
+              href={`/profile/households?returnTo=${householdsReturnTo}`}
+              className="rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-50 dark:hover:bg-amber-900/60"
+            >
+              次回から楽にする（世帯マスタ・任意）
+            </Link>
             {families.length > 0 ? (
               <Link
                 href={
@@ -317,7 +322,7 @@ export function FamiliesClient() {
                     ? `/groups/${groupId}/expenses`
                     : `/groups/${groupId}`
                 }
-                className="rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-50 dark:hover:bg-amber-900/60"
+                className="rounded-md border border-amber-300/80 px-3 py-1.5 text-xs font-medium text-amber-900/80 hover:bg-amber-100/80 dark:border-amber-800 dark:text-amber-200"
               >
                 {afterSetup === "expenses"
                   ? "支出の記録へ進む"
@@ -410,54 +415,25 @@ export function FamiliesClient() {
         </p>
       ) : null}
 
-      {/* 追加・編集フォーム */}
-      <section className="mt-8 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+      {/* 追加・編集フォーム（セットアップでは主役） */}
+      <section
+        id="family-quick-add"
+        className={`mt-8 rounded-lg border p-4 ${
+          isSetupMode && !editingId
+            ? "border-amber-300 bg-amber-50/40 dark:border-amber-800 dark:bg-amber-950/20"
+            : "border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/50"
+        }`}
+      >
         <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-          {editingId ? "世帯を編集" : "世帯を追加"}
+          {editingId
+            ? "世帯を編集"
+            : isSetupMode
+              ? "この旅行用に1世帯を追加"
+              : "世帯を追加"}
         </h2>
-
-        {/* 世帯マスタから選ぶ */}
-        {!editingId && households.length > 0 ? (
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={() => setShowHouseholdPicker((v) => !v)}
-              className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-200"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              世帯マスタから選ぶ
-            </button>
-            {showHouseholdPicker ? (
-              <ul className="mt-2 space-y-1 rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-900">
-                {households.map((h) => (
-                  <li key={h.id}>
-                    <button
-                      type="button"
-                      onClick={() => applyHousehold(h)}
-                      className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                    >
-                      <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                        {h.data.name}
-                      </span>
-                      <span className="ml-2 text-xs text-zinc-400">
-                        大人 {h.data.defaultAdultCount}
-                        {h.data.defaultChildCount > 0
-                          ? ` ・ 子供 ${h.data.defaultChildCount}`
-                          : ""}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
-
-        {form.householdMasterId ? (
-          <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
-            ✓ 世帯マスタからコピーしました（人数は変更可能です）
+        {!editingId ? (
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            世帯名と人数だけで登録できます。マスタ登録は任意です。
           </p>
         ) : null}
 
@@ -471,7 +447,11 @@ export function FamiliesClient() {
               required
               value={form.name}
               onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-              placeholder="例: 奥田家"
+              placeholder={
+                user?.displayName
+                  ? `例: ${user.displayName}家`
+                  : "例: 奥田家"
+              }
               className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
             />
           </div>
@@ -528,7 +508,13 @@ export function FamiliesClient() {
               disabled={busy !== null || !user}
               className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
             >
-              {busy === "add" || busy === "save" ? "保存中…" : editingId ? "更新" : "追加"}
+              {busy === "add" || busy === "save"
+                ? "保存中…"
+                : editingId
+                  ? "更新"
+                  : isSetupMode
+                    ? "この旅行に追加"
+                    : "追加"}
             </button>
             {editingId ? (
               <button
@@ -541,6 +527,47 @@ export function FamiliesClient() {
             ) : null}
           </div>
         </form>
+
+        {/* 世帯マスタは任意のショートカット */}
+        {!editingId && households.length > 0 ? (
+          <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-700">
+            <button
+              type="button"
+              onClick={() => setShowHouseholdPicker((v) => !v)}
+              className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+            >
+              世帯マスタからコピー（任意）
+            </button>
+            {showHouseholdPicker ? (
+              <ul className="mt-2 space-y-1 rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-900">
+                {households.map((h) => (
+                  <li key={h.id}>
+                    <button
+                      type="button"
+                      onClick={() => applyHousehold(h)}
+                      className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                    >
+                      <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                        {h.data.name}
+                      </span>
+                      <span className="ml-2 text-xs text-zinc-400">
+                        大人 {h.data.defaultAdultCount}
+                        {h.data.defaultChildCount > 0
+                          ? ` ・ 子供 ${h.data.defaultChildCount}`
+                          : ""}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {form.householdMasterId ? (
+              <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
+                ✓ 世帯マスタからコピーしました（人数は変更可能です）
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       {/* 登録済みの世帯一覧 */}

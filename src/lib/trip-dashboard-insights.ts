@@ -252,6 +252,24 @@ export function computeDashboardInsights(params: {
       href: `/groups/${groupId}/trip`,
       label: `${plan.labels.itinerary}ページへ`,
     };
+  } else if (tripStatus === "planning") {
+    // 準備工程完了 → 確定 CTA（ボタンはパネル側）。非管理者は待機案内。
+    if (canManageSchedule) {
+      nextStepLine = `次のステップ: 準備が揃いました。「${plan.labels.confirmStatus}」にするとメンバーに確定が伝わります。`;
+      nextStepLink = null;
+    } else {
+      nextStepLine = `準備は揃っています。オーナー・管理者が「${plan.labels.confirmStatus}」にするまでお待ちください。`;
+      nextStepLink =
+        familyCount === 0
+          ? {
+              href: `/groups/${groupId}/families?setup=1`,
+              label: "参加世帯を登録する",
+            }
+          : {
+              href: `/groups/${groupId}/expenses`,
+              label: "支出を確認する",
+            };
+    }
   } else if (!settlementDone) {
     nextStepLine =
       familyCount === 0

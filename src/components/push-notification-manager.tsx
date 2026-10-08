@@ -2,8 +2,6 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import {
-  clearCachedFcmToken,
-  removeFcmToken,
   requestAndGetFcmToken,
   saveFcmToken,
   setupForegroundMessageHandler,
@@ -11,8 +9,28 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 const PREF_KEY = "push_notification_pref"; // "granted" | "denied" | unset
+/** 「後で」押下後、再表示するまでの時刻（epoch ms） */
+const SNOOZE_UNTIL_KEY = "push_notification_snooze_until";
+const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
 type ToastItem = { id: number; title: string; body: string; url?: string };
+
+function isSnoozed(): boolean {
+  if (typeof window === "undefined") return false;
+  const raw = localStorage.getItem(SNOOZE_UNTIL_KEY);
+  if (!raw) return false;
+  const until = Number(raw);
+  if (!Number.isFinite(until)) return false;
+  if (Date.now() >= until) {
+    localStorage.removeItem(SNOOZE_UNTIL_KEY);
+    return false;
+  }
+  return true;
+}
+
+/** ボトムナビ（md未満）の上に載せるオフセット */
+const BANNER_BOTTOM =
+  "bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] md:bottom-4";
 
 /**
  * Push通知の許可リクエストとフォアグラウンド受信を管理するコンポーネント。
@@ -31,15 +49,20 @@ export function PushNotificationManager() {
     if (!user) return;
     if (typeof window === "undefined") return;
     const pref = localStorage.getItem(PREF_KEY);
-    if (pref === "denied") return;
     if (!("Notification" in window)) return;
 
     if (Notification.permission === "granted") {
       // 既に許可済み → 5秒後にトークン更新（起動速度を妨げない）
       const timer = setTimeout(() => initToken(user.uid), 5000);
       return () => clearTimeout(timer);
-    } else if (Notification.permission === "default" && !pref) {
-      // 初めてアクセス → 8秒後にバナーを表示（コンテンツ表示を最優先）
+    }
+
+    // ブラウザ未決定ならバナー対象。昔の「後で」=denied も permission が default なら再案内可
+    if (Notification.permission === "default" && pref !== "granted") {
+      if (pref === "denied") {
+        localStorage.removeItem(PREF_KEY);
+      }
+      if (isSnoozed()) return;
       const timer = setTimeout(() => setShowBanner(true), 8000);
       return () => clearTimeout(timer);
     }
@@ -51,7 +74,9 @@ export function PushNotificationManager() {
     const unsubscribe = setupForegroundMessageHandler((title, body, url) => {
       addToast(title, body, url);
     });
-    return () => { unsubscribe?.(); };
+    return () => {
+      unsubscribe?.();
+    };
   }, [user]);
 
   async function initToken(uid: string) {
@@ -63,7 +88,10 @@ export function PushNotificationManager() {
         await saveFcmToken(uid, token);
         console.log("[Push] Token saved successfully.");
       } else {
-        console.warn("[Push] requestAndGetFcmToken returned null. Permission:", Notification.permission);
+        console.warn(
+          "[Push] requestAndGetFcmToken returned null. Permission:",
+          Notification.permission,
+        );
       }
     } catch (e) {
       console.warn("[Push] Token init error:", e);
@@ -72,18 +100,16 @@ export function PushNotificationManager() {
 
   async function handleAllow() {
     setShowBanner(false);
+    localStorage.removeItem(SNOOZE_UNTIL_KEY);
     if (!user) return;
     localStorage.setItem(PREF_KEY, "granted");
     await initToken(user.uid);
   }
 
-  async function handleDeny() {
+  /** 「後で」= 7日間スヌーズ（永久 denied にしない） */
+  function handleSnooze() {
     setShowBanner(false);
-    localStorage.setItem(PREF_KEY, "denied");
-    clearCachedFcmToken();
-    if (user && tokenRef.current) {
-      await removeFcmToken(user.uid, tokenRef.current).catch(() => {});
-    }
+    localStorage.setItem(SNOOZE_UNTIL_KEY, String(Date.now() + SNOOZE_MS));
   }
 
   function addToast(title: string, body: string, url?: string) {
@@ -96,13 +122,24 @@ export function PushNotificationManager() {
 
   return (
     <>
-      {/* 通知許可バナー */}
+      {/* 通知許可バナー（ボトムナビの上） */}
       {showBanner && (
-        <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-xl border border-zinc-200 bg-white p-4 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+        <div
+          className={`fixed left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-xl border border-zinc-200 bg-white p-4 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 ${BANNER_BOTTOM}`}
+        >
           <div className="flex items-start gap-3">
             <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/40">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-blue-600 dark:text-blue-400">
-                <path fillRule="evenodd" d="M10 2a6 6 0 0 0-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 0 0 .515 1.076 32.091 32.091 0 0 0 3.256.508 3.5 3.5 0 0 0 6.972 0 32.085 32.085 0 0 0 3.256-.508.75.75 0 0 0 .515-1.076A11.448 11.448 0 0 1 16 8a6 6 0 0 0-6-6ZM8.05 14.943a33.54 33.54 0 0 0 3.9 0 2 2 0 0 1-3.9 0Z" clipRule="evenodd" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-4 w-4 text-blue-600 dark:text-blue-400"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 2a6 6 0 0 0-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 0 0 .515 1.076 32.091 32.091 0 0 0 3.256.508 3.5 3.5 0 0 0 6.972 0 32.085 32.085 0 0 0 3.256-.508.75.75 0 0 0 .515-1.076A11.448 11.448 0 0 1 16 8a6 6 0 0 0-6-6ZM8.05 14.943a33.54 33.54 0 0 0 3.9 0 2 2 0 0 1-3.9 0Z"
+                  clipRule="evenodd"
+                />
               </svg>
             </div>
             <div className="flex-1">
@@ -115,14 +152,14 @@ export function PushNotificationManager() {
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"
-                  onClick={handleAllow}
+                  onClick={() => void handleAllow()}
                   className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
                 >
                   有効にする
                 </button>
                 <button
                   type="button"
-                  onClick={handleDeny}
+                  onClick={handleSnooze}
                   className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
                 >
                   後で
@@ -134,7 +171,10 @@ export function PushNotificationManager() {
       )}
 
       {/* フォアグラウンド通知トースト */}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2" aria-live="polite">
+      <div
+        className={`fixed right-4 z-50 flex flex-col gap-2 ${BANNER_BOTTOM}`}
+        aria-live="polite"
+      >
         {toasts.map((toast) => (
           <button
             key={toast.id}
@@ -145,8 +185,12 @@ export function PushNotificationManager() {
             }}
             className="w-72 rounded-xl border border-zinc-200 bg-white p-3 text-left shadow-lg transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
           >
-            <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{toast.title}</p>
-            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2">{toast.body}</p>
+            <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+              {toast.title}
+            </p>
+            <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500 dark:text-zinc-400">
+              {toast.body}
+            </p>
           </button>
         ))}
       </div>

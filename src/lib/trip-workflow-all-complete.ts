@@ -81,6 +81,20 @@ function isScheduleStepComplete(group: GroupDoc): boolean {
   return !!group.tripStartDate?.trim();
 }
 
+/** 精算前の準備工程（日程・場所・旅程）が揃っているか。確定 CTA 用 */
+export function arePreparationStepsComplete(
+  group: GroupDoc | null,
+  destinationPolls: DestinationPollRow[],
+  tripRoutes: { id: string; data: TripRouteDoc }[],
+): boolean {
+  if (!group) return false;
+  return (
+    isScheduleStepComplete(group) &&
+    isDestinationStepCompleteForGroup(group, destinationPolls) &&
+    isItineraryCompleteForGroup(group, tripRoutes)
+  );
+}
+
 /**
  * 有効な必須工程がすべて完了したときのみ true。
  * 思い出写真の表示・一覧サムネイルに利用する。
@@ -91,11 +105,11 @@ export function areAllTripWorkflowStepsComplete(
   tripRoutes: { id: string; data: TripRouteDoc }[],
 ): boolean {
   if (!group) return false;
-  const scheduleDone = isScheduleStepComplete(group);
-  const destDone = isDestinationStepCompleteForGroup(group, destinationPolls);
-  const itinDone = isItineraryCompleteForGroup(group, tripRoutes);
   const settlementDone = (group.status ?? "planning") === "completed";
-  return scheduleDone && destDone && itinDone && settlementDone;
+  return (
+    arePreparationStepsComplete(group, destinationPolls, tripRoutes) &&
+    settlementDone
+  );
 }
 
 /**

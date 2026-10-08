@@ -10,6 +10,7 @@ import {
   updateGroupMemoryPhotoUrl,
   updateGroupName,
   updateGroupTripDates,
+  updateTripStatus,
 } from "@/lib/firestore/groups";
 import { listDestinationPolls, type PollItem } from "@/lib/firestore/destination-votes";
 import { listTripRoutes } from "@/lib/firestore/trip";
@@ -21,7 +22,10 @@ import { listFamilies } from "@/lib/firestore/families";
 import { clearLastTripId, loadLastTripId, saveLastTripId } from "@/lib/last-trip";
 import { labelsForShape, resolvePlanShape } from "@/lib/plan-shape";
 import { uploadGroupMemoryPhoto } from "@/lib/storage/group-memory-photo";
-import { areAllTripWorkflowStepsComplete } from "@/lib/trip-workflow-all-complete";
+import {
+  areAllTripWorkflowStepsComplete,
+  arePreparationStepsComplete,
+} from "@/lib/trip-workflow-all-complete";
 import { computeDashboardInsights } from "@/lib/trip-dashboard-insights";
 import { listScheduleCandidates, listScheduleResponses } from "@/lib/firestore/schedule";
 import {
@@ -120,6 +124,7 @@ export function GroupDetailClient() {
     useState<DashboardExtrasState | null>(null);
   /** 旅行ホームの次の一手文言（オーナー／管理者向け）用 */
   const [myMember, setMyMember] = useState<MemberDoc | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   // 開けた旅行だけ直近として記録（見つからない URL では保存しない）
   useEffect(() => {
@@ -299,6 +304,24 @@ export function GroupDetailClient() {
     [group, workflowPolls, workflowTripRoutes],
   );
 
+  const prepStepsComplete = useMemo(
+    () =>
+      !!group &&
+      arePreparationStepsComplete(group, workflowPolls, workflowTripRoutes),
+    [group, workflowPolls, workflowTripRoutes],
+  );
+
+  const planShapeLabels = useMemo(
+    () => labelsForShape(resolvePlanShape(group ?? undefined)),
+    [group],
+  );
+
+  const showConfirmCta =
+    !!group &&
+    canManageSchedule &&
+    prepStepsComplete &&
+    (group.status ?? "planning") === "planning";
+
   const dashboardInsights = useMemo(() => {
     if (!group || !groupId || !dashboardExtras) return null;
     return computeDashboardInsights({
@@ -323,6 +346,22 @@ export function GroupDetailClient() {
     user?.uid,
     canManageSchedule,
   ]);
+
+  async function handleConfirmTrip() {
+    if (!groupId || !group || confirmBusy) return;
+    setConfirmBusy(true);
+    setError(null);
+    try {
+      await updateTripStatus(groupId, "confirmed");
+      setGroup({ ...group, status: "confirmed" });
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "ステータスの更新に失敗しました。",
+      );
+    } finally {
+      setConfirmBusy(false);
+    }
+  }
 
   function startEditName() {
     if (!group) return;
@@ -650,6 +689,15 @@ export function GroupDetailClient() {
       <TripDashboardInsightsPanel
         insights={dashboardInsights}
         allWorkflowComplete={allTripWorkflowComplete}
+        confirmAction={
+          showConfirmCta
+            ? {
+                label: planShapeLabels.confirmStatus,
+                busy: confirmBusy,
+                onConfirm: () => void handleConfirmTrip(),
+              }
+            : null
+        }
       />
 
       {canManageSchedule ? (

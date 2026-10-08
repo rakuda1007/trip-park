@@ -6,18 +6,28 @@ import Link from "next/link";
 export function TripDashboardInsightsPanel({
   insights,
   allWorkflowComplete,
+  confirmAction,
 }: {
   insights: DashboardInsights | null;
   allWorkflowComplete: boolean;
+  confirmAction?: {
+    label: string;
+    busy: boolean;
+    onConfirm: () => void;
+  } | null;
 }) {
   if (!insights) return null;
 
   const { nextStepLine, nextStepLink, personalTasks } = insights;
   const hasPersonal = personalTasks.length > 0;
+  const showConfirm = !!confirmAction;
 
   const nextStepCtaClass = allWorkflowComplete
     ? "inline-flex items-center justify-center rounded-lg border-2 border-emerald-600/55 bg-emerald-50/95 px-4 py-2.5 text-sm font-semibold text-emerald-950 shadow-sm ring-1 ring-emerald-200/70 transition hover:border-emerald-600 hover:bg-emerald-100/95 active:scale-[0.99] dark:border-emerald-500/50 dark:bg-emerald-950/40 dark:text-emerald-50 dark:ring-emerald-800/50 dark:hover:bg-emerald-900/55"
     : "inline-flex items-center justify-center rounded-lg border-2 border-sky-600/45 bg-white/90 px-4 py-2.5 text-sm font-semibold text-sky-950 shadow-sm ring-1 ring-sky-200/80 transition hover:border-sky-600/70 hover:bg-sky-50/95 active:scale-[0.99] dark:border-sky-500/45 dark:bg-sky-950/35 dark:text-sky-50 dark:ring-sky-800/40 dark:hover:bg-sky-900/45";
+
+  const confirmCtaClass =
+    "inline-flex items-center justify-center rounded-lg border-2 border-teal-700/45 bg-teal-50/95 px-4 py-2.5 text-sm font-semibold text-teal-950 shadow-sm ring-1 ring-teal-200/70 transition hover:border-teal-700 hover:bg-teal-100/95 active:scale-[0.99] disabled:opacity-60 dark:border-teal-500/45 dark:bg-teal-950/40 dark:text-teal-50 dark:ring-teal-800/50 dark:hover:bg-teal-900/55";
 
   return (
     <section className="my-5 rounded-xl border border-zinc-200 bg-white sm:my-6 dark:border-zinc-700 dark:bg-zinc-900/50">
@@ -49,16 +59,32 @@ export function TripDashboardInsightsPanel({
 
       <div
         className={`border-b border-zinc-100 px-4 py-4 dark:border-zinc-800 ${
-          allWorkflowComplete
-            ? "bg-emerald-50/80 dark:bg-emerald-950/25"
-            : "bg-sky-50/80 dark:bg-sky-950/20"
+          showConfirm
+            ? "bg-teal-50/80 dark:bg-teal-950/25"
+            : allWorkflowComplete
+              ? "bg-emerald-50/80 dark:bg-emerald-950/25"
+              : "bg-sky-50/80 dark:bg-sky-950/20"
         }`}
       >
         <p className="text-sm font-medium leading-snug text-zinc-900 dark:text-zinc-100">
           {nextStepLine}
         </p>
-        {nextStepLink ? (
+        {showConfirm && confirmAction ? (
           <div className="mt-3">
+            <button
+              type="button"
+              disabled={confirmAction.busy}
+              onClick={confirmAction.onConfirm}
+              className={confirmCtaClass}
+            >
+              {confirmAction.busy
+                ? "更新中…"
+                : `${confirmAction.label}にする`}
+            </button>
+          </div>
+        ) : null}
+        {nextStepLink ? (
+          <div className={showConfirm ? "mt-2" : "mt-3"}>
             <Link href={nextStepLink.href} className={nextStepCtaClass}>
               {nextStepLink.label}
             </Link>
