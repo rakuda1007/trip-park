@@ -9,7 +9,16 @@ import {
   updateFamily,
   type FamilyInput,
 } from "@/lib/firestore/families";
-import { getGroup, listMembers } from "@/lib/firestore/groups";
+import {
+  listCircleMembers,
+  listCircles,
+  type CircleMemberItem,
+} from "@/lib/firestore/circles";
+import {
+  buildWelcomeUrl,
+  getGroup,
+  listMembers,
+} from "@/lib/firestore/groups";
 import { listHouseholds, type HouseholdItem } from "@/lib/firestore/households";
 import type { GroupDoc, MemberDoc } from "@/types/group";
 import type { FamilyDoc } from "@/types/family";
@@ -53,6 +62,7 @@ export function FamiliesClient() {
   const searchParams = useSearchParams();
   const isSetupMode =
     searchParams.get("setup") === "1" || searchParams.get("setup") === "true";
+  const circleInviteId = searchParams.get("circleInvite");
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
   const [members, setMembers] = useState<{ userId: string; data: MemberDoc }[]>([]);
@@ -60,6 +70,11 @@ export function FamiliesClient() {
   const [households, setHouseholds] = useState<HouseholdItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [circleInviteName, setCircleInviteName] = useState<string | null>(null);
+  const [circleInviteMembers, setCircleInviteMembers] = useState<
+    CircleMemberItem[]
+  >([]);
+  const [inviteCopied, setInviteCopied] = useState(false);
 
   const [form, setForm] = useState<FormState>(emptyForm());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -103,6 +118,35 @@ export function FamiliesClient() {
       })
       .catch(() => {});
   }, [user, isSetupMode]);
+
+  useEffect(() => {
+    if (!user || !circleInviteId) {
+      setCircleInviteName(null);
+      setCircleInviteMembers([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [circles, membersList] = await Promise.all([
+          listCircles(user.uid),
+          listCircleMembers(circleInviteId),
+        ]);
+        if (cancelled) return;
+        const c = circles.find((x) => x.id === circleInviteId);
+        setCircleInviteName(c?.data.name ?? "選択したサークル");
+        setCircleInviteMembers(membersList);
+      } catch {
+        if (!cancelled) {
+          setCircleInviteName(null);
+          setCircleInviteMembers([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, circleInviteId]);
 
   function resetForm() {
     setEditingId(null);
@@ -202,8 +246,30 @@ export function FamiliesClient() {
   const showChildRatio = Number(form.childCount) > 0;
 
   const householdsReturnTo = encodeURIComponent(
-    `/groups/${groupId}/families?setup=1`,
+    `/groups/${groupId}/families?setup=1${
+      circleInviteId ? `&circleInvite=${encodeURIComponent(circleInviteId)}` : ""
+    }`,
   );
+
+  const inviteUrl =
+    group?.inviteCode != null ? buildWelcomeUrl(group.inviteCode) : null;
+  const inviteShareText =
+    group && inviteUrl
+      ? `「${group.name}」の旅行に招待されました！\n参加はこちらから👇\n${inviteUrl}`
+      : "";
+
+  async function copyInviteLink() {
+    if (!inviteUrl || typeof navigator === "undefined" || !navigator.clipboard) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setInviteCopied(true);
+      window.setTimeout(() => setInviteCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
@@ -258,6 +324,75 @@ export function FamiliesClient() {
                 あとで登録する
               </Link>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {circleInviteId && inviteUrl && group ? (
+        <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-4 text-sm text-sky-950 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-50">
+          <p className="font-semibold">
+            サークル「{circleInviteName ?? "…"}」へ招待を共有
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-sky-900/90 dark:text-sky-100/90">
+            下のメンバーに招待リンクを送ってください（LINE・コピーなど）。
+          </p>
+          {circleInviteMembers.length > 0 ? (
+            <ul className="mt-2 list-inside list-disc text-xs text-sky-900/90 dark:text-sky-100/90">
+              {circleInviteMembers.map((m) => (
+                <li key={m.id}>
+                  {m.data.displayName}
+                  {m.data.note ? (
+                    <span className="text-sky-700/80 dark:text-sky-300/80">
+                      {" "}
+                      （{m.data.note}）
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-sky-800/80 dark:text-sky-200/80">
+              このサークルにメンバーがいません。リンク自体は共有できます。
+            </p>
+          )}
+          <p className="mt-3 break-all font-mono text-[11px] text-sky-900 dark:text-sky-100">
+            {inviteUrl}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => void copyInviteLink()}
+              className="rounded-md bg-sky-700 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-sky-800"
+            >
+              {inviteCopied ? "コピーしました ✓" : "リンクをコピー"}
+            </button>
+            <a
+              href={`https://line.me/R/msg/text/?${encodeURIComponent(inviteShareText)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center rounded-md bg-[#06C755] px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-[#05b34c]"
+            >
+              LINEで送る
+            </a>
+            {typeof navigator !== "undefined" && "share" in navigator ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.share({
+                      title: `「${group.name}」への招待`,
+                      text: `「${group.name}」の旅行に招待されました！`,
+                      url: inviteUrl,
+                    });
+                  } catch {
+                    // cancel
+                  }
+                }}
+                className="rounded-md border border-sky-300 px-2.5 py-1.5 text-[11px] font-medium text-sky-950 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-50 dark:hover:bg-sky-900/50"
+              >
+                その他で共有
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

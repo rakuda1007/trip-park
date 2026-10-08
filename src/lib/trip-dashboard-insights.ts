@@ -13,6 +13,7 @@ import {
   isDestinationStepCompleteForGroup,
   isItineraryCompleteForGroup,
 } from "@/lib/trip-workflow-all-complete";
+import { tripStatusLabel } from "@/lib/trip-status-labels";
 
 export type DashboardPersonalTask = {
   key: string;
@@ -163,13 +164,19 @@ export function computeDashboardInsights(params: {
     statusLines.push("旅程は全日の確認が済んでいます。");
   }
 
-  // ── 精算 ──
+  // ── 旅行の段階（計画中 / 旅行確定 / 精算完了） ──
   if (tripStatus === "completed") {
-    statusLines.push("支出・精算は完了済みとして記録されています。");
+    statusLines.push(
+      `いまの段階は「${tripStatusLabel("completed")}」です。支出の精算まで終えて旅行を締めました。`,
+    );
   } else if (tripStatus === "confirmed") {
-    statusLines.push("旅行は確定済みです。支出・精算の記録・完了ステップが残っています。");
+    statusLines.push(
+      `いまの段階は「${tripStatusLabel("confirmed")}」です。支出の記録と精算を進め、最後に締めます。`,
+    );
   } else {
-    statusLines.push("旅行フェーズは「計画中」です（精算完了で締められます）。");
+    statusLines.push(
+      `いまの段階は「${tripStatusLabel("planning")}」です。準備ができたら支出・精算へ進み、精算完了で締められます。`,
+    );
   }
 
   const scheduleAnswersIncomplete =
@@ -220,8 +227,8 @@ export function computeDashboardInsights(params: {
   } else if (!settlementDone) {
     nextStepLine =
       tripStatus === "confirmed"
-        ? "次のステップ: 支出・精算ページで清算を進め、旅行を完了にしてください。"
-        : "次のステップ: 旅行を確定したうえで、支出・精算を進めてください。";
+        ? "次のステップ: 支出を記録し、精算結果を確認して旅行を締めましょう。"
+        : "次のステップ: 支出・精算を進め、精算が終わったら旅行を締めましょう。";
     nextStepLink = {
       href:
         familyCount === 0

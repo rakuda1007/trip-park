@@ -305,12 +305,12 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
             })}
           </div>
 
-          {/* 工程外の実務ナビ（常時表示） */}
+          {/* 工程外ナビ（デスクトップ）。モバイルはボトムナビへ */}
           <div
-            className="mx-1 h-5 w-px shrink-0 bg-zinc-200 dark:bg-zinc-700"
+            className="mx-1 hidden h-5 w-px shrink-0 bg-zinc-200 md:block dark:bg-zinc-700"
             aria-hidden
           />
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="hidden shrink-0 items-center gap-1 md:flex">
             {tools.map((tool) => {
               const isActive = tool.key === activeTool;
               return (

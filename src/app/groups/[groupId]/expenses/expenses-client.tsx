@@ -31,6 +31,7 @@ import type {
   ExpenseSplitMode,
   PerExpenseFamilyDemographics,
 } from "@/types/expense";
+import { settlementCloseLabels, tripStatusLabel } from "@/lib/trip-status-labels";
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -578,17 +579,12 @@ export function ExpensesClient() {
   const canUpdateSettlementStep =
     !!user && (group.ownerId === user.uid || myRole === "admin");
   const settlementStepDone = (group.status ?? "planning") === "completed";
+  const closeLabels = settlementCloseLabels(settlementStepDone);
 
   async function handleToggleSettlementStep() {
     if (!canUpdateSettlementStep) return;
     const nextStatus = settlementStepDone ? "confirmed" : "completed";
-    if (
-      !confirm(
-        settlementStepDone
-          ? "精算工程を未完了に戻しますか？"
-          : "精算の工程を「完了」に変更しますか？",
-      )
-    ) {
+    if (!confirm(closeLabels.confirm)) {
       return;
     }
     setBusy("settlement-status");
@@ -600,7 +596,7 @@ export function ExpensesClient() {
       setError(
         err instanceof Error
           ? err.message
-          : "精算工程のステータス更新に失敗しました",
+          : "旅行の締め状態の更新に失敗しました",
       );
     } finally {
       setBusy(null);
@@ -1283,10 +1279,10 @@ export function ExpensesClient() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                  精算工程ステータス
+                  旅行の締め
                 </p>
                 <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  現在: {settlementStepDone ? "完了" : "進行中"}
+                  段階: {tripStatusLabel(group.status)} — {closeLabels.current}
                 </p>
               </div>
               {canUpdateSettlementStep ? (
@@ -1302,9 +1298,7 @@ export function ExpensesClient() {
                 >
                   {busy === "settlement-status"
                     ? "更新中…"
-                    : settlementStepDone
-                      ? "未完了に戻す"
-                      : "精算工程を完了にする"}
+                    : closeLabels.button}
                 </button>
               ) : null}
             </div>

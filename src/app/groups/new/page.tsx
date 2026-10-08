@@ -21,7 +21,7 @@ export default function NewGroupPage() {
           旅行を作成
         </h1>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          1回の旅行・キャンプ単位のスペースを作ります。作成後に招待リンクを共有してメンバーを招待できます。
+          1回の旅行・キャンプ単位のスペースを作ります。サークルを選ぶと、作成後にまとめて招待リンクを共有できます。
         </p>
         <NewGroupForm />
       </div>

@@ -143,12 +143,27 @@ export function PromoPageContent({
             今すぐ旅を計画する（無料）
           </SmartCtaLink>
         </div>
-        <p className="mt-4 text-xs text-zinc-500">
-          Parkシリーズ全体を見る:{" "}
-          <Link href="/portal" className="font-medium text-sky-700 underline-offset-2 hover:underline">
-            公式ポータル
-          </Link>
-        </p>
+        {!autoRedirectOnAuth ? (
+          <p className="mt-4 text-xs text-zinc-500">
+            すでにアカウントがある方は{" "}
+            <Link
+              href="/dashboard"
+              className="font-medium text-sky-700 underline-offset-2 hover:underline"
+            >
+              アプリを開く
+            </Link>
+          </p>
+        ) : (
+          <p className="mt-4 text-xs text-zinc-500">
+            紹介ページを固定で見たい場合:{" "}
+            <Link
+              href="/portal"
+              className="font-medium text-sky-700 underline-offset-2 hover:underline"
+            >
+              公式ポータル
+            </Link>
+          </p>
+        )}
       </section>
       </div>
     </PromoAuthRedirect>

@@ -449,13 +449,13 @@ function CircleCard({
               {members.length > 0 ? (
                 <div className="mt-4 border-t border-zinc-100 pt-3 dark:border-zinc-800">
                   <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    このサークルのメンバーに旅行の招待を送るには、旅行作成時に「サークルから招待」を選んでください。
+                    旅行作成で「サークルから招待」にこのサークルを選ぶと、招待リンクをまとめて共有できます。
                   </p>
                   <Link
-                    href="/groups/new"
+                    href={`/groups/new?circle=${circle.id}`}
                     className="mt-1 inline-block text-xs font-medium text-zinc-900 underline dark:text-zinc-100"
                   >
-                    旅行を作成する →
+                    このサークルで旅行を作成 →
                   </Link>
                 </div>
               ) : null}

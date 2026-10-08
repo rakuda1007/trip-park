@@ -2,10 +2,7 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import { LoadingScreen } from "@/components/loading-screen";
-import {
-  isOpenTripForUser,
-  listMyGroupsForRouting,
-} from "@/lib/firestore/groups";
+import { listMyGroupsForRouting } from "@/lib/firestore/groups";
 import { loadLastTripId } from "@/lib/last-trip";
 import type { UserGroupRefDoc } from "@/types/group";
 import Link from "next/link";
@@ -82,19 +79,16 @@ export function DashboardHome() {
 
     let cancelled = false;
 
+    // 直近旅行は Firestore 待ちなしで即遷移（二重待ちを減らす）
+    // 無効・削除済みは旅行ホーム側で案内する
+    const lastTripId = loadLastTripId(user.uid);
+    if (lastTripId) {
+      router.replace(`/groups/${lastTripId}`);
+      return;
+    }
+
     (async () => {
       try {
-        // 直近旅行があれば polls/routes なしの軽量確認だけで遷移
-        const lastTripId = loadLastTripId(user.uid);
-        if (lastTripId) {
-          const open = await isOpenTripForUser(user.uid, lastTripId);
-          if (cancelled) return;
-          if (open) {
-            router.replace(`/groups/${lastTripId}`);
-            return;
-          }
-        }
-
         const items = await listMyGroupsForRouting(user.uid);
         if (cancelled) return;
 

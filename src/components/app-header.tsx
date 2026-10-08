@@ -47,11 +47,14 @@ export function AppHeader() {
   /** メニュー内「招待」表示用（パスの旅行 = 選択中の旅行） */
   const [groupForMenu, setGroupForMenu] = useState<GroupDoc | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
+  /** モバイルでは招待詳細を折りたたみ、ヘッダー窮屈さを減らす */
+  const [inviteExpanded, setInviteExpanded] = useState(false);
 
   // パス変化でメニューを閉じる
   useEffect(() => {
     setMenuOpen(false);
     setInviteCopied(false);
+    setInviteExpanded(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -186,13 +189,15 @@ export function AppHeader() {
               <Link
                 href="/groups"
                 aria-current={pathname === "/groups" ? "page" : undefined}
+                title="旅行一覧"
                 className={`shrink-0 whitespace-nowrap rounded-md px-2 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 sm:px-2.5 ${
                   pathname === "/groups"
                     ? "bg-zinc-100 dark:bg-zinc-800"
                     : ""
                 }`}
               >
-                旅行一覧
+                <span className="sm:hidden">一覧</span>
+                <span className="hidden sm:inline">旅行一覧</span>
               </Link>
               {/* ── ハンバーガーメニュー ── */}
               <div ref={menuRef} className="relative shrink-0">
@@ -285,74 +290,96 @@ export function AppHeader() {
                         ) : null}
                       </div>
                     ) : null}
-                    {/* 7. 公式ポータル */}
-                    <Link
-                      href="/portal"
-                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-zinc-400">
-                        <path fillRule="evenodd" d="M2 4.75A2.75 2.75 0 0 1 4.75 2h10.5A2.75 2.75 0 0 1 18 4.75v10.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25V4.75ZM4.75 3.5a1.25 1.25 0 0 0-1.25 1.25v2.5h13v-2.5a1.25 1.25 0 0 0-1.25-1.25H4.75Zm11.75 5.25h-13v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5Z" clipRule="evenodd" />
-                      </svg>
-                      公式ポータル
-                    </Link>
+                    {/* マーケ用ポータルはログイン後メニューから外す（未ログイン時のみヘッダーに表示） */}
                   </nav>
 
                   {currentGroupId && groupForMenu ? (
                     <div className="border-t border-zinc-100 px-4 py-3 dark:border-zinc-800">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
-                        選択中の旅行の招待
-                      </p>
-                      <p className="mt-1 truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                        {groupForMenu.name}
-                      </p>
-                      <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
-                        招待コード{" "}
-                        <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                          {groupForMenu.inviteCode}
+                      <button
+                        type="button"
+                        onClick={() => setInviteExpanded((v) => !v)}
+                        className="flex w-full items-center justify-between gap-2 text-left"
+                        aria-expanded={inviteExpanded}
+                      >
+                        <span>
+                          <span className="block text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                            招待を共有
+                          </span>
+                          <span className="mt-0.5 block truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                            {groupForMenu.name}
+                          </span>
                         </span>
-                      </p>
-                      <p className="mt-1 break-all text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
-                        {buildWelcomeUrl(groupForMenu.inviteCode)}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <svg
+                          className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${inviteExpanded ? "rotate-180" : ""}`}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          aria-hidden
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {!inviteExpanded ? (
                         <button
                           type="button"
                           onClick={() => void copyCurrentInviteLink()}
-                          className="rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                          className="mt-2 w-full rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
                         >
-                          {inviteCopied ? "コピーしました ✓" : "リンクをコピー"}
+                          {inviteCopied ? "コピーしました ✓" : "招待リンクをコピー"}
                         </button>
-                        <a
-                          href={`https://line.me/R/msg/text/?${encodeURIComponent(
-                            `「${groupForMenu.name}」の旅行に招待されました！\n参加はこちらから👇\n${buildWelcomeUrl(groupForMenu.inviteCode)}`,
-                          )}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 rounded-md bg-[#06C755] px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-[#05b34c]"
-                        >
-                          LINEで送る
-                        </a>
-                        {typeof navigator !== "undefined" &&
-                        "share" in navigator ? (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await navigator.share({
-                                  title: `「${groupForMenu.name}」への招待`,
-                                  text: `「${groupForMenu.name}」の旅行に招待されました！`,
-                                  url: buildWelcomeUrl(groupForMenu.inviteCode),
-                                });
-                              } catch {
-                                // キャンセルは無視
-                              }
-                            }}
-                            className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                          >
-                            その他で共有
-                          </button>
-                        ) : null}
-                      </div>
+                      ) : (
+                        <>
+                          <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+                            招待コード{" "}
+                            <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                              {groupForMenu.inviteCode}
+                            </span>
+                          </p>
+                          <p className="mt-1 break-all text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                            {buildWelcomeUrl(groupForMenu.inviteCode)}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => void copyCurrentInviteLink()}
+                              className="rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                            >
+                              {inviteCopied ? "コピーしました ✓" : "リンクをコピー"}
+                            </button>
+                            <a
+                              href={`https://line.me/R/msg/text/?${encodeURIComponent(
+                                `「${groupForMenu.name}」の旅行に招待されました！\n参加はこちらから👇\n${buildWelcomeUrl(groupForMenu.inviteCode)}`,
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded-md bg-[#06C755] px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-[#05b34c]"
+                            >
+                              LINEで送る
+                            </a>
+                            {typeof navigator !== "undefined" &&
+                            "share" in navigator ? (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await navigator.share({
+                                      title: `「${groupForMenu.name}」への招待`,
+                                      text: `「${groupForMenu.name}」の旅行に招待されました！`,
+                                      url: buildWelcomeUrl(groupForMenu.inviteCode),
+                                    });
+                                  } catch {
+                                    // キャンセルは無視
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                              >
+                                その他で共有
+                              </button>
+                            ) : null}
+                          </div>
+                        </>
+                      )}
                     </div>
                   ) : null}
 
@@ -382,7 +409,7 @@ export function AppHeader() {
                 href="/portal"
                 className="rounded-md px-2 py-1 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
               >
-                ポータル
+                紹介
               </Link>
               <Link
                 href="/login"
