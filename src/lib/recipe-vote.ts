@@ -109,7 +109,7 @@ export type MealLineForTrip = {
   topicId: string;
 };
 
-/** 旅程のある Day に紐づく献立（掲示板のレシピ投票確定から） */
+/** 旅程のある Day に紐づく献立（連絡のレシピ投票確定から） */
 export function collectMealsForDayFromBulletin(
   dayNumber: number,
   topics: { id: string; data: BulletinTopicDoc }[],

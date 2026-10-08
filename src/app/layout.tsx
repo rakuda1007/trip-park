@@ -45,7 +45,7 @@ export const viewport: Viewport = {
   themeColor: "#0f766e",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // maximumScale は付けない（ピンチ拡大を許可しアクセシビリティを確保）
   viewportFit: "cover",
 };
 

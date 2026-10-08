@@ -143,7 +143,7 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
     return tripRoutes.some((r) => r.data.isDone);
   }, [itinDone, tripRoutes]);
 
-  // グループ配下のページ以外では非表示
+  // 旅行配下のページ以外では非表示
   if (!isGroupPage(pathname, groupId)) return null;
 
   const activeStep = getActiveStep(pathname, groupId);

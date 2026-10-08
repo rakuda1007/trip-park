@@ -199,7 +199,7 @@ export function sharingSummaryStats(items: SharingItemRow[]): {
   return { total, unassigned };
 }
 
-/** 掲示板など用: 割当済み項目の短いプレビュー行（最大 max 件） */
+/** 連絡など用: 割当済み項目の短いプレビュー行（最大 max 件） */
 export function sharingPreviewLines(
   items: SharingItemRow[],
   max = 3,

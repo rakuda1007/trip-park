@@ -27,7 +27,7 @@ function getInsertSelection(
   return { start: value.length, end: value.length };
 }
 
-/** 掲示板本文へクリップボード画像・ファイル画像を Storage に上げて `![](url)` で差し込む */
+/** 連絡本文へクリップボード画像・ファイル画像を Storage に上げて `![](url)` で差し込む */
 export function useBulletinImagePaste({
   groupId,
   uid,

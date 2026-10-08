@@ -74,3 +74,21 @@ export function areAllTripWorkflowStepsComplete(
   const settlementDone = (group.status ?? "planning") === "completed";
   return scheduleDone && destDone && itinDone && settlementDone;
 }
+
+/**
+ * ボトムナビ「計画」など用: 未完了の最初の計画工程へ。
+ * 日程・目的地・旅程がすべて完了済みなら旅程（計画の最終画面）へ。
+ */
+export function resolveNextPlanPath(
+  groupId: string,
+  group: GroupDoc | null,
+  destinationPolls: DestinationPollRow[],
+  tripRoutes: { id: string; data: TripRouteDoc }[],
+): string {
+  const base = `/groups/${groupId}`;
+  if (!group?.tripStartDate) return `${base}/schedule`;
+  if (!isDestinationStepCompleteForGroup(group, destinationPolls)) {
+    return `${base}/destination-votes`;
+  }
+  return `${base}/trip`;
+}

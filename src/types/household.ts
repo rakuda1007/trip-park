@@ -1,5 +1,5 @@
 /**
- * 世帯マスタ（ユーザーごとに登録する家族・グループの原本データ）
+ * 世帯マスタ（ユーザーごとに登録する家族・世帯の原本データ）
  * Firestore: users/{uid}/households/{householdId}
  */
 export type HouseholdDoc = {

@@ -116,7 +116,7 @@ export function GroupDetailClient() {
   >([]);
   const [dashboardExtras, setDashboardExtras] =
     useState<DashboardExtrasState | null>(null);
-  /** ダッシュボード文言（オーナー／管理者向け）用 */
+  /** 旅行ホームの次の一手文言（オーナー／管理者向け）用 */
   const [myMember, setMyMember] = useState<MemberDoc | null>(null);
 
   // 旅行ページを開いたら直近アクセス旅行として記録

@@ -37,7 +37,7 @@ type NearbyMapTopicDisplayProps = {
 };
 
 /**
- * 周辺地図トピック用：全幅カードで立ち寄り先を並べ、地図導線を大きくする。
+ * 周辺地図の連絡用：全幅カードで立ち寄り先を並べ、地図導線を大きくする。
  */
 export function NearbyMapTopicDisplay({
   body,

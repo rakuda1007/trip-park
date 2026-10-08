@@ -234,7 +234,7 @@ export function AppHeader() {
                     </p>
                   </div>
 
-                  {/* ナビリンク（連絡・買い出しは旅行内ナビへ。ダッシュボードはサイレント遷移のみでメニューに出さない） */}
+                  {/* ナビリンク（連絡・買い出しは旅行内ナビへ。/dashboard はメニューに出さない） */}
                   <nav className="py-1">
                     <Link
                       href="/profile"

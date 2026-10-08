@@ -26,7 +26,7 @@ export type MemberDoc = {
   role: GroupRole;
   joinedAt: unknown;
   displayName: string | null;
-  /** 最終アクセス日時。グループページを開くたびに更新 */
+  /** 最終アクセス日時。旅行ページを開くたびに更新 */
   lastAccessAt?: unknown;
 };
 
@@ -40,7 +40,7 @@ export type UserGroupRefDoc = {
   status?: TripStatus | null;
   role: GroupRole;
   joinedAt: unknown;
-  /** listMyGroups でグループ本体から取得してマージ */
+  /** listMyGroups で旅行本体から取得してマージ */
   tripStartDate?: string | null;
   tripEndDate?: string | null;
   /** 思い出サムネイルを一覧に出してよいか（日程・目的地・旅程・精算がすべて完了のとき true） */

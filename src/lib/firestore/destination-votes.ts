@@ -67,7 +67,7 @@ function votesCollection(groupId: string, pollId: string) {
   );
 }
 
-/** グループ doc の destination に書き込む要約文（旅程ナビ・一覧用） */
+/** 旅行 doc の destination に書き込む要約文（旅程ナビ・一覧用） */
 export function formatDestinationSummaryFromPolls(
   polls: { title: string; decidedNames: string[] }[],
 ): string | null {

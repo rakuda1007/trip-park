@@ -5,7 +5,13 @@ import { LoadingScreen } from "@/components/loading-screen";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, type ReactNode } from "react";
 
-function AuthGuardInner({ children }: { children: ReactNode }) {
+function AuthGuardInner({
+  children,
+  loadingLabel,
+}: {
+  children: ReactNode;
+  loadingLabel?: string;
+}) {
   const { user, loading, authUnavailable } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -30,7 +36,7 @@ function AuthGuardInner({ children }: { children: ReactNode }) {
   }
 
   if (loading) {
-    return <LoadingScreen />;
+    return <LoadingScreen label={loadingLabel} />;
   }
 
   if (!user) {
@@ -40,10 +46,17 @@ function AuthGuardInner({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-export function AuthGuard({ children }: { children: ReactNode }) {
+export function AuthGuard({
+  children,
+  loadingLabel,
+}: {
+  children: ReactNode;
+  /** 認証待ち・Suspense 中の表示文言（振り分け画面など） */
+  loadingLabel?: string;
+}) {
   return (
-    <Suspense fallback={<LoadingScreen />}>
-      <AuthGuardInner>{children}</AuthGuardInner>
+    <Suspense fallback={<LoadingScreen label={loadingLabel} />}>
+      <AuthGuardInner loadingLabel={loadingLabel}>{children}</AuthGuardInner>
     </Suspense>
   );
 }

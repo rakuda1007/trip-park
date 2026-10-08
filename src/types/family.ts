@@ -1,6 +1,6 @@
 import type { Timestamp } from "firebase/firestore";
 
-/** グループ内の家族（世帯）。精算を家族単位でまとめるために使う。 */
+/** 旅行内の家族（世帯）。精算を家族単位でまとめるために使う。 */
 export type FamilyDoc = {
   /** 表示名（例: 奥田、大木） */
   name: string;
@@ -13,7 +13,7 @@ export type FamilyDoc = {
    * 一人世帯では 1 を保存（未使用）。旧データでは欠ける場合あり。
    */
   childRatio?: number;
-  /** この世帯に含めるグループメンバー（アカウント）の userId */
+  /** この世帯に含める旅行メンバー（アカウント）の userId */
   memberUserIds: string[];
   /**
    * 参照元の世帯マスタ ID（users/{uid}/households/{id}）

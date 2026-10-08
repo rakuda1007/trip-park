@@ -127,7 +127,7 @@ export async function joinGroupWithCode(
     throw new Error("すでにこの旅行に参加しています。");
   }
 
-  const groupName = nameFromInvite || "グループ";
+  const groupName = nameFromInvite || "旅行";
 
   const batch = writeBatch(db);
   batch.set(memberRef, {
@@ -169,7 +169,7 @@ async function listUserGroupRefs(
 
 /**
  * 起動振り分け用の軽量一覧。
- * polls / routes は取らず、グループ本体の status・日程だけをマージする。
+ * polls / routes は取らず、旅行本体の status・日程だけをマージする。
  */
 export async function listMyGroupsForRouting(uid: string): Promise<
   { groupId: string; data: UserGroupRefDoc }[]
@@ -203,33 +203,14 @@ export async function listMyGroupsForRouting(uid: string): Promise<
   });
 }
 
-/** 直近旅行が未完了で開けるなら true（membership + group status のみ確認） */
-export async function isOpenTripForUser(
-  uid: string,
-  groupId: string,
-): Promise<boolean> {
-  const db = getFirebaseFirestore();
-  const memberSnap = await getDoc(
-    doc(db, COLLECTIONS.users, uid, SUB.groups, groupId),
-  ).catch(() => null);
-  if (!memberSnap || !memberSnap.exists()) return false;
-
-  const groupSnap = await getDoc(doc(db, COLLECTIONS.groups, groupId)).catch(
-    () => null,
-  );
-  if (!groupSnap || !groupSnap.exists()) return false;
-  const gd = groupSnap.data() as GroupDoc | undefined;
-  return (gd?.status ?? "planning") !== "completed";
-}
-
 export async function listMyGroups(uid: string): Promise<
   { groupId: string; data: UserGroupRefDoc }[]
 > {
   const db = getFirebaseFirestore();
   const items = await listUserGroupRefs(uid);
 
-  // グループ本体から旅行日程を並列取得
-  // 権限エラーや削除済みグループは null として扱いリストから除外する
+  // 旅行本体から日程を並列取得
+  // 権限エラーや削除済み旅行は null として扱いリストから除外する
   const groupSnaps = await Promise.all(
     items.map(({ groupId }) =>
       getDoc(doc(db, COLLECTIONS.groups, groupId)).catch(() => null),
@@ -256,7 +237,7 @@ export async function listMyGroups(uid: string): Promise<
           groupId: item.groupId,
           data: {
             ...item.data,
-            /** グループ本体の最新名（ユーザーの参加時参照が古くても一覧は正しい表示になる） */
+            /** 旅行本体の最新名（参加時参照が古くても一覧は正しい表示になる） */
             groupName: gd?.name ?? item.data.groupName,
             memoryPhotoUrl: gd?.memoryPhotoUrl ?? null,
             status: gd?.status ?? "planning",
@@ -272,7 +253,7 @@ export async function listMyGroups(uid: string): Promise<
   return enrichedRows.flat();
 }
 
-/** 旅行名（グループ名）を更新する（オーナーのみ・セキュリティルール側でも検証） */
+/** 旅行名を更新する（オーナーのみ・セキュリティルール側でも検証） */
 export async function updateGroupName(groupId: string, name: string): Promise<void> {
   const trimmed = name.trim();
   if (!trimmed) {
@@ -304,7 +285,7 @@ export async function updateGroupName(groupId: string, name: string): Promise<vo
   await batch.commit();
 }
 
-/** グループの旅行日程を更新する（オーナーまたは管理者が実行） */
+/** 旅行日程を更新する（オーナーまたは管理者が実行） */
 export async function updateGroupTripDates(
   groupId: string,
   startDate: string | null,
@@ -325,7 +306,7 @@ export async function getGroup(groupId: string): Promise<GroupDoc | null> {
   return snap.data() as GroupDoc;
 }
 
-/** 指定ユーザーがグループに参加しているときのメンバー情報（未参加なら null） */
+/** 指定ユーザーが旅行に参加しているときのメンバー情報（未参加なら null） */
 export async function getMemberForUser(
   groupId: string,
   uid: string,
@@ -444,7 +425,7 @@ async function deleteDestinationPollsTree(
   }
 }
 
-/** 掲示板: 各話題の返信を消してから話題を消す */
+/** 連絡: 各話題の返信を消してから話題を消す */
 async function deleteBulletinPostsTree(db: Firestore, groupId: string) {
   const topicsSnap = await getDocs(
     collection(db, COLLECTIONS.groups, groupId, SUB.bulletinPosts),
@@ -497,7 +478,7 @@ export async function deleteGroup(ownerUid: string, groupId: string): Promise<vo
     .then((snap) => (snap.exists() ? deleteDoc(scheduleCfgRef) : undefined))
     .catch(() => {});
 
-  // ② 招待コードを削除（失敗しても続行 — グループ削除後は招待コードは無効になる）
+  // ② 招待コードを削除（失敗しても続行 — 旅行削除後は招待コードは無効になる）
   await deleteDoc(doc(db, COLLECTIONS.inviteCodes, group.inviteCode)).catch(() => {});
 
   // ③ メンバードキュメントを順次削除
@@ -509,7 +490,7 @@ export async function deleteGroup(ownerUid: string, groupId: string): Promise<vo
     await deleteDoc(m.ref);
   }
 
-  // ④ グループ文書を削除
+  // ④ 旅行文書を削除
   await deleteDoc(doc(db, COLLECTIONS.groups, groupId));
 
   // ⑤ 各メンバーの UserGroupRef を削除（他メンバーのはエラーを無視）

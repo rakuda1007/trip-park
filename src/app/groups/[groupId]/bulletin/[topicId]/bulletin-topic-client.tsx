@@ -246,7 +246,7 @@ export function BulletinTopicClient() {
     load();
   }, [load]);
 
-  /** ダッシュボード等から ?edit=1 で開いたとき、作者なら編集モードを開始 */
+  /** 旅行ホーム等から ?edit=1 で開いたとき、作者なら編集モードを開始 */
   useEffect(() => {
     if (!openEditFromQuery || !topic || !user) return;
     if (user.uid !== topic.authorUserId) return;

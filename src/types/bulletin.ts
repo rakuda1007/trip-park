@@ -1,4 +1,4 @@
-/** 掲示板カテゴリ（仕様の例に対応） */
+/** 連絡カテゴリ（仕様の例に対応） */
 export type BulletinCategory =
   | "general"
   | "gear"
@@ -56,19 +56,20 @@ export const BULLETIN_CATEGORY_LABELS: Record<BulletinCategory, string> = {
   nearby_map: "周辺地図",
 };
 
+/** 作成 UI の並び。レシピ投票は末尾（旅程からの作成を主経路にする） */
 export const BULLETIN_CATEGORY_OPTIONS: BulletinCategory[] = [
   "general",
   "gear",
   "dayof",
+  "nearby_map",
   "other",
   "recipe_vote",
-  "nearby_map",
 ];
 
 /** 重要度 */
 export type BulletinImportance = "normal" | "important";
 
-/** トピックに付与できるタグ（複数可） */
+/** 話題に付与できるタグ（複数可） */
 export type BulletinTopicTag = "recipe" | "movement" | "priority_top";
 
 export const BULLETIN_TOPIC_TAG_LABELS: Record<BulletinTopicTag, string> = {

@@ -283,7 +283,7 @@ export function GroupsClient() {
         </p>
       ) : (
         <div className="mt-8 space-y-8">
-          {/* 直近グループのハイライト */}
+          {/* 直近旅行のハイライト */}
           {highlight ? (
             <div>
               <SectionHeading>

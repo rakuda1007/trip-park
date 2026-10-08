@@ -441,10 +441,17 @@ function BulletinClientInner() {
                 >
                   {BULLETIN_CATEGORY_OPTIONS.map((c) => (
                     <option key={c} value={c}>
-                      {BULLETIN_CATEGORY_LABELS[c]}
+                      {c === "recipe_vote"
+                        ? `${BULLETIN_CATEGORY_LABELS[c]}（旅程から推奨）`
+                        : BULLETIN_CATEGORY_LABELS[c]}
                     </option>
                   ))}
                 </select>
+                {newCategory === "recipe_vote" ? (
+                  <span className="mt-1 block text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+                    献立と紐づける場合は旅程ページの「献立・レシピ投票」から作成すると分かりやすいです。
+                  </span>
+                ) : null}
               </label>
               <label className="text-xs text-zinc-600 dark:text-zinc-400">
                 重要度

@@ -35,7 +35,7 @@ export default function ProfilePage() {
                   世帯マスタ
                 </p>
                 <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                  旅行で使う家族・グループの人数を登録
+                  旅行で使う家族・世帯の人数を登録
                 </p>
               </div>
               <svg

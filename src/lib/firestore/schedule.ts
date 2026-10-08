@@ -238,7 +238,7 @@ export async function setScheduleConfirm(
     confirmedBy: actorUid,
     confirmedDate: null,
   });
-  // グループ本体の旅行日程も同期更新（権限不足時は無視）
+  // 旅行本体の日程も同期更新（権限不足時は無視）
   try {
     await updateGroupTripDates(groupId, startDateISO, endDateISO);
   } catch {
@@ -263,7 +263,7 @@ export async function clearScheduleConfirm(groupId: string): Promise<void> {
     confirmedAt: null,
     confirmedBy: null,
   });
-  // グループ本体の旅行日程もクリア（権限不足時は無視）
+  // 旅行本体の日程もクリア（権限不足時は無視）
   try {
     await updateGroupTripDates(groupId, null, null);
   } catch {

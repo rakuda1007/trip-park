@@ -41,7 +41,7 @@ export type NotifyPayload =
       comment: string | null;
     };
 
-/** 話題の再通知: 投稿者・グループオーナー・管理者のみ */
+/** 話題の再通知: 投稿者・旅行オーナー・管理者のみ */
 async function assertCanRemindBulletinTopic(
   groupId: string,
   topicId: string,
@@ -77,7 +77,7 @@ async function assertCanRemindBulletinTopic(
   return { ok: false, status: 403 };
 }
 
-/** グループの全メンバー（除外 UID を除く）の FCM トークンを収集する */
+/** 旅行の全メンバー（除外 UID を除く）の FCM トークンを収集する */
 async function collectTokens(groupId: string, excludeUids: string[]): Promise<string[]> {
   const db = getAdminFirestore();
 

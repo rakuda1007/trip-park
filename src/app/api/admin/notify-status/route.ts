@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // グループメンバー一覧を取得
+    // 旅行メンバー一覧を取得
     const membersSnap = await db
       .collection("groups")
       .doc(groupId)

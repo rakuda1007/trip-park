@@ -341,7 +341,7 @@ export function ScheduleClient() {
   ) {
     if (
       !confirm(
-        `次の候補をグループの確定日程としてよいですか？\n\n${label}`,
+        `次の候補を旅行の確定日程としてよいですか？\n\n${label}`,
       )
     ) {
       return;
@@ -483,7 +483,7 @@ export function ScheduleClient() {
           </p>
         ) : (
           <>
-            {/* ── メンバー別の投票・回答（ダッシュボードからのリンク先アンカー） ── */}
+            {/* ── メンバー別の投票・回答（旅行ホームからのリンク先アンカー） ── */}
             <div id="schedule-voting" className="scroll-mt-28">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                 メンバー別の回答・投票

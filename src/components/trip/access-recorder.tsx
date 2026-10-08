@@ -6,7 +6,7 @@ import { recordMemberAccess } from "@/lib/firestore/groups";
 import { useEffect, useRef } from "react";
 
 /**
- * グループページへのアクセスを記録するコンポーネント。
+ * 旅行ページへのアクセスを記録するコンポーネント。
  * sessionStorage を使ってセッション単位で1回のみ Firestore に書き込む。
  */
 export function AccessRecorder() {

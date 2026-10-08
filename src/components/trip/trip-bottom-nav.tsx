@@ -1,6 +1,10 @@
 "use client";
 
 import { useGroupRouteId } from "@/contexts/group-route-context";
+import { listDestinationPolls } from "@/lib/firestore/destination-votes";
+import { getGroup } from "@/lib/firestore/groups";
+import { listTripRoutes } from "@/lib/firestore/trip";
+import { resolveNextPlanPath } from "@/lib/trip-workflow-all-complete";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -16,9 +20,9 @@ export function TripBottomNav() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  const [planHref, setPlanHref] = useState(`/groups/${groupId}/schedule`);
 
   const homeHref = `/groups/${groupId}`;
-  const planHref = `/groups/${groupId}/schedule`;
   const contactHref = `/groups/${groupId}/bulletin`;
 
   const isHome =
@@ -48,6 +52,28 @@ export function TripBottomNav() {
     document.addEventListener("mousedown", onOutside);
     return () => document.removeEventListener("mousedown", onOutside);
   }, [moreOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPlanHref(`/groups/${groupId}/schedule`);
+    void (async () => {
+      try {
+        const group = await getGroup(groupId);
+        if (cancelled || !group) return;
+        const [polls, routes] = await Promise.all([
+          listDestinationPolls(groupId),
+          listTripRoutes(groupId),
+        ]);
+        if (cancelled) return;
+        setPlanHref(resolveNextPlanPath(groupId, group, polls, routes));
+      } catch {
+        if (!cancelled) setPlanHref(`/groups/${groupId}/schedule`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, pathname]);
 
   const moreItems: { key: MoreKey; label: string; href: string }[] = [
     { key: "sharing", label: "買い出し", href: `${homeHref}/sharing` },

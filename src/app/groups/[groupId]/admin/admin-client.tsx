@@ -272,7 +272,7 @@ export function AdminClient() {
           </table>
         </div>
         <p className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
-          ※ 最終アクセスはグループページを開いたときに更新されます（セッション単位）。
+          ※ 最終アクセスは旅行ページを開いたときに更新されます（セッション単位）。
           オーナーのみ「外す」でメンバーを旅行から除外できます。
         </p>
       </section>
@@ -286,7 +286,7 @@ export function AdminClient() {
             <VisibilityBadge kind="owner" />
           </div>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-            メンバー・日程・旅程・トピックなど、この旅行に紐づくデータはすべて削除されます。元に戻せません。
+            メンバー・日程・旅程・連絡など、この旅行に紐づくデータはすべて削除されます。元に戻せません。
           </p>
           <button
             type="button"

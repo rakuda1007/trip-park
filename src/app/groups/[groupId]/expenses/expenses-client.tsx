@@ -184,18 +184,14 @@ export function ExpensesClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const activeTab: ExpensesTab =
-    tabParam === "settle" ? "settle" : "record";
+  const explicitTab: ExpensesTab | null =
+    tabParam === "settle" || tabParam === "record" ? tabParam : null;
 
   function setActiveTab(next: ExpensesTab) {
     const q = new URLSearchParams(searchParams.toString());
-    if (next === "record") q.delete("tab");
-    else q.set("tab", next);
+    q.set("tab", next);
     const qs = q.toString();
-    router.replace(
-      qs ? `/groups/${groupId}/expenses?${qs}` : `/groups/${groupId}/expenses`,
-      { scroll: false },
-    );
+    router.replace(`/groups/${groupId}/expenses?${qs}`, { scroll: false });
   }
 
   const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
@@ -575,6 +571,9 @@ export function ExpensesClient() {
   }
 
   const hasExpenses = expenses.length > 0;
+  /** 未指定時: 支出なし→記録、あり→精算。明示 tab があればそれを優先 */
+  const activeTab: ExpensesTab =
+    explicitTab ?? (hasExpenses ? "settle" : "record");
   const myRole = members.find((m) => m.userId === user?.uid)?.data.role;
   const canUpdateSettlementStep =
     !!user && (group.ownerId === user.uid || myRole === "admin");
