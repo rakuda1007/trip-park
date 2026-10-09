@@ -211,7 +211,9 @@ export function NewGroupForm() {
       {showPlaceMode ? (
         <fieldset>
           <legend className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            {planShape === "gathering" ? "お店の決め方" : "目的地の決め方"}
+            {planShape === "gathering"
+              ? "主なお店の決め方"
+              : "主な目的地の決め方"}
           </legend>
           <div className="mt-2 flex flex-col gap-2 text-sm">
             <label className="flex items-start gap-2">

@@ -23,6 +23,12 @@ import {
   type VoteItem,
 } from "@/lib/firestore/destination-votes";
 import { getGroup, listMembers } from "@/lib/firestore/groups";
+import { resolvePlanConfig } from "@/lib/plan-shape";
+import {
+  isMainPlaceRegistered,
+  placeVoteCopy,
+  type PlaceVoteKind,
+} from "@/lib/place-vote-copy";
 import {
   DESTINATION_DECIDE_MAX_PER_POLL,
   DESTINATION_WANT_VOTES_MAX_PER_USER,
@@ -51,12 +57,14 @@ function CandidateForm({
   onCancel,
   submitLabel,
   busy,
+  candidateNoun,
 }: {
   initial?: EditDraft;
   onSubmit: (d: EditDraft) => void;
   onCancel?: () => void;
   submitLabel: string;
   busy: boolean;
+  candidateNoun: string;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [url, setUrl] = useState(initial?.url ?? "");
@@ -72,7 +80,7 @@ function CandidateForm({
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
         <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-          目的地名 <span className="text-red-500">*</span>
+          {candidateNoun}名 <span className="text-red-500">*</span>
         </label>
         <input
           type="text"
@@ -148,7 +156,15 @@ type PollBundle = {
   votes: VoteItem[];
 };
 
-export function DestinationVotesClient() {
+export function DestinationVotesClient({
+  placeVoteKind: placeVoteKindProp,
+  embedded = false,
+}: {
+  /** 省略時は拠点の登録有無から自動判定 */
+  placeVoteKind?: PlaceVoteKind;
+  /** 固定登録フォーム下など、埋め込み表示 */
+  embedded?: boolean;
+} = {}) {
   const groupId = useGroupRouteId();
   const { user } = useAuth();
 
@@ -168,12 +184,25 @@ export function DestinationVotesClient() {
   >({});
   const [lineShareUrl, setLineShareUrl] = useState("");
   const [showNewPollForm, setShowNewPollForm] = useState(false);
-  const [newPollTitle, setNewPollTitle] = useState("1日目の目的地");
+  const [newPollTitle, setNewPollTitle] = useState("");
   const [editingPollId, setEditingPollId] = useState<string | null>(null);
   const [editPollTitleDraft, setEditPollTitleDraft] = useState("");
   const [editPollSortDraft, setEditPollSortDraft] = useState("0");
   /** 旧レイアウトのデータが残っているが投票ブロックが無い（オーナーによる移行待ち） */
   const [legacyMigrationHint, setLegacyMigrationHint] = useState(false);
+
+  const placeLabel =
+    group && group !== null
+      ? resolvePlanConfig(group).labels.place
+      : "目的地";
+  const placeVoteKind: PlaceVoteKind =
+    placeVoteKindProp ??
+    (isMainPlaceRegistered(group) ? "stopover" : "destination");
+  const copy = placeVoteCopy(placeVoteKind, placeLabel);
+
+  useEffect(() => {
+    setNewPollTitle(placeVoteCopy(placeVoteKind, placeLabel).defaultBlockTitle(1));
+  }, [placeVoteKind, placeLabel]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !groupId) return;
@@ -388,9 +417,7 @@ export function DestinationVotesClient() {
     const current = normalizeDecidedNamesFromPollDoc(b.poll.data);
     if (current.includes(name)) return;
     if (current.length >= DESTINATION_DECIDE_MAX_PER_POLL) {
-      setError(
-        `確定できる目的地はこのブロックで最大${String(DESTINATION_DECIDE_MAX_PER_POLL)}件までです。`,
-      );
+      setError(copy.decideMaxError(DESTINATION_DECIDE_MAX_PER_POLL));
       return;
     }
     if (
@@ -486,7 +513,7 @@ export function DestinationVotesClient() {
         sortOrder,
       });
       setShowNewPollForm(false);
-      setNewPollTitle(`${sortOrder + 2}日目の目的地`);
+      setNewPollTitle(copy.defaultBlockTitle(sortOrder + 2));
       await load();
     } catch (ex) {
       setError(ex instanceof Error ? ex.message : "作成に失敗しました");
@@ -620,23 +647,41 @@ export function DestinationVotesClient() {
   }
 
   const hasPollBlocks = bundles.length > 0;
+  const hubSummary =
+    group.placeFixed?.name?.trim() || group.destination?.trim() || "";
+  const TitleTag = embedded ? "h2" : "h1";
 
   return (
-    <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        目的地を決める
-      </h1>
+    <div
+      className={
+        embedded
+          ? "mx-auto w-full max-w-3xl flex-1 px-4 py-6"
+          : "mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14"
+      }
+    >
+      <TitleTag
+        className={
+          embedded
+            ? "text-lg font-semibold text-zinc-900 dark:text-zinc-50"
+            : "text-2xl font-semibold text-zinc-900 dark:text-zinc-50"
+        }
+      >
+        {copy.pageTitle}
+      </TitleTag>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        {copy.pageLead}
+      </p>
+      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
         各投票ブロックで、メンバー1人あたり「行きたい」合計3票までを候補に分けて入れられます。
       </p>
 
-      {group.destination ? (
+      {hubSummary ? (
         <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            確定の概要（旅行トップにも表示）
+            {copy.hubSummaryLabel}
           </p>
           <p className="mt-1 text-sm text-zinc-800 dark:text-zinc-200">
-            {group.destination}
+            {hubSummary}
           </p>
         </div>
       ) : null}
@@ -699,6 +744,7 @@ export function DestinationVotesClient() {
                 wantVoterDetailsForAdmin={wantVoterDetailsForAdmin}
                 openVoters={openVoters}
                 toggleVoters={toggleVoters}
+                candidateNoun={copy.candidateNoun}
               />
             ))}
           </div>
@@ -709,7 +755,7 @@ export function DestinationVotesClient() {
                 href={
                   lineShareUrl
                     ? `https://line.me/R/msg/text/?${encodeURIComponent(
-                        `「${group.name}」の目的地を決める\n${lineShareUrl}`,
+                        `「${group.name}」の${copy.shareVerb}\n${lineShareUrl}`,
                       )}`
                     : undefined
                 }
@@ -735,7 +781,7 @@ export function DestinationVotesClient() {
               {showNewPollForm ? (
                 <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
                   <h2 className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                    投票ブロックを追加
+                    {copy.addBlockHeading}
                   </h2>
                   <label className="block text-xs text-zinc-600 dark:text-zinc-400">
                     タイトル
@@ -743,7 +789,7 @@ export function DestinationVotesClient() {
                       type="text"
                       value={newPollTitle}
                       onChange={(e) => setNewPollTitle(e.target.value)}
-                      placeholder="例: 1日目の目的地"
+                      placeholder={copy.titlePlaceholder}
                       className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
                     />
                   </label>
@@ -769,16 +815,12 @@ export function DestinationVotesClient() {
                 <button
                   type="button"
                   onClick={() => {
-                    setNewPollTitle(
-                      bundles.length === 0
-                        ? "1日目の目的地"
-                        : `${bundles.length + 1}日目の目的地`,
-                    );
+                    setNewPollTitle(copy.defaultBlockTitle(bundles.length + 1));
                     setShowNewPollForm(true);
                   }}
                   className="rounded-md border border-dashed border-zinc-400 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-500 dark:text-zinc-200 dark:hover:bg-zinc-800"
                 >
-                  ＋ 投票ブロックを追加（日別など）
+                  {copy.addBlockButton}
                 </button>
               )}
             </div>
@@ -791,7 +833,7 @@ export function DestinationVotesClient() {
               href={
                 lineShareUrl
                   ? `https://line.me/R/msg/text/?${encodeURIComponent(
-                      `「${group.name}」の目的地を決める\n${lineShareUrl}`,
+                      `「${group.name}」の${copy.shareVerb}\n${lineShareUrl}`,
                     )}`
                   : undefined
               }
@@ -818,7 +860,7 @@ export function DestinationVotesClient() {
             {showNewPollForm ? (
               <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
                 <h2 className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                  投票ブロックを追加
+                  {copy.addBlockHeading}
                 </h2>
                 <label className="block text-xs text-zinc-600 dark:text-zinc-400">
                   タイトル
@@ -826,7 +868,7 @@ export function DestinationVotesClient() {
                     type="text"
                     value={newPollTitle}
                     onChange={(e) => setNewPollTitle(e.target.value)}
-                    placeholder="例: 1日目の目的地"
+                    placeholder={copy.titlePlaceholder}
                     className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
                   />
                 </label>
@@ -852,16 +894,12 @@ export function DestinationVotesClient() {
               <button
                 type="button"
                 onClick={() => {
-                  setNewPollTitle(
-                    bundles.length === 0
-                      ? "1日目の目的地"
-                      : `${bundles.length + 1}日目の目的地`,
-                  );
+                  setNewPollTitle(copy.defaultBlockTitle(bundles.length + 1));
                   setShowNewPollForm(true);
                 }}
                 className="rounded-md border border-dashed border-zinc-400 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-500 dark:text-zinc-200 dark:hover:bg-zinc-800"
               >
-                ＋ 投票ブロックを追加（日別など）
+                {copy.addBlockButton}
               </button>
             )}
           </div>
@@ -907,6 +945,7 @@ function PollSection({
   wantVoterDetailsForAdmin,
   openVoters,
   toggleVoters,
+  candidateNoun,
 }: {
   bundle: PollBundle;
   user: ReturnType<typeof useAuth>["user"];
@@ -947,6 +986,7 @@ function PollSection({
   ) => { key: string; label: string }[];
   openVoters: Set<string>;
   toggleVoters: (key: string) => void;
+  candidateNoun: string;
 }) {
   const { poll, candidates, votes } = bundle;
   const pollId = poll.id;
@@ -1123,7 +1163,7 @@ function PollSection({
             </colgroup>
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-xs font-semibold text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400">
-                <th className="px-4 py-3">目的地</th>
+                <th className="px-4 py-3">{candidateNoun}</th>
                 <th className="px-2 py-3 text-right">費用</th>
                 <th className="px-2 py-3">補足</th>
               </tr>
@@ -1165,6 +1205,7 @@ function PollSection({
                           onCancel={() => setEditingCandidateId(null)}
                           submitLabel="保存"
                           busy={busy === `edit-${c.id}`}
+                          candidateNoun={candidateNoun}
                         />
                       </td>
                     </tr>
@@ -1436,6 +1477,7 @@ function PollSection({
                 onCancel={() => setShowAddForm(false)}
                 submitLabel="追加する"
                 busy={busy === `add-${pollId}`}
+                candidateNoun={candidateNoun}
               />
             </section>
           ) : (

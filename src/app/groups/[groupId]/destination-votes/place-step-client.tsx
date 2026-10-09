@@ -8,6 +8,7 @@ import {
   updatePlaceFixed,
   updatePlaceMode,
 } from "@/lib/firestore/groups";
+import { isMainPlaceRegistered } from "@/lib/place-vote-copy";
 import { resolvePlanConfig } from "@/lib/plan-shape";
 import type { GroupDoc, PlaceMode } from "@/types/group";
 import { VisibilityBadge } from "@/components/visibility-badge";
@@ -76,6 +77,7 @@ export function PlaceStepClient() {
 
   const config = resolvePlanConfig(group);
   const placeLabel = config.labels.place;
+  const hubRegistered = isMainPlaceRegistered(group);
 
   async function handleModeChange(next: PlaceMode) {
     if (!canManage || !groupId) return;
@@ -96,7 +98,7 @@ export function PlaceStepClient() {
     if (!canManage || !groupId) return;
     const name = fixedName.trim();
     if (!name) {
-      setError(`${placeLabel}名を入力してください。`);
+      setError(`主な${placeLabel}名を入力してください。`);
       return;
     }
     setBusy(true);
@@ -120,7 +122,7 @@ export function PlaceStepClient() {
       <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-900/50">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-            {placeLabel}の決め方
+            主な{placeLabel}の決め方
           </p>
           <VisibilityBadge kind="admin" />
         </div>
@@ -177,95 +179,104 @@ export function PlaceStepClient() {
 
   if (config.placeMode === "fixed") {
     return (
-      <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          {placeLabel}
-        </h1>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          投票なしで、決まっている{placeLabel}を登録します。
-        </p>
-        {error ? (
-          <p className="mt-3 text-sm text-red-600" role="alert">
-            {error}
+      <div>
+        <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
+          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+            主な{placeLabel}
+          </h1>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            拠点が決まっているときはこちらで登録します。途中で寄る場所は、登録後に下の「立ち寄りの投票」で決められます。
           </p>
-        ) : null}
-        {modeSwitcher}
-        <form onSubmit={handleSaveFixed} className="mt-6 max-w-md space-y-3">
-          <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-            {placeLabel}名 <span className="text-red-500">*</span>
-            <input
-              type="text"
-              required
-              value={fixedName}
-              onChange={(e) => setFixedName(e.target.value)}
-              disabled={!canManage || busy}
-              placeholder={
-                config.planShape === "gathering"
-                  ? "例: 〇〇居酒屋 駅前店"
-                  : "例: 箱根・強羅"
-              }
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-            />
-          </label>
-          <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-            地図・予約 URL（任意）
-            <input
-              type="url"
-              value={fixedMapUrl}
-              onChange={(e) => setFixedMapUrl(e.target.value)}
-              disabled={!canManage || busy}
-              placeholder="https://..."
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-            />
-          </label>
-          <label className="block text-xs text-zinc-600 dark:text-zinc-400">
-            メモ（任意）
-            <input
-              type="text"
-              value={fixedNote}
-              onChange={(e) => setFixedNote(e.target.value)}
-              disabled={!canManage || busy}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-            />
-          </label>
-          {canManage ? (
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-            >
-              {busy ? "保存中…" : "保存する"}
-            </button>
-          ) : (
-            <p className="text-xs text-zinc-500">
-              登録・変更はオーナーまたは管理者のみ行えます。
+          {error ? (
+            <p className="mt-3 text-sm text-red-600" role="alert">
+              {error}
             </p>
-          )}
-        </form>
-        {group.destination ? (
-          <p className="mt-4 text-sm text-zinc-700 dark:text-zinc-300">
-            現在の登録:{" "}
-            <span className="font-medium">{group.destination}</span>
-            {group.placeFixed?.mapUrl ? (
-              <>
-                {" · "}
-                <a
-                  href={group.placeFixed.mapUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline"
-                >
-                  地図を開く
-                </a>
-              </>
-            ) : null}
-          </p>
+          ) : null}
+          {modeSwitcher}
+          <form onSubmit={handleSaveFixed} className="mt-6 max-w-md space-y-3">
+            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+              主な{placeLabel}名 <span className="text-red-500">*</span>
+              <input
+                type="text"
+                required
+                value={fixedName}
+                onChange={(e) => setFixedName(e.target.value)}
+                disabled={!canManage || busy}
+                placeholder={
+                  config.planShape === "gathering"
+                    ? "例: 〇〇居酒屋 駅前店"
+                    : "例: 修善寺・箱根"
+                }
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+              />
+            </label>
+            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+              地図・予約 URL（任意）
+              <input
+                type="url"
+                value={fixedMapUrl}
+                onChange={(e) => setFixedMapUrl(e.target.value)}
+                disabled={!canManage || busy}
+                placeholder="https://..."
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+              />
+            </label>
+            <label className="block text-xs text-zinc-600 dark:text-zinc-400">
+              メモ（任意）
+              <input
+                type="text"
+                value={fixedNote}
+                onChange={(e) => setFixedNote(e.target.value)}
+                disabled={!canManage || busy}
+                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+              />
+            </label>
+            {canManage ? (
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+              >
+                {busy ? "保存中…" : "保存する"}
+              </button>
+            ) : (
+              <p className="text-xs text-zinc-500">
+                登録・変更はオーナーまたは管理者のみ行えます。
+              </p>
+            )}
+          </form>
+          {hubRegistered ? (
+            <p className="mt-4 text-sm text-zinc-700 dark:text-zinc-300">
+              現在の登録:{" "}
+              <span className="font-medium">
+                {group.placeFixed?.name?.trim() || group.destination}
+              </span>
+              {group.placeFixed?.mapUrl ? (
+                <>
+                  {" · "}
+                  <a
+                    href={group.placeFixed.mapUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    地図を開く
+                  </a>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
+        {hubRegistered ? (
+          <div className="border-t border-zinc-200 dark:border-zinc-700">
+            <DestinationVotesClient placeVoteKind="stopover" embedded />
+          </div>
         ) : null}
       </div>
     );
   }
 
-  // vote
+  // vote — 拠点未定なら目的地投票、確定後は立ち寄り表記に自動切替
   return (
     <div>
       <div className="mx-auto w-full max-w-3xl px-4 pt-4">

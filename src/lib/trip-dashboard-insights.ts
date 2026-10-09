@@ -148,29 +148,35 @@ export function computeDashboardInsights(params: {
   if (!isStepVisible(plan.place)) {
     statusLines.push(`${plan.labels.place}の工程はこの予定では使いません。`);
   } else if (plan.placeMode === "fixed") {
+    const hubName =
+      group.placeFixed?.name?.trim() || group.destination?.trim() || "";
     statusLines.push(
-      group.destination?.trim()
-        ? `${plan.labels.place}は「${group.destination.trim()}」として登録されています。`
-        : `${plan.labels.place}はまだ登録されていません。`,
+      hubName
+        ? `主な${plan.labels.place}は「${hubName}」として登録されています。立ち寄りの投票も使えます。`
+        : `主な${plan.labels.place}はまだ登録されていません。`,
     );
   } else if (destinationPolls.length === 0) {
     statusLines.push(
       group.destination?.trim()
-        ? `${plan.labels.place}は「${group.destination.trim()}」として記録されています（投票ブロックなし）。`
+        ? `主な${plan.labels.place}は「${group.destination.trim()}」として記録されています（投票ブロックなし）。`
         : `${plan.labels.place}は投票ブロックがまだなく、登録も未設定です。`,
     );
   } else {
+    const hubSet = !!(
+      group.destination?.trim() || group.placeFixed?.name?.trim()
+    );
+    const voteNoun = hubSet ? "立ち寄り" : plan.labels.place;
     const undecided = destinationPolls.filter(
       (p) => normalizeDecidedNamesFromPollDoc(p.data).length === 0,
     );
     const decided = destinationPolls.length - undecided.length;
     if (undecided.length > 0) {
       statusLines.push(
-        `${plan.labels.place}は投票ブロック ${destinationPolls.length} 件のうち、${undecided.length} 件が未確定です（確定済み ${decided} 件）。`,
+        `${voteNoun}の投票は ${destinationPolls.length} 件のうち、${undecided.length} 件が未確定です（確定済み ${decided} 件）。`,
       );
     } else {
       statusLines.push(
-        `${plan.labels.place}は ${destinationPolls.length} 件のブロックすべて確定済みです。`,
+        `${voteNoun}の投票は ${destinationPolls.length} 件のブロックすべて確定済みです。`,
       );
     }
   }
@@ -235,15 +241,20 @@ export function computeDashboardInsights(params: {
         : `${plan.labels.schedule}ページを開く`,
     };
   } else if (isStepVisible(plan.place) && !destDone) {
+    const hubSet = !!(
+      group.destination?.trim() || group.placeFixed?.name?.trim()
+    );
     nextStepLine =
       plan.placeMode === "fixed"
-        ? `次のステップ: ${plan.labels.place}を登録してください。`
-        : `次のステップ: ${plan.labels.place}の投票をしてください。`;
+        ? `次のステップ: 主な${plan.labels.place}を登録してください。`
+        : hubSet
+          ? "次のステップ: 立ち寄りの投票をしてください。"
+          : `次のステップ: ${plan.labels.place}の投票をしてください。`;
     nextStepLink = {
       href: `/groups/${groupId}/destination-votes#destination-voting`,
       label:
         plan.placeMode === "fixed"
-          ? `${plan.labels.place}を登録する`
+          ? `主な${plan.labels.place}を登録する`
           : "投票ページを開く",
     };
   } else if (isStepVisible(plan.itinerary) && !itinDone) {
@@ -308,13 +319,20 @@ export function computeDashboardInsights(params: {
       });
     }
 
-    if (!nextStepIsDestination && plan.placeMode === "vote") {
+    const hubSetForVotes = !!(
+      group.destination?.trim() || group.placeFixed?.name?.trim()
+    );
+    const showPlaceVoteTasks =
+      (plan.placeMode === "vote" && !nextStepIsDestination) ||
+      (plan.placeMode === "fixed" && hubSetForVotes);
+    if (showPlaceVoteTasks) {
+      const voteNoun = hubSetForVotes ? "立ち寄り" : plan.labels.place;
       for (const row of openDestinationPollVotes) {
         const sum = sumUserDestinationWantVotes(userId, row.votes);
         if (sum === 0) {
           personalTasks.push({
             key: `dest-${row.pollId}`,
-            label: `${plan.labels.place}の投票「${row.pollTitle.slice(0, 48)}${row.pollTitle.length > 48 ? "…" : ""}」にまだ票が入っていません。`,
+            label: `${voteNoun}の投票「${row.pollTitle.slice(0, 48)}${row.pollTitle.length > 48 ? "…" : ""}」にまだ票が入っていません。`,
             href: `/groups/${groupId}/destination-votes#destination-voting`,
           });
         }
