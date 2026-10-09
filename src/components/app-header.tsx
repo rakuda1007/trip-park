@@ -62,11 +62,14 @@ export function AppHeader() {
     setInviteExpanded(false);
   }, [pathname]);
 
+  // メニューを開いたときだけ旅行・権限を読む（起動時の getGroup を避ける）
   useEffect(() => {
-    if (!user || !currentGroupId) {
-      setShowAdminMenuLink(false);
-      setMenuTripIsOwner(false);
-      setGroupForMenu(null);
+    if (!menuOpen || !user || !currentGroupId) {
+      if (!currentGroupId) {
+        setShowAdminMenuLink(false);
+        setMenuTripIsOwner(false);
+        setGroupForMenu(null);
+      }
       return;
     }
     let cancelled = false;
@@ -101,7 +104,7 @@ export function AppHeader() {
     return () => {
       cancelled = true;
     };
-  }, [user, currentGroupId]);
+  }, [menuOpen, user, currentGroupId]);
 
   // 外クリックで閉じる
   useEffect(() => {

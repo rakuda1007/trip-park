@@ -1,11 +1,11 @@
 "use client";
 
 import { useGroupRouteId } from "@/contexts/group-route-context";
-import { getGroup } from "@/lib/firestore/groups";
+import { useGroupWorkflow } from "@/contexts/group-workflow-context";
 import { resolvePlanConfig } from "@/lib/plan-shape";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type MoreKey = "sharing" | "expenses" | "families" | "admin";
 
@@ -16,10 +16,17 @@ type MoreKey = "sharing" | "expenses" | "families" | "admin";
 export function TripBottomNav() {
   const groupId = useGroupRouteId();
   const pathname = usePathname();
+  const { group } = useGroupWorkflow();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
-  const [sharingEnabled, setSharingEnabled] = useState(true);
-  const [planTabLabel, setPlanTabLabel] = useState("計画");
+
+  const planConfig = useMemo(
+    () => resolvePlanConfig(group ?? null),
+    [group],
+  );
+  const sharingEnabled = planConfig.sharingEnabled;
+  const planTabLabel =
+    planConfig.planShape === "settle_only" ? "精算" : "計画";
 
   const homeHref = `/groups/${groupId}`;
   const planHref = `${homeHref}/plan`;
@@ -54,27 +61,6 @@ export function TripBottomNav() {
     return () => document.removeEventListener("mousedown", onOutside);
   }, [moreOpen]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const group = await getGroup(groupId);
-        if (cancelled || !group) return;
-        const cfg = resolvePlanConfig(group);
-        setSharingEnabled(cfg.sharingEnabled);
-        setPlanTabLabel(cfg.planShape === "settle_only" ? "精算" : "計画");
-      } catch {
-        if (!cancelled) {
-          setSharingEnabled(true);
-          setPlanTabLabel("計画");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [groupId, pathname]);
-
   const moreItems: { key: MoreKey; label: string; href: string }[] = [
     ...(sharingEnabled
       ? [{ key: "sharing" as const, label: "買い出し", href: `${homeHref}/sharing` }]
@@ -101,12 +87,18 @@ export function TripBottomNav() {
       aria-label="旅行メニュー"
     >
       <div className="relative mx-auto flex max-w-3xl items-stretch">
-        <Link href={homeHref} className={itemClass(isHome)} aria-current={isHome ? "page" : undefined}>
+        <Link
+          href={homeHref}
+          prefetch={false}
+          className={itemClass(isHome)}
+          aria-current={isHome ? "page" : undefined}
+        >
           <HomeIcon />
           ホーム
         </Link>
         <Link
           href={planHref}
+          prefetch={false}
           className={itemClass(isPlan && !isHome)}
           aria-current={isPlan && !isHome ? "page" : undefined}
         >
@@ -115,6 +107,7 @@ export function TripBottomNav() {
         </Link>
         <Link
           href={contactHref}
+          prefetch={false}
           className={itemClass(isContact)}
           aria-current={isContact ? "page" : undefined}
         >
@@ -141,6 +134,7 @@ export function TripBottomNav() {
                 <Link
                   key={item.key}
                   href={item.href}
+                  prefetch={false}
                   role="menuitem"
                   className="block px-4 py-2.5 text-sm text-zinc-800 hover:bg-zinc-50 dark:text-zinc-100 dark:hover:bg-zinc-800"
                   onClick={() => setMoreOpen(false)}

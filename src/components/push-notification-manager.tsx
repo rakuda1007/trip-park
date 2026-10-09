@@ -75,7 +75,7 @@ export function PushNotificationManager() {
       addToast(title, body, url);
     });
     return () => {
-      unsubscribe?.();
+      unsubscribe();
     };
   }, [user]);
 

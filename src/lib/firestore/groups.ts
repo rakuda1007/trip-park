@@ -231,9 +231,10 @@ export async function listMyGroupsForRouting(uid: string): Promise<
           ...item.data,
           groupName: gd?.name ?? item.data.groupName,
           memoryPhotoUrl: gd?.memoryPhotoUrl ?? null,
-          status: gd?.status ?? "planning",
+            status: gd?.status ?? "planning",
           tripStartDate: gd?.tripStartDate ?? null,
           tripEndDate: gd?.tripEndDate ?? null,
+          planShape: gd?.planShape ?? "trip",
         },
       },
     ];

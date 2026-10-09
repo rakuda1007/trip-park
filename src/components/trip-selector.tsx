@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
-import { listMyGroups } from "@/lib/firestore/groups";
+import { getGroup, listMyGroupsForRouting } from "@/lib/firestore/groups";
 import { clearLastTripId, loadLastTripId, saveLastTripId } from "@/lib/last-trip";
 import type { UserGroupRefDoc } from "@/types/group";
 import Link from "next/link";
@@ -49,6 +49,10 @@ function parseCurrentGroupIdFromPath(pathname: string): string | undefined {
   return seg;
 }
 
+/**
+ * 旅行セレクタ。
+ * 起動時はフル一覧を取らず、開いたときだけ軽量一覧を読む。
+ */
 export function TripSelector() {
   const { user } = useAuth();
   const router = useRouter();
@@ -56,43 +60,76 @@ export function TripSelector() {
   const currentGroupId = parseCurrentGroupIdFromPath(pathname);
 
   const [trips, setTrips] = useState<TripItem[]>([]);
+  const [listLoaded, setListLoaded] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [currentTrip, setCurrentTrip] = useState<TripItem | null>(null);
+  const [headerLabel, setHeaderLabel] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const loadTrips = useCallback(async () => {
-    if (!user) return;
+  // 閉じた状態の表示名だけ軽く取る（一覧は開くまで取らない）
+  useEffect(() => {
+    if (!user) {
+      setHeaderLabel(null);
+      return;
+    }
+    let cancelled = false;
+    const targetId = currentGroupId ?? loadLastTripId(user.uid);
+    if (!targetId) {
+      setHeaderLabel(null);
+      return;
+    }
+    void getGroup(targetId)
+      .then((g) => {
+        if (cancelled) return;
+        if (!g) {
+          if (!currentGroupId && loadLastTripId(user.uid) === targetId) {
+            clearLastTripId(user.uid);
+          }
+          setHeaderLabel(null);
+          return;
+        }
+        setHeaderLabel(g.name);
+      })
+      .catch(() => {
+        if (!cancelled) setHeaderLabel(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, currentGroupId]);
+
+  const listLoadingRef = useRef(false);
+  const loadTripList = useCallback(async () => {
+    if (!user || listLoadingRef.current) return;
+    listLoadingRef.current = true;
+    setListLoading(true);
     try {
-      const list = await listMyGroups(user.uid);
+      const list = await listMyGroupsForRouting(user.uid);
       setTrips(list);
+      setListLoaded(true);
       if (currentGroupId) {
         const found = list.find((t) => t.groupId === currentGroupId);
-        setCurrentTrip(found ?? null);
-      } else {
-        const lastId = loadLastTripId(user.uid);
-        if (lastId) {
-          const found = list.find((t) => t.groupId === lastId);
-          if (found) {
-            setCurrentTrip(found);
-          } else {
-            // 一覧に無い（削除済み等）の ID が残っているとヘッダーと画面が食い違うため消す
-            clearLastTripId(user.uid);
-            setCurrentTrip(null);
-          }
-        } else {
-          setCurrentTrip(null);
-        }
+        if (found) setCurrentTrip(found);
       }
     } catch {
       // ignore
+    } finally {
+      listLoadingRef.current = false;
+      setListLoading(false);
     }
   }, [user, currentGroupId]);
 
   useEffect(() => {
-    loadTrips();
-  }, [loadTrips]);
+    setListLoaded(false);
+    setTrips([]);
+  }, [user?.uid]);
 
-  // クリック外で閉じる
+  useEffect(() => {
+    if (!open) return;
+    if (!listLoaded) void loadTripList();
+  }, [open, listLoaded, loadTripList]);
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -112,7 +149,6 @@ export function TripSelector() {
 
   if (!user) return null;
 
-  // セクション分類
   const sections: { key: SectionKey; label: string; items: TripItem[] }[] = [
     { key: "active", label: "旅行中", items: [] },
     { key: "upcoming", label: "今後の旅行", items: [] },
@@ -123,17 +159,16 @@ export function TripSelector() {
     const key = classifyTrip(t);
     sections.find((s) => s.key === key)?.items.push(t);
   }
-  // 今後は直近順にソート
   sections.find((s) => s.key === "upcoming")!.items.sort(
     (a, b) => (a.data.tripStartDate ?? "").localeCompare(b.data.tripStartDate ?? ""),
   );
-  // 過去は直近順にソート（降順）
   sections.find((s) => s.key === "past")!.items.sort(
     (a, b) => (b.data.tripStartDate ?? "").localeCompare(a.data.tripStartDate ?? ""),
   );
 
   const hasTrips = trips.length > 0;
-  const displayName = currentTrip?.data.groupName ?? "旅行を選択";
+  const displayName =
+    currentTrip?.data.groupName ?? headerLabel ?? "旅行を選択";
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -160,7 +195,11 @@ export function TripSelector() {
 
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-          {!hasTrips ? (
+          {listLoading && !listLoaded ? (
+            <div className="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">
+              読み込み中…
+            </div>
+          ) : !hasTrips ? (
             <div className="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">
               旅行がありません
             </div>

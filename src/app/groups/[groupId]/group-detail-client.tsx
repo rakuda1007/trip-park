@@ -2,8 +2,8 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import { useGroupRouteId } from "@/contexts/group-route-context";
+import { useGroupWorkflow } from "@/contexts/group-workflow-context";
 import {
-  getGroup,
   getMemberForUser,
   leaveGroup,
   listMembers,
@@ -13,9 +13,8 @@ import {
   updateGroupTripDates,
   updateTripStatus,
 } from "@/lib/firestore/groups";
-import { listDestinationPolls, type PollItem } from "@/lib/firestore/destination-votes";
-import { listTripRoutes } from "@/lib/firestore/trip";
 import {
+  listBulletinTopics,
   listBulletinTopicsWithReplyCounts,
   listRecipeVotes,
 } from "@/lib/firestore/bulletin";
@@ -40,7 +39,6 @@ import type {
   BulletinRecipeVoteDoc,
   BulletinTopicDoc,
 } from "@/types/bulletin";
-import type { TripRouteDoc } from "@/types/trip";
 import { VisibilityBadge } from "@/components/visibility-badge";
 import { PlanShapeSettings } from "@/components/trip/plan-shape-settings";
 import { TripDashboardInsightsPanel } from "@/components/trip/trip-dashboard-insights-panel";
@@ -55,6 +53,8 @@ import {
   useMemo,
   useState,
   type ChangeEvent,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
 
 function formatDateRange(start: string, end?: string | null): string {
@@ -91,8 +91,27 @@ export function GroupDetailClient() {
   const groupId = useGroupRouteId();
   const { user } = useAuth();
   const router = useRouter();
+  const {
+    group: sharedGroup,
+    setGroup: setSharedGroup,
+    polls: workflowPolls,
+    tripRoutes: workflowTripRoutes,
+    refreshCore,
+  } = useGroupWorkflow();
 
-  const [group, setGroup] = useState<GroupDoc | null | undefined>(undefined);
+  const group = sharedGroup;
+  const setGroup: Dispatch<SetStateAction<GroupDoc | null | undefined>> =
+    useCallback(
+      (update) => {
+        if (typeof update === "function") {
+          setSharedGroup(update(sharedGroup) ?? null);
+        } else {
+          setSharedGroup(update ?? null);
+        }
+      },
+      [sharedGroup, setSharedGroup],
+    );
+
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -112,11 +131,6 @@ export function GroupDetailClient() {
   const [memoryPhotoDraftFile, setMemoryPhotoDraftFile] = useState<File | null>(null);
   const [memoryPhotoDraftPreview, setMemoryPhotoDraftPreview] = useState<string | null>(null);
   const [isMemoryPhotoLightboxOpen, setIsMemoryPhotoLightboxOpen] = useState(false);
-  /** 思い出写真の解放条件（ステップナビと同一ロジック） */
-  const [workflowPolls, setWorkflowPolls] = useState<PollItem[]>([]);
-  const [workflowTripRoutes, setWorkflowTripRoutes] = useState<
-    { id: string; data: TripRouteDoc }[]
-  >([]);
 
   // 連絡（洞察パネルのレシピ投票用にも利用）
   const [topics, setTopics] = useState<
@@ -144,71 +158,81 @@ export function GroupDetailClient() {
     }
   }, [group, user, groupId]);
 
-  const load = useCallback(async () => {
-    if (!groupId) return;
+  // シェル用: 自分のメンバー情報だけ先に取る
+  useEffect(() => {
+    if (!groupId || !group) {
+      setMyMember(null);
+      return;
+    }
+    if (!user) {
+      setMyMember(null);
+      return;
+    }
+    let cancelled = false;
+    void getMemberForUser(groupId, user.uid)
+      .then((m) => {
+        if (!cancelled) setMyMember(m);
+      })
+      .catch(() => {
+        if (!cancelled) setMyMember(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, group, user]);
+
+  // 連絡サマリ → insights（後追い）。コアの getGroup は GroupWorkflowProvider に任せる
+  useEffect(() => {
+    if (!groupId || !group) {
+      setTopics([]);
+      setDashboardExtras(null);
+      setMemberCount(0);
+      return;
+    }
+    let cancelled = false;
     setError(null);
-    try {
-      const g = await getGroup(groupId);
-      if (!g) {
-        setGroup(null);
-        setTopics([]);
-        setWorkflowPolls([]);
-        setWorkflowTripRoutes([]);
-        setDashboardExtras(null);
-        setMyMember(null);
-        setMemberCount(0);
-        return;
-      }
-      setGroup(g);
+
+    void (async () => {
       try {
-        const members = await listMembers(groupId);
-        setMemberCount(members.length);
+        const bare = await listBulletinTopics(groupId);
+        if (cancelled) return;
+        setTopics(bare.map((t) => ({ ...t, replyCount: 0 })));
       } catch {
-        setMemberCount(0);
+        if (!cancelled) setTopics([]);
       }
-      if (user) {
-        try {
-          const m = await getMemberForUser(groupId, user.uid);
-          setMyMember(m);
-        } catch {
-          setMyMember(null);
+
+      // 次フレーム以降で重い insights を読む
+      await new Promise<void>((r) => {
+        if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+          (
+            window as Window & {
+              requestIdleCallback: (cb: () => void) => number;
+            }
+          ).requestIdleCallback(() => r());
+        } else {
+          setTimeout(r, 0);
         }
-      } else {
-        setMyMember(null);
-      }
-      let polls: Awaited<ReturnType<typeof listDestinationPolls>> = [];
-      let topicsList: Awaited<
-        ReturnType<typeof listBulletinTopicsWithReplyCounts>
-      > = [];
+      });
+      if (cancelled) return;
+
       try {
-        const [p, routes] = await Promise.all([
-          listDestinationPolls(groupId),
-          listTripRoutes(groupId),
-        ]);
-        polls = p;
-        setWorkflowPolls(polls);
-        setWorkflowTripRoutes(routes);
-      } catch {
-        polls = [];
-        setWorkflowPolls([]);
-        setWorkflowTripRoutes([]);
-      }
-      try {
-        topicsList = await listBulletinTopicsWithReplyCounts(groupId);
-        setTopics(topicsList);
-      } catch {
-        topicsList = [];
-        setTopics([]);
-      }
-      try {
-        const [cands, resps, families] = await Promise.all([
+        const [topicsFull, cands, resps, families, members] = await Promise.all([
+          listBulletinTopicsWithReplyCounts(groupId).catch(() => null),
           listScheduleCandidates(groupId),
           listScheduleResponses(groupId),
           listFamilies(groupId).catch(() => []),
+          listMembers(groupId).catch(() => []),
         ]);
-        const scheduleCandidateIds = cands.map((c) => c.id);
-        const scheduleResponses = resps.map((r) => r.data);
-        const familyCount = families.length;
+        if (cancelled) return;
+
+        setMemberCount(members.length);
+        const topicsList =
+          topicsFull ??
+          (await listBulletinTopics(groupId).catch(() => [])).map((t) => ({
+            ...t,
+            replyCount: 0,
+          }));
+        if (topicsFull) setTopics(topicsFull);
 
         const recipeTopicsMeta = topicsList.filter(
           (row) =>
@@ -231,8 +255,9 @@ export function GroupDetailClient() {
             };
           }),
         );
+        if (cancelled) return;
 
-        const undecidedPolls = polls.filter(
+        const undecidedPolls = workflowPolls.filter(
           (p) => normalizeDecidedNamesFromPollDoc(p.data).length === 0,
         );
         const openDestinationPollVotes = await Promise.all(
@@ -242,30 +267,28 @@ export function GroupDetailClient() {
             votes: await listDestinationVotes(groupId, p.id),
           })),
         );
+        if (cancelled) return;
 
         setDashboardExtras({
-          scheduleCandidateIds,
-          scheduleResponses,
+          scheduleCandidateIds: cands.map((c) => c.id),
+          scheduleResponses: resps.map((r) => r.data),
           openRecipeVotes,
           openDestinationPollVotes,
-          familyCount,
+          familyCount: families.length,
         });
       } catch {
-        setDashboardExtras(null);
+        if (!cancelled) setDashboardExtras(null);
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "読み込みに失敗しました");
-      setGroup(null);
-      setWorkflowPolls([]);
-      setWorkflowTripRoutes([]);
-      setDashboardExtras(null);
-      setMyMember(null);
-    }
-  }, [groupId, user]);
+    })();
 
-  useEffect(() => {
-    load();
-  }, [load]);
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, group, workflowPolls]);
+
+  const load = useCallback(async () => {
+    await refreshCore();
+  }, [refreshCore]);
 
   useEffect(() => {
     setMemoryPhotoPreview(group?.memoryPhotoUrl ?? null);

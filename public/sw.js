@@ -1,4 +1,4 @@
-const CACHE_NAME = "trip-park-v4";
+const CACHE_NAME = "trip-park-v5";
 const APP_SHELL = "/dashboard";
 const LAST_TRIP_HOME = "/__last_trip_home__";
 const OFFLINE_PAGE = "/offline.html";
@@ -145,12 +145,16 @@ function networkFirstWithTimeout(request, timeoutMs) {
   );
 }
 
-/** /dashboard: キャッシュ即返し＋裏で更新（起動の待ちを短縮） */
+/** /dashboard・旅行ホーム: キャッシュ即返し＋裏で更新（起動の待ちを短縮） */
 function staleWhileRevalidateNavigate(request) {
+  const pathname = new URL(request.url).pathname;
   return caches.match(request).then((cached) => {
     const networkPromise = fetch(request)
       .then((response) => {
         cachePut(request, response);
+        if (isTripHomePath(pathname)) {
+          rememberLastTripHome(response);
+        }
         return response;
       })
       .catch(() => null);
@@ -162,6 +166,11 @@ function staleWhileRevalidateNavigate(request) {
 
     return networkPromise.then((response) => {
       if (response) return response;
+      if (isTripHomePath(pathname)) {
+        return caches.match(LAST_TRIP_HOME).then((last) =>
+          last ?? matchOfflineFallback(),
+        );
+      }
       return caches.match(LAST_TRIP_HOME).then((last) =>
         last ?? matchOfflineFallback(),
       );
@@ -195,7 +204,12 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     const path = url.pathname;
-    if (path === APP_SHELL || path === `${APP_SHELL}/`) {
+    // 起動導線: dashboard と旅行ホームはキャッシュ即返し＋裏更新
+    if (
+      path === APP_SHELL ||
+      path === `${APP_SHELL}/` ||
+      isTripHomePath(path)
+    ) {
       event.respondWith(staleWhileRevalidateNavigate(request));
       return;
     }

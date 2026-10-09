@@ -1,10 +1,7 @@
 "use client";
 
 import { useGroupRouteId } from "@/contexts/group-route-context";
-import { listDestinationPolls } from "@/lib/firestore/destination-votes";
-import { getGroup } from "@/lib/firestore/groups";
-import { listScheduleCandidates } from "@/lib/firestore/schedule";
-import { listTripRoutes } from "@/lib/firestore/trip";
+import { useGroupWorkflow } from "@/contexts/group-workflow-context";
 import {
   isStepVisible,
   resolvePlanConfig,
@@ -13,11 +10,9 @@ import {
   isDestinationStepCompleteForGroup,
   isItineraryCompleteForGroup,
 } from "@/lib/trip-workflow-all-complete";
-import type { GroupDoc } from "@/types/group";
-import type { TripRouteDoc } from "@/types/trip";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 /** layout.tsx から直接使えるラッパー（groupId は GroupRouteProvider から） */
 export function TripStepNavBarWrapper() {
@@ -61,65 +56,37 @@ function dividerClassBeforeStep(prev: StepStatus): string {
 
 export function TripStepNavBar({ groupId }: { groupId: string }) {
   const pathname = usePathname();
-  const [group, setGroup] = useState<GroupDoc | null>(null);
-  const [destStepDone, setDestStepDone] = useState(false);
-  const [destinationInProgress, setDestinationInProgress] = useState(false);
-  const [scheduleHasCandidates, setScheduleHasCandidates] = useState(false);
-  const [tripRoutes, setTripRoutes] = useState<
-    { id: string; data: TripRouteDoc }[]
-  >([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const g = await getGroup(groupId);
-        if (cancelled) return;
-        setGroup(g);
-        if (!g) {
-          setDestStepDone(false);
-          setDestinationInProgress(false);
-          setScheduleHasCandidates(false);
-          setTripRoutes([]);
-          return;
-        }
-        const [polls, candidates, routes] = await Promise.all([
-          listDestinationPolls(groupId),
-          listScheduleCandidates(groupId),
-          listTripRoutes(groupId),
-        ]);
-        if (cancelled) return;
-        setTripRoutes(routes);
-        setScheduleHasCandidates(candidates.length > 0);
-
-        const destDone = isDestinationStepCompleteForGroup(g, polls);
-        setDestStepDone(destDone);
-        const cfg = resolvePlanConfig(g, polls.length);
-        setDestinationInProgress(
-          cfg.placeMode === "vote" && !destDone && polls.length > 0,
-        );
-      } catch {
-        if (!cancelled) {
-          setGroup(null);
-          setDestStepDone(false);
-          setDestinationInProgress(false);
-          setScheduleHasCandidates(false);
-          setTripRoutes([]);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [groupId, pathname]);
+  const {
+    group,
+    polls,
+    tripRoutes,
+    scheduleHasCandidates,
+  } = useGroupWorkflow();
 
   const planConfig = useMemo(
-    () => resolvePlanConfig(group),
-    [group],
+    () => resolvePlanConfig(group ?? null, polls.length),
+    [group, polls.length],
+  );
+
+  const destDone = useMemo(
+    () =>
+      group
+        ? isDestinationStepCompleteForGroup(group, polls)
+        : false,
+    [group, polls],
+  );
+
+  const destinationInProgress = useMemo(
+    () =>
+      !!group &&
+      planConfig.placeMode === "vote" &&
+      !destDone &&
+      polls.length > 0,
+    [group, planConfig.placeMode, destDone, polls.length],
   );
 
   const itinDone = useMemo(
-    () => isItineraryCompleteForGroup(group, tripRoutes),
+    () => isItineraryCompleteForGroup(group ?? null, tripRoutes),
     [group, tripRoutes],
   );
 
@@ -137,7 +104,6 @@ export function TripStepNavBar({ groupId }: { groupId: string }) {
   const activeTool = getActiveTool(pathname, groupId);
 
   const datesDone = !!group?.tripStartDate;
-  const destDone = destStepDone;
   const status = group?.status ?? "planning";
   const labels = planConfig.labels;
 
