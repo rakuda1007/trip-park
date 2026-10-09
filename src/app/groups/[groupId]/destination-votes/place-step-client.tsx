@@ -10,6 +10,7 @@ import {
 } from "@/lib/firestore/groups";
 import { resolvePlanConfig } from "@/lib/plan-shape";
 import type { GroupDoc, PlaceMode } from "@/types/group";
+import { VisibilityBadge } from "@/components/visibility-badge";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DestinationVotesClient } from "./destination-votes-client";
@@ -117,9 +118,12 @@ export function PlaceStepClient() {
   const modeSwitcher =
     canManage && config.place !== "off" ? (
       <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-900/50">
-        <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-          {placeLabel}の決め方
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            {placeLabel}の決め方
+          </p>
+          <VisibilityBadge kind="admin" />
+        </div>
         <div className="mt-2 flex flex-wrap gap-2">
           {(
             [
