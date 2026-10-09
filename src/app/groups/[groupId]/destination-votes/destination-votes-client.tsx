@@ -159,11 +159,14 @@ type PollBundle = {
 export function DestinationVotesClient({
   placeVoteKind: placeVoteKindProp,
   embedded = false,
+  hideHubSummary = false,
 }: {
   /** 省略時は拠点の登録有無から自動判定 */
   placeVoteKind?: PlaceVoteKind;
   /** 固定登録フォーム下など、埋め込み表示 */
   embedded?: boolean;
+  /** 親が拠点サマリーを出すとき二重表示を避ける */
+  hideHubSummary?: boolean;
 } = {}) {
   const groupId = useGroupRouteId();
   const { user } = useAuth();
@@ -655,17 +658,11 @@ export function DestinationVotesClient({
     <div
       className={
         embedded
-          ? "mx-auto w-full max-w-3xl flex-1 px-4 py-6"
+          ? "mx-auto w-full max-w-3xl flex-1 px-4 pb-10 pt-4 sm:pb-14"
           : "mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14"
       }
     >
-      <TitleTag
-        className={
-          embedded
-            ? "text-lg font-semibold text-zinc-900 dark:text-zinc-50"
-            : "text-2xl font-semibold text-zinc-900 dark:text-zinc-50"
-        }
-      >
+      <TitleTag className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
         {copy.pageTitle}
       </TitleTag>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
@@ -675,7 +672,7 @@ export function DestinationVotesClient({
         各投票ブロックで、メンバー1人あたり「行きたい」合計3票までを候補に分けて入れられます。
       </p>
 
-      {hubSummary ? (
+      {hubSummary && !hideHubSummary ? (
         <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
             {copy.hubSummaryLabel}
