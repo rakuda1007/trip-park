@@ -8,6 +8,7 @@ import {
   resolvePlanShape,
 } from "@/lib/plan-shape";
 import type { GroupDoc, PlanShape } from "@/types/group";
+import { VisibilityBadge } from "@/components/visibility-badge";
 import { useState } from "react";
 
 export function PlanShapeSettings({
@@ -57,9 +58,12 @@ export function PlanShapeSettings({
 
   return (
     <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/60">
-      <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-        予定の形
-      </h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+          予定の形
+        </h2>
+        <VisibilityBadge kind="admin" />
+      </div>
       <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
         いまは「{labelsForShape(current).shape}」です。旅行の中止後に飲み会だけにする、精算だけに絞る、などに切り替えられます。
       </p>
